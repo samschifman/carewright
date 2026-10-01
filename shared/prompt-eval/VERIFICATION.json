@@ -1,0 +1,21 @@
+{
+  "receipt": {
+    "schema_version": "1.0.0",
+    "run_id": "3f4d5cbf-01b6-49c7-bb7a-c9e785338d1c",
+    "envelope": {
+      "name": "envelope.json",
+      "uri": "runs:/0f439ab469874047a6e11649f6fc16c9/prompt-eval/envelope.json",
+      "sha256": "1e18bfd33a4ff3e241f2b33182f77c5cde17f1277254cd659cebbee8df6dcabf",
+      "size": 15139
+    },
+    "mlflow_run_id": "0f439ab469874047a6e11649f6fc16c9"
+  },
+  "status": "complete",
+  "verified_artifacts": 33,
+  "workspace": "ksulayma-cpg-to-acp",
+  "tracking_uri": "https://mlflow-redhat-ods-applications.apps.rosa.agentic-mcp.jolf.p3.openshiftapps.com/mlflow",
+  "implementation_commit": "28cb003f40b2a7066f3f588bc9f7d3e442b4bf62",
+  "offline_tests_passed": 56,
+  "ruff": "passed",
+  "scope": "Synthetic transport smoke; no paid model calls or clinical quality claim"
+}

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "carewright-prompt-eval"
+version = "1.0.0"
+description = "Stage-neutral prompt experiment lifecycle and immutable artifacts"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = ["pydantic>=2.10,<3", "mlflow-skinny>=3.16.1,<4"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-cov", "ruff"]
+
+[project.scripts]
+prompt-eval = "prompt_eval.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100

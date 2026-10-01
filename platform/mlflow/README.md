@@ -42,3 +42,11 @@ Set `MLFLOW_TRACKING_URI` to point your services at the MLflow server:
 
 - **Local:** http://localhost:5000
 - **OpenShift:** Access via the MLflow Route in the RHOAI dashboard
+
+## Prompt-evaluation experiments
+
+The shared [prompt-evaluation infrastructure](../../shared/prompt-eval/README.md)
+uses operator-managed MLflow for official baselines, tuned comparisons, and sealed
+holdouts. It verifies artifact upload/download and SHA-256 before executor calls.
+See [the experiment guide](../../docs/prompt-evaluation.md) for workspace-aware
+configuration, immutable receipts, capture/redaction, exports, and retention.

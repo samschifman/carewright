@@ -1,0 +1,232 @@
+{
+  "$defs": {
+    "PairScore": {
+      "additionalProperties": false,
+      "properties": {
+        "golden_id": {
+          "title": "Golden Id",
+          "type": "string"
+        },
+        "match_evidence": {
+          "title": "Match Evidence",
+          "type": "string"
+        },
+        "missing_atoms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Atoms",
+          "type": "array"
+        },
+        "missing_population": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Population",
+          "type": "array"
+        },
+        "missing_qualifications": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Qualifications",
+          "type": "array"
+        },
+        "output_index": {
+          "title": "Output Index",
+          "type": "integer"
+        },
+        "token_f1": {
+          "title": "Token F1",
+          "type": "number"
+        },
+        "token_precision": {
+          "title": "Token Precision",
+          "type": "number"
+        },
+        "token_recall": {
+          "title": "Token Recall",
+          "type": "number"
+        },
+        "unsupported_atoms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unsupported Atoms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "golden_id",
+        "output_index",
+        "match_evidence",
+        "token_precision",
+        "token_recall",
+        "token_f1",
+        "missing_atoms",
+        "unsupported_atoms",
+        "missing_population",
+        "missing_qualifications"
+      ],
+      "title": "PairScore",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "accounted_count": {
+      "title": "Accounted Count",
+      "type": "integer"
+    },
+    "ambiguous": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Ambiguous",
+      "type": "object"
+    },
+    "ambiguous_count": {
+      "title": "Ambiguous Count",
+      "type": "integer"
+    },
+    "details": {
+      "items": {
+        "$ref": "#/$defs/PairScore"
+      },
+      "title": "Details",
+      "type": "array"
+    },
+    "duplicate_count": {
+      "title": "Duplicate Count",
+      "type": "integer"
+    },
+    "duplicate_indices": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Duplicate Indices",
+      "type": "array"
+    },
+    "expected_count": {
+      "title": "Expected Count",
+      "type": "integer"
+    },
+    "extra_count": {
+      "title": "Extra Count",
+      "type": "integer"
+    },
+    "extra_indices": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Extra Indices",
+      "type": "array"
+    },
+    "manual_review_required": {
+      "title": "Manual Review Required",
+      "type": "boolean"
+    },
+    "matched_count": {
+      "title": "Matched Count",
+      "type": "integer"
+    },
+    "metrics": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Metrics",
+      "type": "object"
+    },
+    "missing_count": {
+      "title": "Missing Count",
+      "type": "integer"
+    },
+    "missing_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Ids",
+      "type": "array"
+    },
+    "produced_count": {
+      "title": "Produced Count",
+      "type": "integer"
+    },
+    "ratios": {
+      "additionalProperties": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "type": "array"
+      },
+      "title": "Ratios",
+      "type": "object"
+    },
+    "schema_error_count": {
+      "title": "Schema Error Count",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "undefined_metrics": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Undefined Metrics",
+      "type": "array"
+    },
+    "valid_contract_count": {
+      "title": "Valid Contract Count",
+      "type": "integer"
+    },
+    "validation_errors": {
+      "additionalProperties": {
+        "items": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "title": "Validation Errors",
+      "type": "object"
+    }
+  },
+  "required": [
+    "expected_count",
+    "produced_count",
+    "accounted_count",
+    "valid_contract_count",
+    "matched_count",
+    "missing_count",
+    "extra_count",
+    "duplicate_count",
+    "ambiguous_count",
+    "schema_error_count",
+    "metrics",
+    "ratios",
+    "undefined_metrics",
+    "missing_ids",
+    "extra_indices",
+    "duplicate_indices",
+    "ambiguous",
+    "validation_errors",
+    "details",
+    "manual_review_required"
+  ],
+  "title": "ExtractionScore",
+  "type": "object"
+}

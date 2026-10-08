@@ -114,9 +114,28 @@ Phases 2 through 3.3 are complete. See [Appendix: Completed Phases](#appendix-co
 
 #### Work Items
 
+**Prompt-evaluation workflow:** Each prompt-improvement story owns a
+self-contained benchmark suited to its output contract and links its runnable
+handoff from the tracking issue. Before starting another prompt-improvement
+story, review the completed handoffs and record any reusable lessons on
+GitHub #31 / RHAIENG-6453. After at least two efforts are complete, revisit that
+spike to extract recurring conventions based on evidence rather than defining a
+common framework up front. CPG-ingester benchmark entry points are indexed in
+[`cpg-ingester/tests/benchmarks/README.md`](../cpg-ingester/tests/benchmarks/README.md).
+
+Each applicable prompt-improvement story also owns multi-CPG validation within
+that story. Its versioned corpus must cover synthetic hypertension, synthetic
+diabetes, and at least one real CPG acquired at runtime through the shared
+manifest, using stage-specific goldens and at least one case or section held out
+from prompt tuning. Downstream acp-writer stories may consume frozen outputs
+derived from those CPGs rather than the source PDFs directly. Existing baseline
+artifacts remain immutable; adding cases creates a new dataset version. The
+separate multi-CPG story is only the final end-to-end integration run over
+already-frozen prompts, evaluators, and goldens.
+
 | Work | Notes |
 |---|---|
-| **Establish prompt evaluation pattern and reporting approach** (spike) — Define common metrics, scoring approach, and reporting format for prompt evaluation across both pipelines | Informs all subsequent evaluation stories; goal is consistency, not a reusable tool |
+| **Revisit prompt evaluation patterns after initial improvement efforts** (deferred spike) — Compare at least two completed prompt-evaluation efforts and extract only the patterns that proved reusable | Keep stage-specific metrics and schemas where the output contracts differ; decide whether shared conventions or tooling are justified by the completed work |
 | **Evaluate and improve structure analyzer + content filter prompts** — Section classification accuracy, false positive/negative rates | Baseline → identify issues → improve → re-measure |
 | **Evaluate and improve DMN creator prompts** — Clinical accuracy, FEEL expression correctness, decision table completeness vs golden DMN | Baseline → identify issues → improve → re-measure |
 | **Evaluate and improve recommendation extractor prompts** — Completeness, accuracy of certainty grading, content fidelity | Baseline → identify issues → improve → re-measure |
@@ -125,7 +144,7 @@ Phases 2 through 3.3 are complete. See [Appendix: Completed Phases](#appendix-co
 | **Evaluate and improve FHIR generation prompts** — Bundle correctness, terminology accuracy, structural compliance vs $validate | Baseline → identify issues → improve → re-measure |
 | **Evaluate and improve FHIR semantic reviewer prompts** — False approval rate, missed defects, feedback quality for revision loop | Baseline → identify issues → improve → re-measure |
 | **Review and improve Docling usage** — Evaluate parsing quality across CPG formats, image/chart interpretation (vision model), OCR for scanned PDFs | Currently Docling detects image regions but doesn't interpret content |
-| **Multi-CPG evaluation** — Run evaluation across hypertension, diabetes, and at least one real CPG | Verify prompts generalize beyond the synthetic hypertension CPG |
+| **Multi-CPG end-to-end integration validation** — Run the assembled pipeline across hypertension, diabetes, and at least one real CPG sourced at runtime through the existing manifest | Thin integration gate over prompts, evaluators, and stage-specific goldens already frozen by the individual improvement stories; no prompt tuning or catch-up golden authoring belongs here |
 
 #### Exit Criteria
 

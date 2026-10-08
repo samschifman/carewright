@@ -1,0 +1,575 @@
+{
+  "$defs": {
+    "CertaintyGrade": {
+      "description": "Normalized certainty across grading systems.\n\nIf grading_system is None, inherit from CPGMetadata.grading_system.",
+      "properties": {
+        "evidence_quality": {
+          "$ref": "#/$defs/EvidenceQuality"
+        },
+        "grading_system": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GradingSystem"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "original_grade": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Original Grade"
+        },
+        "strength": {
+          "$ref": "#/$defs/RecommendationStrength"
+        }
+      },
+      "required": [
+        "strength",
+        "evidence_quality"
+      ],
+      "title": "CertaintyGrade",
+      "type": "object"
+    },
+    "CrossReference": {
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "relationship": {
+          "$ref": "#/$defs/CrossReferenceRelationship"
+        },
+        "target_id": {
+          "title": "Target Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_id",
+        "relationship"
+      ],
+      "title": "CrossReference",
+      "type": "object"
+    },
+    "CrossReferenceRelationship": {
+      "enum": [
+        "prerequisite",
+        "alternative",
+        "conflicts-with",
+        "modifies",
+        "related",
+        "supersedes",
+        "other"
+      ],
+      "title": "CrossReferenceRelationship",
+      "type": "string"
+    },
+    "EvidenceQuality": {
+      "enum": [
+        "high",
+        "moderate",
+        "low",
+        "very-low",
+        "ungraded"
+      ],
+      "title": "EvidenceQuality",
+      "type": "string"
+    },
+    "GoldenAnnotation": {
+      "additionalProperties": false,
+      "properties": {
+        "action_aliases": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Action Aliases",
+          "type": "array"
+        },
+        "allowed_atoms": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Allowed Atoms",
+          "type": "array"
+        },
+        "normalization_rationale": {
+          "minLength": 1,
+          "title": "Normalization Rationale",
+          "type": "string"
+        },
+        "population_phrases": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Population Phrases",
+          "type": "array"
+        },
+        "qualification_phrases": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Qualification Phrases",
+          "type": "array"
+        },
+        "recommendation_id": {
+          "minLength": 1,
+          "title": "Recommendation Id",
+          "type": "string"
+        },
+        "required_atoms": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Required Atoms",
+          "type": "array"
+        },
+        "source_quote": {
+          "minLength": 1,
+          "title": "Source Quote",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recommendation_id",
+        "source_quote",
+        "action_aliases",
+        "normalization_rationale"
+      ],
+      "title": "GoldenAnnotation",
+      "type": "object"
+    },
+    "GradingSystem": {
+      "enum": [
+        "GRADE",
+        "COR-LOE",
+        "GRADE-COR-hybrid",
+        "simplified",
+        "verb-implied",
+        "ungraded"
+      ],
+      "title": "GradingSystem",
+      "type": "string"
+    },
+    "Recommendation": {
+      "properties": {
+        "certainty": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CertaintyGrade"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "cross_references": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CrossReference"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cross References"
+        },
+        "evidence_review_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Review Date"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RecommendationProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        },
+        "recommendation_type": {
+          "$ref": "#/$defs/RecommendationType"
+        },
+        "remarks": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remarks"
+        },
+        "scope_notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Notes"
+        },
+        "section": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Section"
+        },
+        "source_cpg": {
+          "title": "Source Cpg",
+          "type": "string"
+        },
+        "source_location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_cpg",
+        "title",
+        "content",
+        "recommendation_type"
+      ],
+      "title": "Recommendation",
+      "type": "object"
+    },
+    "RecommendationBundle": {
+      "properties": {
+        "contract_version": {
+          "default": "1.0",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "recommendations": {
+          "items": {
+            "$ref": "#/$defs/Recommendation"
+          },
+          "title": "Recommendations",
+          "type": "array"
+        },
+        "source_cpg": {
+          "title": "Source Cpg",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_cpg",
+        "recommendations"
+      ],
+      "title": "RecommendationBundle",
+      "type": "object"
+    },
+    "RecommendationProvenance": {
+      "enum": [
+        "reviewed",
+        "new-added",
+        "amended",
+        "not-changed",
+        "removed"
+      ],
+      "title": "RecommendationProvenance",
+      "type": "string"
+    },
+    "RecommendationStrength": {
+      "enum": [
+        "strong-for",
+        "conditional-for",
+        "consensus",
+        "no-recommendation",
+        "conditional-against",
+        "strong-against"
+      ],
+      "title": "RecommendationStrength",
+      "type": "string"
+    },
+    "RecommendationType": {
+      "enum": [
+        "treatment",
+        "diagnostic",
+        "monitoring",
+        "lifestyle",
+        "educational",
+        "referral",
+        "screening",
+        "contraindication",
+        "process"
+      ],
+      "title": "RecommendationType",
+      "type": "string"
+    },
+    "SourceLocation": {
+      "description": "Where in the source CPG document this item was extracted from.\n\nPopulated from Docling ProvenanceItem data during ingestion.",
+      "properties": {
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bbox"
+        },
+        "page_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page End"
+        },
+        "page_start": {
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "source_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Text"
+        }
+      },
+      "required": [
+        "page_start"
+      ],
+      "title": "SourceLocation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "abbreviations": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Abbreviations",
+      "type": "object"
+    },
+    "annotations": {
+      "items": {
+        "$ref": "#/$defs/GoldenAnnotation"
+      },
+      "minItems": 1,
+      "title": "Annotations",
+      "type": "array"
+    },
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "case_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+      "title": "Case Id",
+      "type": "string"
+    },
+    "corpus": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+      "title": "Corpus",
+      "type": "string"
+    },
+    "dataset_version": {
+      "minLength": 1,
+      "title": "Dataset Version",
+      "type": "string"
+    },
+    "derivation_status": {
+      "enum": [
+        "draft",
+        "reviewed"
+      ],
+      "title": "Derivation Status",
+      "type": "string"
+    },
+    "golden": {
+      "$ref": "#/$defs/RecommendationBundle"
+    },
+    "grading_definitions": {
+      "title": "Grading Definitions",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "section": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+      "title": "Section",
+      "type": "string"
+    },
+    "source_cpg": {
+      "minLength": 1,
+      "title": "Source Cpg",
+      "type": "string"
+    },
+    "source_document_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Document Sha256",
+      "type": "string"
+    },
+    "source_text": {
+      "minLength": 1,
+      "title": "Source Text",
+      "type": "string"
+    },
+    "split": {
+      "enum": [
+        "tuning",
+        "holdout",
+        "validity-only"
+      ],
+      "title": "Split",
+      "type": "string"
+    },
+    "transformation_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Transformation Sha256",
+      "type": "string"
+    },
+    "unscored_fields": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Unscored Fields",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "dataset_version",
+    "case_id",
+    "corpus",
+    "split",
+    "source_cpg",
+    "section",
+    "source_text",
+    "source_document_sha256",
+    "transformation_sha256",
+    "items",
+    "grading_definitions",
+    "abbreviations",
+    "golden",
+    "annotations",
+    "derivation_status",
+    "assumptions",
+    "unscored_fields"
+  ],
+  "title": "EvaluationCase",
+  "type": "object"
+}

@@ -1,0 +1,1204 @@
+{
+  "contract_version": "1.1",
+  "summary": {
+    "id": "home-bp-monitoring",
+    "version": "499a6a2c1b81",
+    "name": "Home blood pressure monitoring with outreach and escalation",
+    "description": "",
+    "source_cpg": "SYN-HTN-2026-002",
+    "section": "3.5 Home Blood Pressure Monitoring",
+    "source_location": null,
+    "triggers": [
+      {
+        "kind": "recommendation",
+        "model_id": null,
+        "output_name": null,
+        "output_value": null,
+        "recommendation_id": "<rec-guid: Home blood pressure monitoring>"
+      }
+    ],
+    "linked_recommendation_ids": [
+      "<placeholder-rec-id>"
+    ],
+    "linked_decision_model_ids": [],
+    "parameters": [
+      {
+        "name": "reporting_interval",
+        "type": "duration",
+        "unit": null,
+        "default": "P1W",
+        "constraints": null,
+        "required": true,
+        "description": "",
+        "source": {
+          "kind": "cpg",
+          "source_text": "transmit their readings to the care team weekly",
+          "source_location": {
+            "page_start": 3,
+            "page_end": null,
+            "bbox": null,
+            "source_text": null
+          },
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "notify_systolic_threshold",
+        "type": "quantity",
+        "unit": "mm[Hg]",
+        "default": 135,
+        "constraints": {
+          "min": 110.0,
+          "max": 180.0,
+          "enum": null,
+          "pattern": null,
+          "source": {
+            "kind": "authored",
+            "source_text": null,
+            "source_location": null,
+            "reviewer": null,
+            "note": null,
+            "previous": null,
+            "policy": null
+          }
+        },
+        "required": false,
+        "description": "",
+        "source": {
+          "kind": "cpg",
+          "source_text": "weekly home average is 135/85 mmHg or higher",
+          "source_location": null,
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "notify_diastolic_threshold",
+        "type": "quantity",
+        "unit": "mm[Hg]",
+        "default": 85,
+        "constraints": {
+          "min": 70.0,
+          "max": 120.0,
+          "enum": null,
+          "pattern": null,
+          "source": {
+            "kind": "authored",
+            "source_text": null,
+            "source_location": null,
+            "reviewer": null,
+            "note": null,
+            "previous": null,
+            "policy": null
+          }
+        },
+        "required": false,
+        "description": "",
+        "source": {
+          "kind": "cpg",
+          "source_text": "weekly home average is 135/85 mmHg or higher",
+          "source_location": null,
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "max_reminder_attempts",
+        "type": "integer",
+        "unit": null,
+        "default": 3,
+        "constraints": {
+          "min": 1.0,
+          "max": 5.0,
+          "enum": null,
+          "pattern": null,
+          "source": {
+            "kind": "authored",
+            "source_text": null,
+            "source_location": null,
+            "reviewer": null,
+            "note": null,
+            "previous": null,
+            "policy": null
+          }
+        },
+        "required": false,
+        "description": "",
+        "source": {
+          "kind": "cpg",
+          "source_text": "after three reminder attempts on different days",
+          "source_location": null,
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "instructions_text",
+        "type": "string",
+        "unit": null,
+        "default": "Measure twice in the morning before medications and twice in the evening, one minute apart.",
+        "constraints": null,
+        "required": false,
+        "description": "",
+        "source": {
+          "kind": "authored",
+          "source_text": null,
+          "source_location": null,
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "reminder_text",
+        "type": "string",
+        "unit": null,
+        "default": "Please submit this week's home blood pressure readings.",
+        "constraints": null,
+        "required": false,
+        "description": "",
+        "source": {
+          "kind": "authored",
+          "source_text": null,
+          "source_location": null,
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "escalation_reason",
+        "type": "string",
+        "unit": null,
+        "default": "No home blood pressure readings after reminders.",
+        "constraints": null,
+        "required": false,
+        "description": "",
+        "source": {
+          "kind": "authored",
+          "source_text": null,
+          "source_location": null,
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "notify_reason",
+        "type": "string",
+        "unit": null,
+        "default": "Weekly home blood pressure average above threshold.",
+        "constraints": null,
+        "required": false,
+        "description": "",
+        "source": {
+          "kind": "authored",
+          "source_text": null,
+          "source_location": null,
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "max_duration",
+        "type": "duration",
+        "unit": null,
+        "default": null,
+        "constraints": null,
+        "required": true,
+        "description": "",
+        "source": null,
+        "reserved": true
+      }
+    ],
+    "capabilities_used": [
+      "care_team.escalate",
+      "clinician.notify",
+      "ehr.query_observations",
+      "patient.request_observation",
+      "patient.send_message"
+    ],
+    "catalog_version": "1.0",
+    "ir_version": "1.0",
+    "pattern_family": "remind-until-done",
+    "automatability": {
+      "tier": "A",
+      "rationale": "The guideline gives a repeatable monitoring cadence, thresholds, reminder limit, and escalation path."
+    },
+    "validation": {
+      "status": "valid",
+      "rungs_passed": [
+        "L0",
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5a",
+        "L5b"
+      ],
+      "deferred_invariants": [
+        "max_duration >= reporting_interval * (max_reminder_attempts + 1)"
+      ],
+      "kogito_checked": false,
+      "warnings": [],
+      "errors": [],
+      "acknowledgement": null
+    },
+    "artifact_id": "golden-automation-home-bp-monitoring"
+  },
+  "ir": {
+    "ir_version": "1.0",
+    "process": {
+      "id": "home-bp-monitoring",
+      "name": "Home blood pressure monitoring with outreach and escalation",
+      "description": "",
+      "isExecutable": true,
+      "kind": "template",
+      "properties": [
+        {
+          "name": "reading_count",
+          "type": "integer",
+          "unit": null
+        },
+        {
+          "name": "avg_systolic",
+          "type": "quantity",
+          "unit": "mm[Hg]"
+        },
+        {
+          "name": "avg_diastolic",
+          "type": "quantity",
+          "unit": "mm[Hg]"
+        },
+        {
+          "name": "reminder_attempts",
+          "type": "integer",
+          "unit": null
+        }
+      ],
+      "flowElements": [
+        {
+          "id": "start",
+          "name": "Monitoring started",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "start-event",
+              "supports": [
+                "request_readings"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "startEvent"
+        },
+        {
+          "id": "loop_entry",
+          "name": "Begin monitoring cycle",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "exclusive-join",
+              "supports": [
+                "request_readings",
+                "notify",
+                "gw_threshold",
+                "gw_attempts"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "exclusiveGateway",
+          "gatewayDirection": "Converging",
+          "default": null
+        },
+        {
+          "id": "request_readings",
+          "name": "Request home BP readings",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "take two readings one minute apart in the morning before medications and two readings one minute apart in the evening ... and transmit their readings to the care team weekly",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "task",
+          "taskName": "patient.request_observation",
+          "inputs": {
+            "code": {
+              "concept": "blood pressure"
+            },
+            "due": {
+              "param": "reporting_interval"
+            },
+            "instructions": {
+              "param": "instructions_text"
+            }
+          },
+          "outputs": {}
+        },
+        {
+          "id": "wait_interval",
+          "name": "Reporting interval elapsed",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "transmit their readings to the care team weekly",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "intermediateCatchEvent",
+          "timerEventDefinition": {
+            "timeDuration": {
+              "param": "reporting_interval"
+            },
+            "timeCycle": null
+          }
+        },
+        {
+          "id": "query_systolic",
+          "name": "Check systolic readings received",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "The care team reviews the weekly average systolic and diastolic readings",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "task",
+          "taskName": "ehr.query_observations",
+          "inputs": {
+            "code": {
+              "concept": "systolic blood pressure"
+            },
+            "window": {
+              "param": "reporting_interval"
+            },
+            "unit": {
+              "literal": "mm[Hg]",
+              "type": "unit"
+            }
+          },
+          "outputs": {
+            "count": "reading_count",
+            "average_value": "avg_systolic"
+          }
+        },
+        {
+          "id": "query_diastolic",
+          "name": "Check diastolic readings received",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "The care team reviews the weekly average systolic and diastolic readings",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "task",
+          "taskName": "ehr.query_observations",
+          "inputs": {
+            "code": {
+              "concept": "diastolic blood pressure"
+            },
+            "window": {
+              "param": "reporting_interval"
+            },
+            "unit": {
+              "literal": "mm[Hg]",
+              "type": "unit"
+            }
+          },
+          "outputs": {
+            "average_value": "avg_diastolic"
+          }
+        },
+        {
+          "id": "gw_received",
+          "name": "Readings received?",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "exclusive-split",
+              "supports": [
+                "f_some",
+                "f_none"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "exclusiveGateway",
+          "gatewayDirection": "Diverging",
+          "default": "f_none"
+        },
+        {
+          "id": "remind",
+          "name": "Send reading reminder",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "If a week passes without readings, a reminder should be sent to the patient",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": "reminder_attempts",
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "task",
+          "taskName": "patient.send_message",
+          "inputs": {
+            "kind": {
+              "literal": "reminder",
+              "type": "enum"
+            },
+            "message": {
+              "param": "reminder_text"
+            }
+          },
+          "outputs": {}
+        },
+        {
+          "id": "gw_attempts",
+          "name": "Reminder limit reached?",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "exclusive-split",
+              "supports": [
+                "f_escalate"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "exclusiveGateway",
+          "gatewayDirection": "Diverging",
+          "default": "f_retry"
+        },
+        {
+          "id": "escalate",
+          "name": "Escalate to care team",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "After three reminder attempts on different days without readings, the care team should contact the patient directly",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "task",
+          "taskName": "care_team.escalate",
+          "inputs": {
+            "reason": {
+              "param": "escalation_reason"
+            },
+            "attempts": {
+              "property": "reminder_attempts"
+            }
+          },
+          "outputs": {}
+        },
+        {
+          "id": "gw_threshold",
+          "name": "Average above threshold?",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "exclusive-split",
+              "supports": [
+                "f_high"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "exclusiveGateway",
+          "gatewayDirection": "Diverging",
+          "default": "f_ok"
+        },
+        {
+          "id": "notify",
+          "name": "Notify clinician",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "The responsible clinician should be notified when the weekly home average is 135/85 mmHg or higher ... routine notification",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "task",
+          "taskName": "clinician.notify",
+          "inputs": {
+            "urgency": {
+              "literal": "routine",
+              "type": "enum"
+            },
+            "reason": {
+              "param": "notify_reason"
+            }
+          },
+          "outputs": {}
+        },
+        {
+          "id": "end_escalated",
+          "name": "Handed to care team",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "end-event",
+              "supports": [
+                "escalate"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": "escalated",
+            "structural_constant": false
+          },
+          "type": "endEvent"
+        },
+        {
+          "id": "end_period",
+          "name": "Monitoring period complete",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "end-event",
+              "supports": [
+                "period_elapsed"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": "complete",
+            "structural_constant": false
+          },
+          "type": "endEvent"
+        },
+        {
+          "id": "period_elapsed",
+          "name": "Max duration elapsed",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "plan-bound",
+              "supports": [
+                "request_readings"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "boundaryEvent",
+          "attachedToRef": "main",
+          "cancelActivity": true,
+          "timerEventDefinition": {
+            "timeDuration": {
+              "param": "max_duration"
+            },
+            "timeCycle": null
+          }
+        },
+        {
+          "id": "f_start",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "start",
+          "targetRef": "loop_entry",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_loop",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "loop_entry",
+          "targetRef": "request_readings",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_wait",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "request_readings",
+          "targetRef": "wait_interval",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_query",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "wait_interval",
+          "targetRef": "query_systolic",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_query2",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "query_systolic",
+          "targetRef": "query_diastolic",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_received",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "query_diastolic",
+          "targetRef": "gw_received",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_some",
+          "name": "yes",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "The care team reviews the weekly average systolic and diastolic readings",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": [
+              "reminder_attempts"
+            ],
+            "outcome": null,
+            "structural_constant": true
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "gw_received",
+          "targetRef": "gw_threshold",
+          "conditionExpression": "defined(reading_count) and reading_count > 0"
+        },
+        {
+          "id": "f_none",
+          "name": "no",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "gw_received",
+          "targetRef": "remind",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_attempts",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "remind",
+          "targetRef": "gw_attempts",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_escalate",
+          "name": "limit reached",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "after three reminder attempts on different days",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "gw_attempts",
+          "targetRef": "escalate",
+          "conditionExpression": "reminder_attempts >= max_reminder_attempts"
+        },
+        {
+          "id": "f_retry",
+          "name": "try again",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "gw_attempts",
+          "targetRef": "loop_entry",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_high",
+          "name": "above threshold",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "weekly home average is 135/85 mmHg or higher",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "gw_threshold",
+          "targetRef": "notify",
+          "conditionExpression": "avg_systolic >= notify_systolic_threshold or avg_diastolic >= notify_diastolic_threshold"
+        },
+        {
+          "id": "f_ok",
+          "name": "within target",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "gw_threshold",
+          "targetRef": "loop_entry",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_notified",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "notify",
+          "targetRef": "loop_entry",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_end_escalated",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "escalate",
+          "targetRef": "end_escalated",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_period",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "period_elapsed",
+          "targetRef": "end_period",
+          "conditionExpression": null
+        }
+      ],
+      "acp": {
+        "triggers": [
+          {
+            "kind": "recommendation",
+            "model_id": null,
+            "output_name": null,
+            "output_value": null,
+            "recommendation_id": "<rec-guid: Home blood pressure monitoring>"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "reporting_interval",
+            "type": "duration",
+            "unit": null,
+            "default": "P1W",
+            "constraints": null,
+            "required": true,
+            "description": "",
+            "source": {
+              "kind": "cpg",
+              "source_text": "transmit their readings to the care team weekly",
+              "source_location": {
+                "page_start": 3,
+                "page_end": null,
+                "bbox": null,
+                "source_text": null
+              },
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "notify_systolic_threshold",
+            "type": "quantity",
+            "unit": "mm[Hg]",
+            "default": 135,
+            "constraints": {
+              "min": 110.0,
+              "max": 180.0,
+              "enum": null,
+              "pattern": null,
+              "source": {
+                "kind": "authored",
+                "source_text": null,
+                "source_location": null,
+                "reviewer": null,
+                "note": null,
+                "previous": null,
+                "policy": null
+              }
+            },
+            "required": false,
+            "description": "",
+            "source": {
+              "kind": "cpg",
+              "source_text": "weekly home average is 135/85 mmHg or higher",
+              "source_location": null,
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "notify_diastolic_threshold",
+            "type": "quantity",
+            "unit": "mm[Hg]",
+            "default": 85,
+            "constraints": {
+              "min": 70.0,
+              "max": 120.0,
+              "enum": null,
+              "pattern": null,
+              "source": {
+                "kind": "authored",
+                "source_text": null,
+                "source_location": null,
+                "reviewer": null,
+                "note": null,
+                "previous": null,
+                "policy": null
+              }
+            },
+            "required": false,
+            "description": "",
+            "source": {
+              "kind": "cpg",
+              "source_text": "weekly home average is 135/85 mmHg or higher",
+              "source_location": null,
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "max_reminder_attempts",
+            "type": "integer",
+            "unit": null,
+            "default": 3,
+            "constraints": {
+              "min": 1.0,
+              "max": 5.0,
+              "enum": null,
+              "pattern": null,
+              "source": {
+                "kind": "authored",
+                "source_text": null,
+                "source_location": null,
+                "reviewer": null,
+                "note": null,
+                "previous": null,
+                "policy": null
+              }
+            },
+            "required": false,
+            "description": "",
+            "source": {
+              "kind": "cpg",
+              "source_text": "after three reminder attempts on different days",
+              "source_location": null,
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "instructions_text",
+            "type": "string",
+            "unit": null,
+            "default": "Measure twice in the morning before medications and twice in the evening, one minute apart.",
+            "constraints": null,
+            "required": false,
+            "description": "",
+            "source": {
+              "kind": "authored",
+              "source_text": null,
+              "source_location": null,
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "reminder_text",
+            "type": "string",
+            "unit": null,
+            "default": "Please submit this week's home blood pressure readings.",
+            "constraints": null,
+            "required": false,
+            "description": "",
+            "source": {
+              "kind": "authored",
+              "source_text": null,
+              "source_location": null,
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "escalation_reason",
+            "type": "string",
+            "unit": null,
+            "default": "No home blood pressure readings after reminders.",
+            "constraints": null,
+            "required": false,
+            "description": "",
+            "source": {
+              "kind": "authored",
+              "source_text": null,
+              "source_location": null,
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "notify_reason",
+            "type": "string",
+            "unit": null,
+            "default": "Weekly home blood pressure average above threshold.",
+            "constraints": null,
+            "required": false,
+            "description": "",
+            "source": {
+              "kind": "authored",
+              "source_text": null,
+              "source_location": null,
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "max_duration",
+            "type": "duration",
+            "unit": null,
+            "default": null,
+            "constraints": null,
+            "required": true,
+            "description": "",
+            "source": null,
+            "reserved": true
+          }
+        ],
+        "invariants": [
+          "max_duration >= reporting_interval * (max_reminder_attempts + 1)"
+        ],
+        "produces": [],
+        "provenance": {
+          "source_cpg": "SYN-HTN-2026-002",
+          "section": "3.5 Home Blood Pressure Monitoring",
+          "source_location": null,
+          "template_snapshots": null
+        },
+        "template_refs": [],
+        "unify": [],
+        "pruned": [],
+        "consolidated_boundaries": []
+      }
+    }
+  },
+  "bpmn_xml": "<?xml version='1.0' encoding='UTF-8'?>\n<bpmn2:definitions xmlns:bpmn2=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:drools=\"http://www.jboss.org/drools\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:acp=\"https://github.com/samschifman/cpg-to-acp/bpmn\" id=\"home-bp-monitoring_defs\" targetNamespace=\"https://github.com/samschifman/cpg-to-acp/bpmn/SYN-HTN-2026-002\">\n  <bpmn2:itemDefinition id=\"_strItem\" structureRef=\"String\"/>\n  <bpmn2:itemDefinition id=\"_intItem\" structureRef=\"Integer\"/>\n  <bpmn2:itemDefinition id=\"_dblItem\" structureRef=\"Double\"/>\n  <bpmn2:process id=\"home-bp-monitoring\" name=\"Home blood pressure monitoring with outreach and escalation\" isExecutable=\"true\" processType=\"Public\" drools:packageName=\"org.carewright.automation\" drools:version=\"499a6a2c1b81\">\n    <bpmn2:extensionElements>\n      <drools:metaData name=\"acp.catalogVersion\">1.0</drools:metaData>\n      <acp:template><![CDATA[{\"catalog_version\":\"1.0\",\"consolidated_boundaries\":[],\"description\":\"\",\"invariants\":[\"max_duration >= reporting_interval * (max_reminder_attempts + 1)\"],\"ir_version\":\"1.0\",\"kind\":\"template\",\"parameters\":[{\"default\":\"P1W\",\"description\":\"\",\"name\":\"reporting_interval\",\"required\":true,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_location\":{\"page_start\":3},\"source_text\":\"transmit their readings to the care team weekly\"},\"type\":\"duration\"},{\"constraints\":{\"max\":180.0,\"min\":110.0,\"source\":{\"kind\":\"authored\"}},\"default\":135,\"description\":\"\",\"name\":\"notify_systolic_threshold\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_text\":\"weekly home average is 135/85 mmHg or higher\"},\"type\":\"quantity\",\"unit\":\"mm[Hg]\"},{\"constraints\":{\"max\":120.0,\"min\":70.0,\"source\":{\"kind\":\"authored\"}},\"default\":85,\"description\":\"\",\"name\":\"notify_diastolic_threshold\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_text\":\"weekly home average is 135/85 mmHg or higher\"},\"type\":\"quantity\",\"unit\":\"mm[Hg]\"},{\"constraints\":{\"max\":5.0,\"min\":1.0,\"source\":{\"kind\":\"authored\"}},\"default\":3,\"description\":\"\",\"name\":\"max_reminder_attempts\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_text\":\"after three reminder attempts on different days\"},\"type\":\"integer\"},{\"default\":\"Measure twice in the morning before medications and twice in the evening, one minute apart.\",\"description\":\"\",\"name\":\"instructions_text\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"default\":\"Please submit this week's home blood pressure readings.\",\"description\":\"\",\"name\":\"reminder_text\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"default\":\"No home blood pressure readings after reminders.\",\"description\":\"\",\"name\":\"escalation_reason\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"default\":\"Weekly home blood pressure average above threshold.\",\"description\":\"\",\"name\":\"notify_reason\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"description\":\"\",\"name\":\"max_duration\",\"required\":true,\"reserved\":true,\"type\":\"duration\"}],\"produces\":[],\"profile\":\"kogito-10.2\",\"provenance\":{\"section\":\"3.5 Home Blood Pressure Monitoring\",\"source_cpg\":\"SYN-HTN-2026-002\"},\"pruned\":[],\"template_id\":\"home-bp-monitoring\",\"template_refs\":[],\"triggers\":[{\"kind\":\"recommendation\",\"recommendation_id\":\"<rec-guid: Home blood pressure monitoring>\"}],\"unify\":[],\"version\":\"499a6a2c1b81\"}]]></acp:template>\n    </bpmn2:extensionElements>\n    <bpmn2:property id=\"reporting_interval\" itemSubjectRef=\"_strItem\" name=\"reporting_interval\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">duration</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"notify_systolic_threshold\" itemSubjectRef=\"_dblItem\" name=\"notify_systolic_threshold\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">quantity</drools:metaData>\n        <drools:metaData name=\"acp.unit\">mm[Hg]</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"notify_diastolic_threshold\" itemSubjectRef=\"_dblItem\" name=\"notify_diastolic_threshold\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">quantity</drools:metaData>\n        <drools:metaData name=\"acp.unit\">mm[Hg]</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"max_reminder_attempts\" itemSubjectRef=\"_intItem\" name=\"max_reminder_attempts\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">integer</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"instructions_text\" itemSubjectRef=\"_strItem\" name=\"instructions_text\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"reminder_text\" itemSubjectRef=\"_strItem\" name=\"reminder_text\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"escalation_reason\" itemSubjectRef=\"_strItem\" name=\"escalation_reason\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"notify_reason\" itemSubjectRef=\"_strItem\" name=\"notify_reason\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"max_duration\" itemSubjectRef=\"_strItem\" name=\"max_duration\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">duration</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"reading_count\" itemSubjectRef=\"_intItem\" name=\"reading_count\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">integer</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"avg_systolic\" itemSubjectRef=\"_dblItem\" name=\"avg_systolic\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">quantity</drools:metaData>\n        <drools:metaData name=\"acp.unit\">mm[Hg]</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"avg_diastolic\" itemSubjectRef=\"_dblItem\" name=\"avg_diastolic\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">quantity</drools:metaData>\n        <drools:metaData name=\"acp.unit\">mm[Hg]</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"reminder_attempts\" itemSubjectRef=\"_intItem\" name=\"reminder_attempts\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">integer</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"outcome\" itemSubjectRef=\"_strItem\" name=\"outcome\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:startEvent id=\"start\" name=\"Monitoring started\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"start-event\",\"kind\":\"structural\",\"supports\":[\"request_readings\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:outgoing>f_init</bpmn2:outgoing>\n    </bpmn2:startEvent>\n    <bpmn2:scriptTask id=\"init\" name=\"Initialise\" scriptFormat=\"http://www.java.com/java\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_init</bpmn2:incoming>\n      <bpmn2:outgoing>f_main</bpmn2:outgoing>\n      <bpmn2:script>kcontext.setVariable(\"reminder_attempts\", 0); kcontext.setVariable(\"outcome\", \"\");</bpmn2:script>\n    </bpmn2:scriptTask>\n    <bpmn2:subProcess id=\"main\" name=\"Monitoring\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_main</bpmn2:incoming>\n      <bpmn2:outgoing>f_after</bpmn2:outgoing>\n      <bpmn2:startEvent id=\"main_start\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:outgoing>f_start</bpmn2:outgoing>\n      </bpmn2:startEvent>\n      <bpmn2:scriptTask id=\"end_escalated_outcome\" name=\"Outcome: escalated\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_end_escalated</bpmn2:incoming>\n        <bpmn2:outgoing>end_escalated_outcome_out</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"outcome\", \"escalated\");</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:endEvent id=\"main_end_escalated\" name=\"Handed to care team\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"outcome\":\"escalated\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"escalate\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>end_escalated_outcome_out</bpmn2:incoming>\n      </bpmn2:endEvent>\n      <bpmn2:task id=\"escalate\" name=\"Escalate to care team\" drools:taskName=\"care_team.escalate\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"After three reminder attempts on different days without readings, the care team should contact the patient directly\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_escalate</bpmn2:incoming>\n        <bpmn2:outgoing>f_end_escalated</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"escalate_attempts_input\" name=\"attempts\" drools:dtype=\"Integer\" itemSubjectRef=\"_intItem\"/>\n          <bpmn2:dataInput id=\"escalate_reason_input\" name=\"reason\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"escalate_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>escalate_attempts_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>escalate_reason_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>escalate_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reminder_attempts</bpmn2:sourceRef>\n          <bpmn2:targetRef>escalate_attempts_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>escalation_reason</bpmn2:sourceRef>\n          <bpmn2:targetRef>escalate_reason_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>escalate_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">care_team_escalate__escalate</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">escalate_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:task>\n      <bpmn2:exclusiveGateway id=\"gw_attempts\" name=\"Reminder limit reached?\" gatewayDirection=\"Diverging\" default=\"f_retry\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"exclusive-split\",\"kind\":\"structural\",\"supports\":[\"f_escalate\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_attempts</bpmn2:incoming>\n        <bpmn2:outgoing>f_escalate</bpmn2:outgoing>\n        <bpmn2:outgoing>f_retry</bpmn2:outgoing>\n      </bpmn2:exclusiveGateway>\n      <bpmn2:exclusiveGateway id=\"gw_received\" name=\"Readings received?\" gatewayDirection=\"Diverging\" default=\"f_none\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"exclusive-split\",\"kind\":\"structural\",\"supports\":[\"f_some\",\"f_none\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_received</bpmn2:incoming>\n        <bpmn2:outgoing>f_none</bpmn2:outgoing>\n        <bpmn2:outgoing>f_some</bpmn2:outgoing>\n      </bpmn2:exclusiveGateway>\n      <bpmn2:scriptTask id=\"f_some_reset\" name=\"Reset reminder attempts\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_some</bpmn2:incoming>\n        <bpmn2:outgoing>f_some_reset_out</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"reminder_attempts\", 0);</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:exclusiveGateway id=\"gw_threshold\" name=\"Average above threshold?\" gatewayDirection=\"Diverging\" default=\"f_ok\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"exclusive-split\",\"kind\":\"structural\",\"supports\":[\"f_high\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_some_reset_out</bpmn2:incoming>\n        <bpmn2:outgoing>f_high</bpmn2:outgoing>\n        <bpmn2:outgoing>f_ok</bpmn2:outgoing>\n      </bpmn2:exclusiveGateway>\n      <bpmn2:exclusiveGateway id=\"loop_entry\" name=\"Begin monitoring cycle\" gatewayDirection=\"Converging\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"exclusive-join\",\"kind\":\"structural\",\"supports\":[\"request_readings\",\"notify\",\"gw_threshold\",\"gw_attempts\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_notified</bpmn2:incoming>\n        <bpmn2:incoming>f_ok</bpmn2:incoming>\n        <bpmn2:incoming>f_retry</bpmn2:incoming>\n        <bpmn2:incoming>f_start</bpmn2:incoming>\n        <bpmn2:outgoing>f_loop</bpmn2:outgoing>\n      </bpmn2:exclusiveGateway>\n      <bpmn2:task id=\"notify\" name=\"Notify clinician\" drools:taskName=\"clinician.notify\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"The responsible clinician should be notified when the weekly home average is 135/85 mmHg or higher ... routine notification\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_high</bpmn2:incoming>\n        <bpmn2:outgoing>f_notified</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"notify_reason_input\" name=\"reason\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"notify_urgency_input\" name=\"urgency\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"notify_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>notify_reason_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>notify_urgency_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>notify_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>notify_reason</bpmn2:sourceRef>\n          <bpmn2:targetRef>notify_reason_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>notify_urgency_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">routine</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">notify_urgency_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>notify_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">clinician_notify__notify</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">notify_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:task>\n      <bpmn2:task id=\"query_diastolic\" name=\"Check diastolic readings received\" drools:taskName=\"ehr.query_observations\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"The care team reviews the weekly average systolic and diastolic readings\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_query2</bpmn2:incoming>\n        <bpmn2:outgoing>f_received</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"query_diastolic_code_input\" name=\"code\" drools:dtype=\"String\"/>\n          <bpmn2:dataInput id=\"query_diastolic_unit_input\" name=\"unit\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"query_diastolic_window_input\" name=\"window\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"query_diastolic_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:dataOutput id=\"query_diastolic_average_value_output\" name=\"average_value\" drools:dtype=\"Double\" itemSubjectRef=\"_dblItem\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>query_diastolic_code_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_diastolic_unit_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_diastolic_window_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_diastolic_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet>\n            <bpmn2:dataOutputRefs>query_diastolic_average_value_output</bpmn2:dataOutputRefs>\n          </bpmn2:outputSet>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_diastolic_code_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">concept:diastolic blood pressure</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_diastolic_code_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_diastolic_unit_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">mm[Hg]</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_diastolic_unit_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reporting_interval</bpmn2:sourceRef>\n          <bpmn2:targetRef>query_diastolic_window_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_diastolic_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">ehr_query_observations__query_diastolic</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_diastolic_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataOutputAssociation>\n          <bpmn2:sourceRef>query_diastolic_average_value_output</bpmn2:sourceRef>\n          <bpmn2:targetRef>avg_diastolic</bpmn2:targetRef>\n        </bpmn2:dataOutputAssociation>\n      </bpmn2:task>\n      <bpmn2:task id=\"query_systolic\" name=\"Check systolic readings received\" drools:taskName=\"ehr.query_observations\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"The care team reviews the weekly average systolic and diastolic readings\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_query</bpmn2:incoming>\n        <bpmn2:outgoing>f_query2</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"query_systolic_code_input\" name=\"code\" drools:dtype=\"String\"/>\n          <bpmn2:dataInput id=\"query_systolic_unit_input\" name=\"unit\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"query_systolic_window_input\" name=\"window\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"query_systolic_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:dataOutput id=\"query_systolic_average_value_output\" name=\"average_value\" drools:dtype=\"Double\" itemSubjectRef=\"_dblItem\"/>\n          <bpmn2:dataOutput id=\"query_systolic_count_output\" name=\"count\" drools:dtype=\"Integer\" itemSubjectRef=\"_intItem\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>query_systolic_code_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_systolic_unit_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_systolic_window_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_systolic_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet>\n            <bpmn2:dataOutputRefs>query_systolic_average_value_output</bpmn2:dataOutputRefs>\n            <bpmn2:dataOutputRefs>query_systolic_count_output</bpmn2:dataOutputRefs>\n          </bpmn2:outputSet>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_systolic_code_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">concept:systolic blood pressure</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_systolic_code_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_systolic_unit_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">mm[Hg]</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_systolic_unit_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reporting_interval</bpmn2:sourceRef>\n          <bpmn2:targetRef>query_systolic_window_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_systolic_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">ehr_query_observations__query_systolic</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_systolic_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataOutputAssociation>\n          <bpmn2:sourceRef>query_systolic_average_value_output</bpmn2:sourceRef>\n          <bpmn2:targetRef>avg_systolic</bpmn2:targetRef>\n        </bpmn2:dataOutputAssociation>\n        <bpmn2:dataOutputAssociation>\n          <bpmn2:sourceRef>query_systolic_count_output</bpmn2:sourceRef>\n          <bpmn2:targetRef>reading_count</bpmn2:targetRef>\n        </bpmn2:dataOutputAssociation>\n      </bpmn2:task>\n      <bpmn2:task id=\"remind\" name=\"Send reading reminder\" drools:taskName=\"patient.send_message\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"counter\":\"reminder_attempts\",\"provenance\":{\"kind\":\"source\",\"source_text\":\"If a week passes without readings, a reminder should be sent to the patient\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_none</bpmn2:incoming>\n        <bpmn2:outgoing>remind_counter_in</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"remind_kind_input\" name=\"kind\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"remind_message_input\" name=\"message\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"remind_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>remind_kind_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>remind_message_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>remind_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>remind_kind_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">reminder</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">remind_kind_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reminder_text</bpmn2:sourceRef>\n          <bpmn2:targetRef>remind_message_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>remind_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">patient_send_message__remind</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">remind_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:task>\n      <bpmn2:scriptTask id=\"remind_counter\" name=\"Count reminder attempts\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>remind_counter_in</bpmn2:incoming>\n        <bpmn2:outgoing>f_attempts</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"reminder_attempts\", ((Integer) kcontext.getVariable(\"reminder_attempts\")) + 1);</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:task id=\"request_readings\" name=\"Request home BP readings\" drools:taskName=\"patient.request_observation\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"take two readings one minute apart in the morning before medications and two readings one minute apart in the evening ... and transmit their readings to the care team weekly\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_loop</bpmn2:incoming>\n        <bpmn2:outgoing>f_wait</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"request_readings_code_input\" name=\"code\" drools:dtype=\"String\"/>\n          <bpmn2:dataInput id=\"request_readings_due_input\" name=\"due\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"request_readings_instructions_input\" name=\"instructions\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"request_readings_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>request_readings_code_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>request_readings_due_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>request_readings_instructions_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>request_readings_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>request_readings_code_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">concept:blood pressure</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">request_readings_code_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reporting_interval</bpmn2:sourceRef>\n          <bpmn2:targetRef>request_readings_due_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>instructions_text</bpmn2:sourceRef>\n          <bpmn2:targetRef>request_readings_instructions_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>request_readings_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">patient_request_observation__request_readings</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">request_readings_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:task>\n      <bpmn2:intermediateCatchEvent id=\"wait_interval\" name=\"Reporting interval elapsed\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"transmit their readings to the care team weekly\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_wait</bpmn2:incoming>\n        <bpmn2:outgoing>f_query</bpmn2:outgoing>\n        <bpmn2:timerEventDefinition>\n          <bpmn2:timeDuration xsi:type=\"bpmn2:tFormalExpression\">#{reporting_interval}</bpmn2:timeDuration>\n        </bpmn2:timerEventDefinition>\n      </bpmn2:intermediateCatchEvent>\n      <bpmn2:sequenceFlow id=\"remind_counter_in\" sourceRef=\"remind\" targetRef=\"remind_counter\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_attempts\" sourceRef=\"remind_counter\" targetRef=\"gw_attempts\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_end_escalated\" sourceRef=\"escalate\" targetRef=\"end_escalated_outcome\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"end_escalated_outcome_out\" sourceRef=\"end_escalated_outcome\" targetRef=\"main_end_escalated\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_escalate\" sourceRef=\"gw_attempts\" targetRef=\"escalate\" name=\"limit reached\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"conditionExpression\":\"reminder_attempts >= max_reminder_attempts\",\"provenance\":{\"kind\":\"source\",\"source_text\":\"after three reminder attempts on different days\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return reminder_attempts != null && max_reminder_attempts != null && reminder_attempts >= max_reminder_attempts;]]></bpmn2:conditionExpression>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_high\" sourceRef=\"gw_threshold\" targetRef=\"notify\" name=\"above threshold\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"conditionExpression\":\"avg_systolic >= notify_systolic_threshold or avg_diastolic >= notify_diastolic_threshold\",\"provenance\":{\"kind\":\"source\",\"source_text\":\"weekly home average is 135/85 mmHg or higher\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return (avg_systolic != null && notify_systolic_threshold != null && avg_systolic >= notify_systolic_threshold) || (avg_diastolic != null && notify_diastolic_threshold != null && avg_diastolic >= notify_diastolic_threshold);]]></bpmn2:conditionExpression>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_loop\" sourceRef=\"loop_entry\" targetRef=\"request_readings\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_none\" sourceRef=\"gw_received\" targetRef=\"remind\" name=\"no\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_notified\" sourceRef=\"notify\" targetRef=\"loop_entry\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_ok\" sourceRef=\"gw_threshold\" targetRef=\"loop_entry\" name=\"within target\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_query\" sourceRef=\"wait_interval\" targetRef=\"query_systolic\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_query2\" sourceRef=\"query_systolic\" targetRef=\"query_diastolic\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_received\" sourceRef=\"query_diastolic\" targetRef=\"gw_received\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_retry\" sourceRef=\"gw_attempts\" targetRef=\"loop_entry\" name=\"try again\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_some\" sourceRef=\"gw_received\" targetRef=\"f_some_reset\" name=\"yes\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"conditionExpression\":\"defined(reading_count) and reading_count > 0\",\"provenance\":{\"kind\":\"source\",\"source_text\":\"The care team reviews the weekly average systolic and diastolic readings\"},\"resets\":[\"reminder_attempts\"],\"structural_constant\":true}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return reading_count != null && reading_count > 0;]]></bpmn2:conditionExpression>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_some_reset_out\" sourceRef=\"f_some_reset\" targetRef=\"gw_threshold\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_start\" sourceRef=\"main_start\" targetRef=\"loop_entry\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_wait\" sourceRef=\"request_readings\" targetRef=\"wait_interval\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n    </bpmn2:subProcess>\n    <bpmn2:boundaryEvent id=\"period_elapsed\" name=\"Max duration elapsed\" attachedToRef=\"main\" cancelActivity=\"true\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"plan-bound\",\"kind\":\"structural\",\"supports\":[\"request_readings\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:outgoing>f_period</bpmn2:outgoing>\n      <bpmn2:timerEventDefinition>\n        <bpmn2:timeDuration xsi:type=\"bpmn2:tFormalExpression\">#{max_duration}</bpmn2:timeDuration>\n      </bpmn2:timerEventDefinition>\n    </bpmn2:boundaryEvent>\n    <bpmn2:exclusiveGateway id=\"gw_outcome\" name=\"Outcome\" gatewayDirection=\"Diverging\" default=\"f_completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_after</bpmn2:incoming>\n      <bpmn2:outgoing>end_escalated_route</bpmn2:outgoing>\n      <bpmn2:outgoing>f_completed</bpmn2:outgoing>\n    </bpmn2:exclusiveGateway>\n    <bpmn2:endEvent id=\"end_escalated\" name=\"Handed to care team\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>end_escalated_route</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_completed\" name=\"Completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_completed</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_period\" name=\"Monitoring period complete\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"outcome\":\"complete\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"period_elapsed\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_period</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:sequenceFlow id=\"f_init\" sourceRef=\"start\" targetRef=\"init\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_main\" sourceRef=\"init\" targetRef=\"main\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_after\" sourceRef=\"main\" targetRef=\"gw_outcome\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"end_escalated_route\" sourceRef=\"gw_outcome\" targetRef=\"end_escalated\" name=\"escalated\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return \"escalated\".equals(outcome);]]></bpmn2:conditionExpression>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_completed\" sourceRef=\"gw_outcome\" targetRef=\"end_completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_period\" sourceRef=\"period_elapsed\" targetRef=\"end_period\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n  </bpmn2:process>\n</bpmn2:definitions>\n"
+}

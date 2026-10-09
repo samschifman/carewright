@@ -1,0 +1,546 @@
+{
+  "contract_version": "1.1",
+  "summary": {
+    "id": "lifestyle-reassessment",
+    "version": "92c654938cef",
+    "name": "Lifestyle reassessment with home-reading review",
+    "description": "Send lifestyle education, request a follow-up visit within the treatment decision interval, wait for that interval, and have a clinician review home readings at the visit.",
+    "source_cpg": "SYN-HTN-2026-002",
+    "section": "3.2 Treatment Decision; 3.4 Lifestyle Modification Recommendations; Table 1 Follow-up (weeks)",
+    "source_location": null,
+    "triggers": [
+      {
+        "kind": "dmn-output",
+        "model_id": "treatment-recommendation",
+        "output_name": "Follow Up Weeks",
+        "output_value": 8,
+        "recommendation_id": null
+      },
+      {
+        "kind": "dmn-output",
+        "model_id": "treatment-recommendation",
+        "output_name": "Follow Up Weeks",
+        "output_value": 12,
+        "recommendation_id": null
+      }
+    ],
+    "linked_recommendation_ids": [
+      "<placeholder-rec-id>"
+    ],
+    "linked_decision_model_ids": [
+      "treatment-recommendation"
+    ],
+    "parameters": [
+      {
+        "name": "reassessment_interval",
+        "type": "duration",
+        "unit": null,
+        "default": null,
+        "constraints": null,
+        "required": true,
+        "description": "Required interval bound from the Treatment Recommendation Follow Up Weeks output at synthesis.",
+        "source": null,
+        "reserved": false
+      },
+      {
+        "name": "education_message",
+        "type": "string",
+        "unit": null,
+        "default": "Follow the DASH eating plan, including fruits, vegetables, whole grains, low-fat dairy, and less than 2,300 mg of sodium daily. Aim for at least 150 minutes of moderate or 75 minutes of vigorous aerobic activity each week. Work toward and maintain a healthy body weight. Limit alcohol to no more than 2 drinks a day for men or 1 for women. If you smoke, ask your care team about smoking-cessation support. Bring your home blood pressure readings to your follow-up visit.",
+        "constraints": null,
+        "required": true,
+        "description": "Patient-facing lifestyle education covering the recommended diet, activity, weight, alcohol, and smoking measures.",
+        "source": {
+          "kind": "authored",
+          "source_text": null,
+          "source_location": null,
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "visit_reason",
+        "type": "string",
+        "unit": null,
+        "default": "Review home blood pressure readings after lifestyle modification.",
+        "constraints": null,
+        "required": true,
+        "description": "Reason supplied with the visit request.",
+        "source": {
+          "kind": "authored",
+          "source_text": null,
+          "source_location": null,
+          "reviewer": null,
+          "note": null,
+          "previous": null,
+          "policy": null
+        },
+        "reserved": false
+      },
+      {
+        "name": "max_duration",
+        "type": "duration",
+        "unit": null,
+        "default": null,
+        "constraints": null,
+        "required": true,
+        "description": "Maximum time allowed for this automation.",
+        "source": null,
+        "reserved": true
+      }
+    ],
+    "capabilities_used": [
+      "patient.send_message",
+      "schedule.request_visit"
+    ],
+    "catalog_version": "1.0",
+    "ir_version": "1.0",
+    "pattern_family": "schedule-and-check",
+    "automatability": {
+      "tier": "A",
+      "rationale": "The treatment decision supplies an eight- or twelve-week interval; the process sends lifestyle education, requests the visit, then has a clinician review readings."
+    },
+    "validation": {
+      "status": "valid",
+      "rungs_passed": [
+        "L0",
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5a",
+        "L5b"
+      ],
+      "deferred_invariants": [
+        "max_duration >= reassessment_interval"
+      ],
+      "kogito_checked": false,
+      "warnings": [],
+      "errors": [],
+      "acknowledgement": null
+    },
+    "artifact_id": "golden-automation-lifestyle-reassessment"
+  },
+  "ir": {
+    "ir_version": "1.0",
+    "process": {
+      "id": "lifestyle-reassessment",
+      "name": "Lifestyle reassessment with home-reading review",
+      "description": "Send lifestyle education, request a follow-up visit within the treatment decision interval, wait for that interval, and have a clinician review home readings at the visit.",
+      "isExecutable": true,
+      "kind": "template",
+      "properties": [
+        {
+          "name": "education_delivered",
+          "type": "boolean",
+          "unit": null
+        },
+        {
+          "name": "visit_request_id",
+          "type": "string",
+          "unit": null
+        }
+      ],
+      "flowElements": [
+        {
+          "id": "start",
+          "name": "Lifestyle reassessment begins",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "start-event",
+              "supports": [
+                "send_education"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "startEvent"
+        },
+        {
+          "id": "send_education",
+          "name": "Send home blood pressure education",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "All patients with hypertension, regardless of whether pharmacological therapy is initiated, should receive counseling on the following lifestyle modifications: Dietary changes: Adopt the DASH (Dietary Approaches to Stop Hypertension) diet, which emphasizes fruits, vegetables, whole grains, and low-fat dairy products while limiting saturated fat and sodium intake to less than 2,300 mg per day. Physical activity: Engage in at least 150 minutes per week of moderate-intensity aerobic exercise, such as brisk walking, or 75 minutes per week of vigorous-intensity aerobic exercise. Weight management: Achieve and maintain a healthy body weight (BMI 18.5-24.9 kg/m2). Even modest weight loss of 5-10% can significantly reduce blood pressure. Alcohol limitation: Limit alcohol intake to no more than 2 drinks per day for men and 1 drink per day for women. Smoking cessation: If applicable, provide smoking cessation counseling and resources.",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "task",
+          "taskName": "patient.send_message",
+          "inputs": {
+            "message": {
+              "param": "education_message"
+            },
+            "kind": {
+              "literal": "education",
+              "type": "enum"
+            }
+          },
+          "outputs": {
+            "delivered": "education_delivered"
+          }
+        },
+        {
+          "id": "request_reassessment_visit",
+          "name": "Request lifestyle follow-up visit",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1.",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "task",
+          "taskName": "schedule.request_visit",
+          "inputs": {
+            "reason": {
+              "param": "visit_reason"
+            },
+            "within": {
+              "param": "reassessment_interval"
+            }
+          },
+          "outputs": {
+            "request_id": "visit_request_id"
+          }
+        },
+        {
+          "id": "wait_reassessment",
+          "name": "Wait for lifestyle reassessment",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "Patients with Stage 1 hypertension without high-risk comorbidities should attempt lifestyle modification for 8 weeks before reassessment. Patients with elevated but sub-hypertensive blood pressure (SBP < 130) should focus on lifestyle modifications with follow-up in 12 weeks.",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "intermediateCatchEvent",
+          "timerEventDefinition": {
+            "timeDuration": {
+              "param": "reassessment_interval"
+            },
+            "timeCycle": null
+          }
+        },
+        {
+          "id": "review_readings",
+          "name": "Review home readings at follow-up visit",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1.",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "userTask",
+          "groupId": "clinicians",
+          "outputs": {}
+        },
+        {
+          "id": "end_complete",
+          "name": "Home readings reviewed at follow-up visit",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "end-event",
+              "supports": [
+                "review_readings"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": "complete",
+            "structural_constant": false
+          },
+          "type": "endEvent"
+        },
+        {
+          "id": "end_timeout",
+          "name": "Reassessment window elapsed",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "end-event",
+              "supports": [
+                "period_elapsed"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": "timed_out",
+            "structural_constant": false
+          },
+          "type": "endEvent"
+        },
+        {
+          "id": "period_elapsed",
+          "name": "Maximum duration elapsed",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "plan-bound",
+              "supports": [
+                "send_education",
+                "request_reassessment_visit",
+                "wait_reassessment",
+                "review_readings"
+              ],
+              "justification": null,
+              "replaces": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "boundaryEvent",
+          "attachedToRef": "main",
+          "cancelActivity": true,
+          "timerEventDefinition": {
+            "timeDuration": {
+              "param": "max_duration"
+            },
+            "timeCycle": null
+          }
+        },
+        {
+          "id": "f_start",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "start",
+          "targetRef": "send_education",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_send_request",
+          "name": "",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "All patients with hypertension, regardless of whether pharmacological therapy is initiated, should receive counseling on the following lifestyle modifications: Dietary changes: Adopt the DASH (Dietary Approaches to Stop Hypertension) diet, which emphasizes fruits, vegetables, whole grains, and low-fat dairy products while limiting saturated fat and sodium intake to less than 2,300 mg per day. Physical activity: Engage in at least 150 minutes per week of moderate-intensity aerobic exercise, such as brisk walking, or 75 minutes per week of vigorous-intensity aerobic exercise. Weight management: Achieve and maintain a healthy body weight (BMI 18.5-24.9 kg/m2). Even modest weight loss of 5-10% can significantly reduce blood pressure. Alcohol limitation: Limit alcohol intake to no more than 2 drinks per day for men and 1 drink per day for women. Smoking cessation: If applicable, provide smoking cessation counseling and resources.",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "send_education",
+          "targetRef": "request_reassessment_visit",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_request_wait",
+          "name": "",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1.",
+              "source_location": null
+            },
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "request_reassessment_visit",
+          "targetRef": "wait_reassessment",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_wait_review",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "wait_reassessment",
+          "targetRef": "review_readings",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_review_end",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "review_readings",
+          "targetRef": "end_complete",
+          "conditionExpression": null
+        },
+        {
+          "id": "f_timeout",
+          "name": "",
+          "acp": {
+            "provenance": null,
+            "template_ref": null,
+            "counter": null,
+            "resets": null,
+            "outcome": null,
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "period_elapsed",
+          "targetRef": "end_timeout",
+          "conditionExpression": null
+        }
+      ],
+      "acp": {
+        "triggers": [
+          {
+            "kind": "dmn-output",
+            "model_id": "treatment-recommendation",
+            "output_name": "Follow Up Weeks",
+            "output_value": 8,
+            "recommendation_id": null
+          },
+          {
+            "kind": "dmn-output",
+            "model_id": "treatment-recommendation",
+            "output_name": "Follow Up Weeks",
+            "output_value": 12,
+            "recommendation_id": null
+          }
+        ],
+        "parameters": [
+          {
+            "name": "reassessment_interval",
+            "type": "duration",
+            "unit": null,
+            "default": null,
+            "constraints": null,
+            "required": true,
+            "description": "Required interval bound from the Treatment Recommendation Follow Up Weeks output at synthesis.",
+            "source": null,
+            "reserved": false
+          },
+          {
+            "name": "education_message",
+            "type": "string",
+            "unit": null,
+            "default": "Follow the DASH eating plan, including fruits, vegetables, whole grains, low-fat dairy, and less than 2,300 mg of sodium daily. Aim for at least 150 minutes of moderate or 75 minutes of vigorous aerobic activity each week. Work toward and maintain a healthy body weight. Limit alcohol to no more than 2 drinks a day for men or 1 for women. If you smoke, ask your care team about smoking-cessation support. Bring your home blood pressure readings to your follow-up visit.",
+            "constraints": null,
+            "required": true,
+            "description": "Patient-facing lifestyle education covering the recommended diet, activity, weight, alcohol, and smoking measures.",
+            "source": {
+              "kind": "authored",
+              "source_text": null,
+              "source_location": null,
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "visit_reason",
+            "type": "string",
+            "unit": null,
+            "default": "Review home blood pressure readings after lifestyle modification.",
+            "constraints": null,
+            "required": true,
+            "description": "Reason supplied with the visit request.",
+            "source": {
+              "kind": "authored",
+              "source_text": null,
+              "source_location": null,
+              "reviewer": null,
+              "note": null,
+              "previous": null,
+              "policy": null
+            },
+            "reserved": false
+          },
+          {
+            "name": "max_duration",
+            "type": "duration",
+            "unit": null,
+            "default": null,
+            "constraints": null,
+            "required": true,
+            "description": "Maximum time allowed for this automation.",
+            "source": null,
+            "reserved": true
+          }
+        ],
+        "invariants": [
+          "max_duration >= reassessment_interval"
+        ],
+        "produces": [],
+        "provenance": {
+          "source_cpg": "SYN-HTN-2026-002",
+          "section": "3.2 Treatment Decision; 3.4 Lifestyle Modification Recommendations; Table 1 Follow-up (weeks)",
+          "source_location": null,
+          "template_snapshots": null
+        },
+        "template_refs": [],
+        "unify": [],
+        "pruned": [],
+        "consolidated_boundaries": []
+      }
+    }
+  },
+  "bpmn_xml": "<?xml version='1.0' encoding='UTF-8'?>\n<bpmn2:definitions xmlns:bpmn2=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:drools=\"http://www.jboss.org/drools\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:acp=\"https://github.com/samschifman/cpg-to-acp/bpmn\" id=\"lifestyle-reassessment_defs\" targetNamespace=\"https://github.com/samschifman/cpg-to-acp/bpmn/SYN-HTN-2026-002\">\n  <bpmn2:itemDefinition id=\"_strItem\" structureRef=\"String\"/>\n  <bpmn2:itemDefinition id=\"_boolItem\" structureRef=\"Boolean\"/>\n  <bpmn2:process id=\"lifestyle-reassessment\" name=\"Lifestyle reassessment with home-reading review\" isExecutable=\"true\" processType=\"Public\" drools:packageName=\"org.carewright.automation\" drools:version=\"92c654938cef\">\n    <bpmn2:extensionElements>\n      <drools:metaData name=\"acp.catalogVersion\">1.0</drools:metaData>\n      <acp:template><![CDATA[{\"catalog_version\":\"1.0\",\"consolidated_boundaries\":[],\"description\":\"Send lifestyle education, request a follow-up visit within the treatment decision interval, wait for that interval, and have a clinician review home readings at the visit.\",\"invariants\":[\"max_duration >= reassessment_interval\"],\"ir_version\":\"1.0\",\"kind\":\"template\",\"parameters\":[{\"description\":\"Required interval bound from the Treatment Recommendation Follow Up Weeks output at synthesis.\",\"name\":\"reassessment_interval\",\"required\":true,\"reserved\":false,\"type\":\"duration\"},{\"default\":\"Follow the DASH eating plan, including fruits, vegetables, whole grains, low-fat dairy, and less than 2,300 mg of sodium daily. Aim for at least 150 minutes of moderate or 75 minutes of vigorous aerobic activity each week. Work toward and maintain a healthy body weight. Limit alcohol to no more than 2 drinks a day for men or 1 for women. If you smoke, ask your care team about smoking-cessation support. Bring your home blood pressure readings to your follow-up visit.\",\"description\":\"Patient-facing lifestyle education covering the recommended diet, activity, weight, alcohol, and smoking measures.\",\"name\":\"education_message\",\"required\":true,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"default\":\"Review home blood pressure readings after lifestyle modification.\",\"description\":\"Reason supplied with the visit request.\",\"name\":\"visit_reason\",\"required\":true,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"description\":\"Maximum time allowed for this automation.\",\"name\":\"max_duration\",\"required\":true,\"reserved\":true,\"type\":\"duration\"}],\"produces\":[],\"profile\":\"kogito-10.2\",\"provenance\":{\"section\":\"3.2 Treatment Decision; 3.4 Lifestyle Modification Recommendations; Table 1 Follow-up (weeks)\",\"source_cpg\":\"SYN-HTN-2026-002\"},\"pruned\":[],\"template_id\":\"lifestyle-reassessment\",\"template_refs\":[],\"triggers\":[{\"kind\":\"dmn-output\",\"model_id\":\"treatment-recommendation\",\"output_name\":\"Follow Up Weeks\",\"output_value\":8},{\"kind\":\"dmn-output\",\"model_id\":\"treatment-recommendation\",\"output_name\":\"Follow Up Weeks\",\"output_value\":12}],\"unify\":[],\"version\":\"92c654938cef\"}]]></acp:template>\n    </bpmn2:extensionElements>\n    <bpmn2:property id=\"reassessment_interval\" itemSubjectRef=\"_strItem\" name=\"reassessment_interval\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">duration</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"education_message\" itemSubjectRef=\"_strItem\" name=\"education_message\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"visit_reason\" itemSubjectRef=\"_strItem\" name=\"visit_reason\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"max_duration\" itemSubjectRef=\"_strItem\" name=\"max_duration\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">duration</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"education_delivered\" itemSubjectRef=\"_boolItem\" name=\"education_delivered\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">boolean</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"visit_request_id\" itemSubjectRef=\"_strItem\" name=\"visit_request_id\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"outcome\" itemSubjectRef=\"_strItem\" name=\"outcome\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:startEvent id=\"start\" name=\"Lifestyle reassessment begins\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"start-event\",\"kind\":\"structural\",\"supports\":[\"send_education\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:outgoing>f_init</bpmn2:outgoing>\n    </bpmn2:startEvent>\n    <bpmn2:scriptTask id=\"init\" name=\"Initialise\" scriptFormat=\"http://www.java.com/java\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_init</bpmn2:incoming>\n      <bpmn2:outgoing>f_main</bpmn2:outgoing>\n      <bpmn2:script>kcontext.setVariable(\"outcome\", \"\");</bpmn2:script>\n    </bpmn2:scriptTask>\n    <bpmn2:subProcess id=\"main\" name=\"Monitoring\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_main</bpmn2:incoming>\n      <bpmn2:outgoing>f_after</bpmn2:outgoing>\n      <bpmn2:startEvent id=\"main_start\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:outgoing>f_start</bpmn2:outgoing>\n      </bpmn2:startEvent>\n      <bpmn2:scriptTask id=\"end_complete_outcome\" name=\"Outcome: complete\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_review_end</bpmn2:incoming>\n        <bpmn2:outgoing>end_complete_outcome_out</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"outcome\", \"complete\");</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:endEvent id=\"main_end_complete\" name=\"Home readings reviewed at follow-up visit\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"outcome\":\"complete\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"review_readings\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>end_complete_outcome_out</bpmn2:incoming>\n      </bpmn2:endEvent>\n      <bpmn2:task id=\"request_reassessment_visit\" name=\"Request lifestyle follow-up visit\" drools:taskName=\"schedule.request_visit\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1.\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_send_request</bpmn2:incoming>\n        <bpmn2:outgoing>f_request_wait</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"request_reassessment_visit_reason_input\" name=\"reason\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"request_reassessment_visit_within_input\" name=\"within\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"request_reassessment_visit_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:dataOutput id=\"request_reassessment_visit_request_id_output\" name=\"request_id\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>request_reassessment_visit_reason_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>request_reassessment_visit_within_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>request_reassessment_visit_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet>\n            <bpmn2:dataOutputRefs>request_reassessment_visit_request_id_output</bpmn2:dataOutputRefs>\n          </bpmn2:outputSet>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>visit_reason</bpmn2:sourceRef>\n          <bpmn2:targetRef>request_reassessment_visit_reason_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reassessment_interval</bpmn2:sourceRef>\n          <bpmn2:targetRef>request_reassessment_visit_within_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>request_reassessment_visit_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">schedule_request_visit__request_reassessment_visit</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">request_reassessment_visit_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataOutputAssociation>\n          <bpmn2:sourceRef>request_reassessment_visit_request_id_output</bpmn2:sourceRef>\n          <bpmn2:targetRef>visit_request_id</bpmn2:targetRef>\n        </bpmn2:dataOutputAssociation>\n      </bpmn2:task>\n      <bpmn2:userTask id=\"review_readings\" name=\"Review home readings at follow-up visit\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1.\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_wait_review</bpmn2:incoming>\n        <bpmn2:outgoing>f_review_end</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"review_readings_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:dataInput id=\"review_readings_Skippable\" name=\"Skippable\" drools:dtype=\"Object\"/>\n          <bpmn2:dataInput id=\"review_readings_GroupId\" name=\"GroupId\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>review_readings_TaskName</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>review_readings_Skippable</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>review_readings_GroupId</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>review_readings_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">review_readings</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">review_readings_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>review_readings_Skippable</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">false</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">review_readings_Skippable</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>review_readings_GroupId</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">clinicians</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">review_readings_GroupId</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:userTask>\n      <bpmn2:task id=\"send_education\" name=\"Send home blood pressure education\" drools:taskName=\"patient.send_message\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"All patients with hypertension, regardless of whether pharmacological therapy is initiated, should receive counseling on the following lifestyle modifications: Dietary changes: Adopt the DASH (Dietary Approaches to Stop Hypertension) diet, which emphasizes fruits, vegetables, whole grains, and low-fat dairy products while limiting saturated fat and sodium intake to less than 2,300 mg per day. Physical activity: Engage in at least 150 minutes per week of moderate-intensity aerobic exercise, such as brisk walking, or 75 minutes per week of vigorous-intensity aerobic exercise. Weight management: Achieve and maintain a healthy body weight (BMI 18.5-24.9 kg/m2). Even modest weight loss of 5-10% can significantly reduce blood pressure. Alcohol limitation: Limit alcohol intake to no more than 2 drinks per day for men and 1 drink per day for women. Smoking cessation: If applicable, provide smoking cessation counseling and resources.\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_start</bpmn2:incoming>\n        <bpmn2:outgoing>f_send_request</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"send_education_kind_input\" name=\"kind\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"send_education_message_input\" name=\"message\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"send_education_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:dataOutput id=\"send_education_delivered_output\" name=\"delivered\" drools:dtype=\"Boolean\" itemSubjectRef=\"_boolItem\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>send_education_kind_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>send_education_message_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>send_education_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet>\n            <bpmn2:dataOutputRefs>send_education_delivered_output</bpmn2:dataOutputRefs>\n          </bpmn2:outputSet>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>send_education_kind_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">education</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">send_education_kind_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>education_message</bpmn2:sourceRef>\n          <bpmn2:targetRef>send_education_message_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>send_education_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">patient_send_message__send_education</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">send_education_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataOutputAssociation>\n          <bpmn2:sourceRef>send_education_delivered_output</bpmn2:sourceRef>\n          <bpmn2:targetRef>education_delivered</bpmn2:targetRef>\n        </bpmn2:dataOutputAssociation>\n      </bpmn2:task>\n      <bpmn2:intermediateCatchEvent id=\"wait_reassessment\" name=\"Wait for lifestyle reassessment\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"Patients with Stage 1 hypertension without high-risk comorbidities should attempt lifestyle modification for 8 weeks before reassessment. Patients with elevated but sub-hypertensive blood pressure (SBP < 130) should focus on lifestyle modifications with follow-up in 12 weeks.\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_request_wait</bpmn2:incoming>\n        <bpmn2:outgoing>f_wait_review</bpmn2:outgoing>\n        <bpmn2:timerEventDefinition>\n          <bpmn2:timeDuration xsi:type=\"bpmn2:tFormalExpression\">#{reassessment_interval}</bpmn2:timeDuration>\n        </bpmn2:timerEventDefinition>\n      </bpmn2:intermediateCatchEvent>\n      <bpmn2:sequenceFlow id=\"f_request_wait\" sourceRef=\"request_reassessment_visit\" targetRef=\"wait_reassessment\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1.\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_review_end\" sourceRef=\"review_readings\" targetRef=\"end_complete_outcome\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"end_complete_outcome_out\" sourceRef=\"end_complete_outcome\" targetRef=\"main_end_complete\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_send_request\" sourceRef=\"send_education\" targetRef=\"request_reassessment_visit\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"All patients with hypertension, regardless of whether pharmacological therapy is initiated, should receive counseling on the following lifestyle modifications: Dietary changes: Adopt the DASH (Dietary Approaches to Stop Hypertension) diet, which emphasizes fruits, vegetables, whole grains, and low-fat dairy products while limiting saturated fat and sodium intake to less than 2,300 mg per day. Physical activity: Engage in at least 150 minutes per week of moderate-intensity aerobic exercise, such as brisk walking, or 75 minutes per week of vigorous-intensity aerobic exercise. Weight management: Achieve and maintain a healthy body weight (BMI 18.5-24.9 kg/m2). Even modest weight loss of 5-10% can significantly reduce blood pressure. Alcohol limitation: Limit alcohol intake to no more than 2 drinks per day for men and 1 drink per day for women. Smoking cessation: If applicable, provide smoking cessation counseling and resources.\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_start\" sourceRef=\"main_start\" targetRef=\"send_education\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_wait_review\" sourceRef=\"wait_reassessment\" targetRef=\"review_readings\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n    </bpmn2:subProcess>\n    <bpmn2:boundaryEvent id=\"period_elapsed\" name=\"Maximum duration elapsed\" attachedToRef=\"main\" cancelActivity=\"true\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"plan-bound\",\"kind\":\"structural\",\"supports\":[\"send_education\",\"request_reassessment_visit\",\"wait_reassessment\",\"review_readings\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:outgoing>f_timeout</bpmn2:outgoing>\n      <bpmn2:timerEventDefinition>\n        <bpmn2:timeDuration xsi:type=\"bpmn2:tFormalExpression\">#{max_duration}</bpmn2:timeDuration>\n      </bpmn2:timerEventDefinition>\n    </bpmn2:boundaryEvent>\n    <bpmn2:exclusiveGateway id=\"gw_outcome\" name=\"Outcome\" gatewayDirection=\"Diverging\" default=\"f_completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_after</bpmn2:incoming>\n      <bpmn2:outgoing>end_complete_route</bpmn2:outgoing>\n      <bpmn2:outgoing>f_completed</bpmn2:outgoing>\n    </bpmn2:exclusiveGateway>\n    <bpmn2:endEvent id=\"end_complete\" name=\"Home readings reviewed at follow-up visit\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>end_complete_route</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_completed\" name=\"Completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_completed</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_timeout\" name=\"Reassessment window elapsed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"outcome\":\"timed_out\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"period_elapsed\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_timeout</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:sequenceFlow id=\"f_init\" sourceRef=\"start\" targetRef=\"init\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_main\" sourceRef=\"init\" targetRef=\"main\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_after\" sourceRef=\"main\" targetRef=\"gw_outcome\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"end_complete_route\" sourceRef=\"gw_outcome\" targetRef=\"end_complete\" name=\"complete\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return \"complete\".equals(outcome);]]></bpmn2:conditionExpression>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_completed\" sourceRef=\"gw_outcome\" targetRef=\"end_completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_timeout\" sourceRef=\"period_elapsed\" targetRef=\"end_timeout\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n  </bpmn2:process>\n</bpmn2:definitions>\n"
+}

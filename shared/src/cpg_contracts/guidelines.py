@@ -10,7 +10,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "1.1"
 
 
 class GradingSystem(str, Enum):

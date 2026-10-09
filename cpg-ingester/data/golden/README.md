@@ -8,6 +8,21 @@ They use DMN 1.4, CDATA for FEEL text, `definitions/@id` equal to
 Clinical sign-off happens in PR review. These files are the ingester's reference
 corpus; they are not bundled into the decision service.
 
+Regenerate the synthetic PDF and automation golden artifacts from the
+`cpg-ingester` directory with:
+
+```sh
+python data/make_synthetic_pdf.py
+python data/golden/automation/regenerate.py
+```
+
+The hypertension source document has two versions: `synthetic-hypertension-cpg.md`
+is v1 and remains unchanged; `synthetic-hypertension-cpg-v2.md` adds the home
+blood pressure monitoring and follow-up outreach sections used by automation
+extraction. The decision-table content and name-derived DMN ids overlap, so a
+fresh knowledge base for the automation slice loads v2 only; registering both
+versions together is not supported.
+
 Each row below is one DMN rule. The input and output cells are shown in table
 order. `Assumption:` is deliberately literal in the final column because the
 benchmark manifest uses it to exclude non-source branches from fidelity scores.

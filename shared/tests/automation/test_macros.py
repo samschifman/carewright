@@ -19,12 +19,13 @@ from cpg_contracts.automation.compiler.macros import (
     element_payload,
     expand,
     expand_counters,
+    expand_dmn,
     expand_main,
     template_payload,
     timer_expression,
 )
 from cpg_contracts.automation.expressions import ExpressionError
-from cpg_contracts.automation.ir import AcpElement, ProcessIR, Task
+from cpg_contracts.automation.ir import AcpElement, BusinessRuleTask, ProcessIR, Task
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures/automation/home-bp-monitoring.ir.json"
@@ -207,6 +208,28 @@ def test_custom_task_io_contains_exactly_ir_inputs_and_mapped_outputs() -> None:
 
     assert inputs == {"code", "window", "unit", "TaskName"}
     assert outputs == {"average_value"}
+
+
+def test_dmn_variable_names_keep_exact_labels_and_get_xml_safe_generated_ids() -> None:
+    task = BusinessRuleTask(
+        type="businessRuleTask",
+        id="run_monitoring_plan",
+        name="Determine laboratory order and timing",
+        dmnModel="monitoring-plan",
+        inputs={"Treatment Action": {"property": "treatment_action"}},
+        outputs={"Lab Timing Weeks": "lab_timing_weeks"},
+    )
+
+    node = expand_dmn(task, "https://example.test/dmn/monitoring-plan", "monitoring-plan")
+    inputs = [io for io in node.io if io.direction == "input" and io.name == "Treatment Action"]
+    outputs = [io for io in node.io if io.direction == "output" and io.name == "Lab Timing Weeks"]
+
+    assert len(inputs) == 1
+    assert inputs[0].id == "run_monitoring_plan_Treatment_Action_input"
+    assert inputs[0].name == "Treatment Action"
+    assert len(outputs) == 1
+    assert outputs[0].id == "run_monitoring_plan_Lab_Timing_Weeks_output"
+    assert outputs[0].name == "Lab Timing Weeks"
 
 
 def test_timer_literals_normalize_weeks_and_reject_months() -> None:

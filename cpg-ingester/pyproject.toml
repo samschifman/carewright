@@ -37,6 +37,9 @@ cpg-deploy-dmn = "cpg_ingester.deploy:main"
 cpg-ingest = "cpg_ingester.cli:main"
 
 [project.optional-dependencies]
+dev = [
+    "reportlab>=4,<6",
+]
 test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",

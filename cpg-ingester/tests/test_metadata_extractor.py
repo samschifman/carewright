@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from cpg_contracts import CONTRACT_VERSION
 from cpg_ingester.nodes.metadata_extractor import (
     _cross_check_grading_system,
     metadata_extractor,
@@ -134,4 +135,4 @@ class TestMetadataExtractor:
             with patch("cpg_ingester.nodes.metadata_extractor.get_llm", return_value=mock_llm):
                 result = metadata_extractor(state)
 
-            assert result["cpg_metadata"]["contract_version"] == "1.0"
+            assert result["cpg_metadata"]["contract_version"] == CONTRACT_VERSION

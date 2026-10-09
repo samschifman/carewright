@@ -1,0 +1,440 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:drools="http://www.jboss.org/drools" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:acp="https://github.com/samschifman/cpg-to-acp/bpmn" id="acei-lab-follow-up_defs" targetNamespace="https://github.com/samschifman/cpg-to-acp/bpmn/SYN-HTN-2026-002">
+  <bpmn2:itemDefinition id="_strItem" structureRef="String"/>
+  <bpmn2:itemDefinition id="_intItem" structureRef="Integer"/>
+  <bpmn2:itemDefinition id="_boolItem" structureRef="Boolean"/>
+  <bpmn2:process id="acei-lab-follow-up" name="ACE inhibitor laboratory follow-up" isExecutable="true" processType="Public" drools:packageName="org.carewright.automation" drools:version="a0e2ef83cb85">
+    <bpmn2:extensionElements>
+      <drools:metaData name="acp.catalogVersion">1.0</drools:metaData>
+      <acp:template><![CDATA[{"catalog_version":"1.0","consolidated_boundaries":[],"description":"Run the Monitoring Plan decision for medication patients, wait for the DMN-specified BMP interval, check for the result, and notify the clinician if it is missing.","invariants":["max_duration >= lab_timing"],"ir_version":"1.0","kind":"template","parameters":[{"description":"Treatment Recommendation Action bound from the approved plan at synthesis.","name":"treatment_action","required":true,"reserved":false,"type":"string"},{"description":"Patient kidney-disease status bound from the approved plan at synthesis.","name":"has_kidney_disease","required":true,"reserved":false,"type":"boolean"},{"description":"Required Monitoring Plan output interval for medication rows; no value is present when the decision says routine laboratory monitoring is not required.","name":"lab_timing","required":true,"reserved":false,"type":"duration"},{"default":"The expected laboratory result was not available at the planned follow-up.","description":"Reason shown to the responsible clinician.","name":"notify_reason","required":true,"reserved":false,"source":{"kind":"authored"},"type":"string"},{"description":"Maximum time allowed for this automation.","name":"max_duration","required":true,"reserved":true,"type":"duration"}],"produces":[],"profile":"kogito-10.2","provenance":{"section":"3.2 Treatment Decision; 3.3 Monitoring Plan","source_cpg":"SYN-HTN-2026-002"},"pruned":[],"template_id":"acei-lab-follow-up","template_refs":[],"triggers":[{"kind":"dmn-output","model_id":"treatment-recommendation","output_name":"Action","output_value":"Start medication"}],"unify":[],"version":"a0e2ef83cb85"}]]></acp:template>
+    </bpmn2:extensionElements>
+    <bpmn2:property id="treatment_action" itemSubjectRef="_strItem" name="treatment_action">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="has_kidney_disease" itemSubjectRef="_boolItem" name="has_kidney_disease">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">boolean</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="lab_timing" itemSubjectRef="_strItem" name="lab_timing">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">duration</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="notify_reason" itemSubjectRef="_strItem" name="notify_reason">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="max_duration" itemSubjectRef="_strItem" name="max_duration">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">duration</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="lab_order" itemSubjectRef="_strItem" name="lab_order">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="lab_timing_weeks" itemSubjectRef="_intItem" name="lab_timing_weeks">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">integer</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="result_found" itemSubjectRef="_boolItem" name="result_found">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">boolean</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="outcome" itemSubjectRef="_strItem" name="outcome">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:startEvent id="start" name="Laboratory follow-up begins">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{"provenance":{"derivation_rule":"start-event","kind":"structural","supports":["run_monitoring_plan"]}}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:outgoing>f_init</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    <bpmn2:scriptTask id="init" name="Initialise" scriptFormat="http://www.java.com/java">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_init</bpmn2:incoming>
+      <bpmn2:outgoing>f_main</bpmn2:outgoing>
+      <bpmn2:script>kcontext.setVariable("outcome", "");</bpmn2:script>
+    </bpmn2:scriptTask>
+    <bpmn2:subProcess id="main" name="Monitoring">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_main</bpmn2:incoming>
+      <bpmn2:outgoing>f_after</bpmn2:outgoing>
+      <bpmn2:startEvent id="main_start">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:outgoing>f_start</bpmn2:outgoing>
+      </bpmn2:startEvent>
+      <bpmn2:scriptTask id="end_complete_outcome" name="Outcome: complete" scriptFormat="http://www.java.com/java">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_result_found</bpmn2:incoming>
+        <bpmn2:outgoing>end_complete_outcome_out</bpmn2:outgoing>
+        <bpmn2:script>kcontext.setVariable("outcome", "complete");</bpmn2:script>
+      </bpmn2:scriptTask>
+      <bpmn2:endEvent id="main_end_complete" name="Laboratory result available">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"outcome":"complete","provenance":{"derivation_rule":"end-event","kind":"structural","supports":["query_lab_result"]}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>end_complete_outcome_out</bpmn2:incoming>
+      </bpmn2:endEvent>
+      <bpmn2:scriptTask id="end_not_required_outcome" name="Outcome: not_required" scriptFormat="http://www.java.com/java">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_lab_not_required</bpmn2:incoming>
+        <bpmn2:outgoing>end_not_required_outcome_out</bpmn2:outgoing>
+        <bpmn2:script>kcontext.setVariable("outcome", "not_required");</bpmn2:script>
+      </bpmn2:scriptTask>
+      <bpmn2:endEvent id="main_end_not_required" name="Laboratory monitoring not required">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"outcome":"not_required","provenance":{"derivation_rule":"end-event","kind":"structural","supports":["gw_lab_needed"]}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>end_not_required_outcome_out</bpmn2:incoming>
+      </bpmn2:endEvent>
+      <bpmn2:scriptTask id="end_notified_outcome" name="Outcome: notified" scriptFormat="http://www.java.com/java">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_notify_end</bpmn2:incoming>
+        <bpmn2:outgoing>end_notified_outcome_out</bpmn2:outgoing>
+        <bpmn2:script>kcontext.setVariable("outcome", "notified");</bpmn2:script>
+      </bpmn2:scriptTask>
+      <bpmn2:endEvent id="main_end_notified" name="Care team notified">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"outcome":"notified","provenance":{"derivation_rule":"end-event","kind":"structural","supports":["notify_clinician"]}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>end_notified_outcome_out</bpmn2:incoming>
+      </bpmn2:endEvent>
+      <bpmn2:exclusiveGateway id="gw_lab_needed" name="Laboratory monitoring required?" gatewayDirection="Diverging" default="f_lab_not_required">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"derivation_rule":"exclusive-split","kind":"structural","supports":["f_lab_required","f_lab_not_required"]}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_decision_gateway</bpmn2:incoming>
+        <bpmn2:outgoing>f_lab_not_required</bpmn2:outgoing>
+        <bpmn2:outgoing>f_lab_required</bpmn2:outgoing>
+      </bpmn2:exclusiveGateway>
+      <bpmn2:exclusiveGateway id="gw_result" name="Laboratory result available?" gatewayDirection="Diverging" default="f_result_missing">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"derivation_rule":"exclusive-split","kind":"structural","supports":["f_result_found","f_result_missing"]}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_query_gateway</bpmn2:incoming>
+        <bpmn2:outgoing>f_result_found</bpmn2:outgoing>
+        <bpmn2:outgoing>f_result_missing</bpmn2:outgoing>
+      </bpmn2:exclusiveGateway>
+      <bpmn2:task id="notify_clinician" name="Notify clinician about missing result" drools:taskName="clinician.notify">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_result_missing</bpmn2:incoming>
+        <bpmn2:outgoing>f_notify_end</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="notify_clinician_reason_input" name="reason" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="notify_clinician_urgency_input" name="urgency" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="notify_clinician_TaskName" name="TaskName" drools:dtype="Object"/>
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>notify_clinician_reason_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>notify_clinician_urgency_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>notify_clinician_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet/>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>notify_reason</bpmn2:sourceRef>
+          <bpmn2:targetRef>notify_clinician_reason_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>notify_clinician_urgency_input</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">routine</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">notify_clinician_urgency_input</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>notify_clinician_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">clinician_notify__notify_clinician</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">notify_clinician_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+      </bpmn2:task>
+      <bpmn2:task id="query_lab_result" name="Check for basic metabolic panel result" drools:taskName="ehr.query_results">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_wait_query</bpmn2:incoming>
+        <bpmn2:outgoing>f_query_gateway</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="query_lab_result_code_input" name="code" drools:dtype="String"/>
+          <bpmn2:dataInput id="query_lab_result_window_input" name="window" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="query_lab_result_TaskName" name="TaskName" drools:dtype="Object"/>
+          <bpmn2:dataOutput id="query_lab_result_found_output" name="found" drools:dtype="Boolean" itemSubjectRef="_boolItem"/>
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>query_lab_result_code_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_lab_result_window_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_lab_result_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>query_lab_result_found_output</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_lab_result_code_input</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">concept:basic metabolic panel</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_lab_result_code_input</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>lab_timing</bpmn2:sourceRef>
+          <bpmn2:targetRef>query_lab_result_window_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_lab_result_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">ehr_query_results__query_lab_result</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_lab_result_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_lab_result_found_output</bpmn2:sourceRef>
+          <bpmn2:targetRef>result_found</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:businessRuleTask id="run_monitoring_plan" name="Determine laboratory order and timing" implementation="http://www.jboss.org/drools/dmn">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_start</bpmn2:incoming>
+        <bpmn2:outgoing>f_decision_gateway</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="run_monitoring_plan_namespace" name="namespace" drools:dtype="Object"/>
+          <bpmn2:dataInput id="run_monitoring_plan_model" name="model" drools:dtype="Object"/>
+          <bpmn2:dataInput id="run_monitoring_plan_Has_Kidney_Disease_input" name="Has Kidney Disease"/>
+          <bpmn2:dataInput id="run_monitoring_plan_Treatment_Action_input" name="Treatment Action"/>
+          <bpmn2:dataOutput id="run_monitoring_plan_Lab_Order_output" name="Lab Order"/>
+          <bpmn2:dataOutput id="run_monitoring_plan_Lab_Timing_Weeks_output" name="Lab Timing Weeks"/>
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>run_monitoring_plan_namespace</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>run_monitoring_plan_model</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>run_monitoring_plan_Has_Kidney_Disease_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>run_monitoring_plan_Treatment_Action_input</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>run_monitoring_plan_Lab_Order_output</bpmn2:dataOutputRefs>
+            <bpmn2:dataOutputRefs>run_monitoring_plan_Lab_Timing_Weeks_output</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>run_monitoring_plan_namespace</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">https://redhat.com/cpg-to-acp/dmn/monitoring-plan</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">run_monitoring_plan_namespace</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>run_monitoring_plan_model</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">monitoring-plan</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">run_monitoring_plan_model</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>has_kidney_disease</bpmn2:sourceRef>
+          <bpmn2:targetRef>run_monitoring_plan_Has_Kidney_Disease_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>treatment_action</bpmn2:sourceRef>
+          <bpmn2:targetRef>run_monitoring_plan_Treatment_Action_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>run_monitoring_plan_Lab_Order_output</bpmn2:sourceRef>
+          <bpmn2:targetRef>lab_order</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>run_monitoring_plan_Lab_Timing_Weeks_output</bpmn2:sourceRef>
+          <bpmn2:targetRef>lab_timing_weeks</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:businessRuleTask>
+      <bpmn2:intermediateCatchEvent id="wait_lab_timing" name="Wait for laboratory follow-up">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_lab_required</bpmn2:incoming>
+        <bpmn2:outgoing>f_wait_query</bpmn2:outgoing>
+        <bpmn2:timerEventDefinition>
+          <bpmn2:timeDuration xsi:type="bpmn2:tFormalExpression">#{lab_timing}</bpmn2:timeDuration>
+        </bpmn2:timerEventDefinition>
+      </bpmn2:intermediateCatchEvent>
+      <bpmn2:sequenceFlow id="f_decision_gateway" sourceRef="run_monitoring_plan" targetRef="gw_lab_needed">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_lab_not_required" sourceRef="gw_lab_needed" targetRef="end_not_required_outcome" name="no laboratory timing">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"}}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="end_not_required_outcome_out" sourceRef="end_not_required_outcome" targetRef="main_end_not_required">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_lab_required" sourceRef="gw_lab_needed" targetRef="wait_lab_timing" name="laboratory timing defined">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"conditionExpression":"defined(lab_timing_weeks)","provenance":{"kind":"source","source_text":"| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java"><![CDATA[return lab_timing_weeks != null;]]></bpmn2:conditionExpression>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_notify_end" sourceRef="notify_clinician" targetRef="end_notified_outcome">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="end_notified_outcome_out" sourceRef="end_notified_outcome" targetRef="main_end_notified">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_query_gateway" sourceRef="query_lab_result" targetRef="gw_result">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."}}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_result_found" sourceRef="gw_result" targetRef="end_complete_outcome" name="result found">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"conditionExpression":"defined(result_found) and result_found == true","provenance":{"kind":"source","source_text":"All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java"><![CDATA[return result_found != null && Boolean.TRUE.equals(result_found);]]></bpmn2:conditionExpression>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="end_complete_outcome_out" sourceRef="end_complete_outcome" targetRef="main_end_complete">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_result_missing" sourceRef="gw_result" targetRef="notify_clinician" name="result missing">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."}}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_start" sourceRef="main_start" targetRef="run_monitoring_plan">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_wait_query" sourceRef="wait_lab_timing" targetRef="query_lab_result">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"}}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+    </bpmn2:subProcess>
+    <bpmn2:boundaryEvent id="period_elapsed" name="Maximum duration elapsed" attachedToRef="main" cancelActivity="true">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{"provenance":{"derivation_rule":"plan-bound","kind":"structural","supports":["run_monitoring_plan","gw_lab_needed","wait_lab_timing","query_lab_result","gw_result","notify_clinician"]}}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:outgoing>f_timeout</bpmn2:outgoing>
+      <bpmn2:timerEventDefinition>
+        <bpmn2:timeDuration xsi:type="bpmn2:tFormalExpression">#{max_duration}</bpmn2:timeDuration>
+      </bpmn2:timerEventDefinition>
+    </bpmn2:boundaryEvent>
+    <bpmn2:exclusiveGateway id="gw_outcome" name="Outcome" gatewayDirection="Diverging" default="f_completed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_after</bpmn2:incoming>
+      <bpmn2:outgoing>end_complete_route</bpmn2:outgoing>
+      <bpmn2:outgoing>end_not_required_route</bpmn2:outgoing>
+      <bpmn2:outgoing>end_notified_route</bpmn2:outgoing>
+      <bpmn2:outgoing>f_completed</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:endEvent id="end_complete" name="Laboratory result available">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>end_complete_route</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_not_required" name="Laboratory monitoring not required">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>end_not_required_route</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_notified" name="Care team notified">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>end_notified_route</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_completed" name="Completed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_completed</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_timeout" name="Follow-up window elapsed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{"outcome":"timed_out","provenance":{"derivation_rule":"end-event","kind":"structural","supports":["period_elapsed"]}}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_timeout</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:sequenceFlow id="f_init" sourceRef="start" targetRef="init">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_main" sourceRef="init" targetRef="main">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_after" sourceRef="main" targetRef="gw_outcome">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="end_complete_route" sourceRef="gw_outcome" targetRef="end_complete" name="complete">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java"><![CDATA[return "complete".equals(outcome);]]></bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="end_not_required_route" sourceRef="gw_outcome" targetRef="end_not_required" name="not_required">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java"><![CDATA[return "not_required".equals(outcome);]]></bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="end_notified_route" sourceRef="gw_outcome" targetRef="end_notified" name="notified">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java"><![CDATA[return "notified".equals(outcome);]]></bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_completed" sourceRef="gw_outcome" targetRef="end_completed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_timeout" sourceRef="period_elapsed" targetRef="end_timeout">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+  </bpmn2:process>
+</bpmn2:definitions>

@@ -1,0 +1,273 @@
+{
+  "ir_version": "1.0",
+  "process": {
+    "id": "lifestyle-reassessment",
+    "name": "Lifestyle reassessment with home-reading review",
+    "description": "Send lifestyle education, request a follow-up visit within the treatment decision interval, wait for that interval, and have a clinician review home readings at the visit.",
+    "isExecutable": true,
+    "kind": "template",
+    "properties": [
+      {
+        "name": "education_delivered",
+        "type": "boolean"
+      },
+      {
+        "name": "visit_request_id",
+        "type": "string"
+      }
+    ],
+    "flowElements": [
+      {
+        "type": "startEvent",
+        "id": "start",
+        "name": "Lifestyle reassessment begins",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "start-event",
+            "supports": [
+              "send_education"
+            ]
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "send_education",
+        "name": "Send home blood pressure education",
+        "taskName": "patient.send_message",
+        "inputs": {
+          "message": {
+            "param": "education_message"
+          },
+          "kind": {
+            "literal": "education",
+            "type": "enum"
+          }
+        },
+        "outputs": {
+          "delivered": "education_delivered"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "All patients with hypertension, regardless of whether pharmacological therapy is initiated, should receive counseling on the following lifestyle modifications: Dietary changes: Adopt the DASH (Dietary Approaches to Stop Hypertension) diet, which emphasizes fruits, vegetables, whole grains, and low-fat dairy products while limiting saturated fat and sodium intake to less than 2,300 mg per day. Physical activity: Engage in at least 150 minutes per week of moderate-intensity aerobic exercise, such as brisk walking, or 75 minutes per week of vigorous-intensity aerobic exercise. Weight management: Achieve and maintain a healthy body weight (BMI 18.5-24.9 kg/m2). Even modest weight loss of 5-10% can significantly reduce blood pressure. Alcohol limitation: Limit alcohol intake to no more than 2 drinks per day for men and 1 drink per day for women. Smoking cessation: If applicable, provide smoking cessation counseling and resources."
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "request_reassessment_visit",
+        "name": "Request lifestyle follow-up visit",
+        "taskName": "schedule.request_visit",
+        "inputs": {
+          "reason": {
+            "param": "visit_reason"
+          },
+          "within": {
+            "param": "reassessment_interval"
+          }
+        },
+        "outputs": {
+          "request_id": "visit_request_id"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1."
+          }
+        }
+      },
+      {
+        "type": "intermediateCatchEvent",
+        "id": "wait_reassessment",
+        "name": "Wait for lifestyle reassessment",
+        "timerEventDefinition": {
+          "timeDuration": {
+            "param": "reassessment_interval"
+          }
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Patients with Stage 1 hypertension without high-risk comorbidities should attempt lifestyle modification for 8 weeks before reassessment. Patients with elevated but sub-hypertensive blood pressure (SBP < 130) should focus on lifestyle modifications with follow-up in 12 weeks."
+          }
+        }
+      },
+      {
+        "type": "userTask",
+        "id": "review_readings",
+        "name": "Review home readings at follow-up visit",
+        "groupId": "clinicians",
+        "outputs": {},
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1."
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_complete",
+        "name": "Home readings reviewed at follow-up visit",
+        "acp": {
+          "outcome": "complete",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "review_readings"
+            ]
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_timeout",
+        "name": "Reassessment window elapsed",
+        "acp": {
+          "outcome": "timed_out",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "period_elapsed"
+            ]
+          }
+        }
+      },
+      {
+        "type": "boundaryEvent",
+        "id": "period_elapsed",
+        "name": "Maximum duration elapsed",
+        "attachedToRef": "main",
+        "cancelActivity": true,
+        "timerEventDefinition": {
+          "timeDuration": {
+            "param": "max_duration"
+          }
+        },
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "plan-bound",
+            "supports": [
+              "send_education",
+              "request_reassessment_visit",
+              "wait_reassessment",
+              "review_readings"
+            ]
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_start",
+        "sourceRef": "start",
+        "targetRef": "send_education"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_send_request",
+        "sourceRef": "send_education",
+        "targetRef": "request_reassessment_visit",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "All patients with hypertension, regardless of whether pharmacological therapy is initiated, should receive counseling on the following lifestyle modifications: Dietary changes: Adopt the DASH (Dietary Approaches to Stop Hypertension) diet, which emphasizes fruits, vegetables, whole grains, and low-fat dairy products while limiting saturated fat and sodium intake to less than 2,300 mg per day. Physical activity: Engage in at least 150 minutes per week of moderate-intensity aerobic exercise, such as brisk walking, or 75 minutes per week of vigorous-intensity aerobic exercise. Weight management: Achieve and maintain a healthy body weight (BMI 18.5-24.9 kg/m2). Even modest weight loss of 5-10% can significantly reduce blood pressure. Alcohol limitation: Limit alcohol intake to no more than 2 drinks per day for men and 1 drink per day for women. Smoking cessation: If applicable, provide smoking cessation counseling and resources."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_request_wait",
+        "sourceRef": "request_reassessment_visit",
+        "targetRef": "wait_reassessment",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_wait_review",
+        "sourceRef": "wait_reassessment",
+        "targetRef": "review_readings"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_review_end",
+        "sourceRef": "review_readings",
+        "targetRef": "end_complete"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_timeout",
+        "sourceRef": "period_elapsed",
+        "targetRef": "end_timeout"
+      }
+    ],
+    "acp": {
+      "triggers": [
+        {
+          "kind": "dmn-output",
+          "model_id": "treatment-recommendation",
+          "output_name": "Follow Up Weeks",
+          "output_value": 8
+        },
+        {
+          "kind": "dmn-output",
+          "model_id": "treatment-recommendation",
+          "output_name": "Follow Up Weeks",
+          "output_value": 12
+        }
+      ],
+      "parameters": [
+        {
+          "name": "reassessment_interval",
+          "type": "duration",
+          "required": true,
+          "description": "Required interval bound from the Treatment Recommendation Follow Up Weeks output at synthesis."
+        },
+        {
+          "name": "education_message",
+          "type": "string",
+          "default": "Follow the DASH eating plan, including fruits, vegetables, whole grains, low-fat dairy, and less than 2,300 mg of sodium daily. Aim for at least 150 minutes of moderate or 75 minutes of vigorous aerobic activity each week. Work toward and maintain a healthy body weight. Limit alcohol to no more than 2 drinks a day for men or 1 for women. If you smoke, ask your care team about smoking-cessation support. Bring your home blood pressure readings to your follow-up visit.",
+          "required": true,
+          "description": "Patient-facing lifestyle education covering the recommended diet, activity, weight, alcohol, and smoking measures.",
+          "source": {
+            "kind": "authored"
+          }
+        },
+        {
+          "name": "visit_reason",
+          "type": "string",
+          "default": "Review home blood pressure readings after lifestyle modification.",
+          "required": true,
+          "description": "Reason supplied with the visit request.",
+          "source": {
+            "kind": "authored"
+          }
+        },
+        {
+          "name": "max_duration",
+          "type": "duration",
+          "required": true,
+          "description": "Maximum time allowed for this automation.",
+          "reserved": true
+        }
+      ],
+      "invariants": [
+        "max_duration >= reassessment_interval"
+      ],
+      "produces": [],
+      "provenance": {
+        "source_cpg": "SYN-HTN-2026-002",
+        "section": "3.2 Treatment Decision; 3.4 Lifestyle Modification Recommendations; Table 1 Follow-up (weeks)"
+      }
+    }
+  }
+}

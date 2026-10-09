@@ -1,0 +1,402 @@
+{
+  "ir_version": "1.0",
+  "process": {
+    "id": "acei-lab-follow-up",
+    "name": "ACE inhibitor laboratory follow-up",
+    "description": "Run the Monitoring Plan decision for medication patients, wait for the DMN-specified BMP interval, check for the result, and notify the clinician if it is missing.",
+    "isExecutable": true,
+    "kind": "template",
+    "properties": [
+      {
+        "name": "lab_order",
+        "type": "string"
+      },
+      {
+        "name": "lab_timing_weeks",
+        "type": "integer"
+      },
+      {
+        "name": "result_found",
+        "type": "boolean"
+      }
+    ],
+    "flowElements": [
+      {
+        "type": "startEvent",
+        "id": "start",
+        "name": "Laboratory follow-up begins",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "start-event",
+            "supports": [
+              "run_monitoring_plan"
+            ]
+          }
+        }
+      },
+      {
+        "type": "businessRuleTask",
+        "id": "run_monitoring_plan",
+        "name": "Determine laboratory order and timing",
+        "dmnModel": "monitoring-plan",
+        "inputs": {
+          "Treatment Action": {
+            "param": "treatment_action"
+          },
+          "Has Kidney Disease": {
+            "param": "has_kidney_disease"
+          }
+        },
+        "outputs": {
+          "Lab Order": "lab_order",
+          "Lab Timing Weeks": "lab_timing_weeks"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_lab_needed",
+        "name": "Laboratory monitoring required?",
+        "gatewayDirection": "Diverging",
+        "default": "f_lab_not_required",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-split",
+            "supports": [
+              "f_lab_required",
+              "f_lab_not_required"
+            ]
+          }
+        }
+      },
+      {
+        "type": "intermediateCatchEvent",
+        "id": "wait_lab_timing",
+        "name": "Wait for laboratory follow-up",
+        "timerEventDefinition": {
+          "timeDuration": {
+            "param": "lab_timing"
+          }
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "query_lab_result",
+        "name": "Check for basic metabolic panel result",
+        "taskName": "ehr.query_results",
+        "inputs": {
+          "code": {
+            "concept": "basic metabolic panel"
+          },
+          "window": {
+            "param": "lab_timing"
+          }
+        },
+        "outputs": {
+          "found": "result_found"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_result",
+        "name": "Laboratory result available?",
+        "gatewayDirection": "Diverging",
+        "default": "f_result_missing",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-split",
+            "supports": [
+              "f_result_found",
+              "f_result_missing"
+            ]
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_result_found",
+        "sourceRef": "gw_result",
+        "targetRef": "end_complete",
+        "name": "result found",
+        "conditionExpression": "defined(result_found) and result_found == true",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_result_missing",
+        "sourceRef": "gw_result",
+        "targetRef": "notify_clinician",
+        "name": "result missing",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "notify_clinician",
+        "name": "Notify clinician about missing result",
+        "taskName": "clinician.notify",
+        "inputs": {
+          "urgency": {
+            "literal": "routine",
+            "type": "enum"
+          },
+          "reason": {
+            "param": "notify_reason"
+          }
+        },
+        "outputs": {},
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_complete",
+        "name": "Laboratory result available",
+        "acp": {
+          "outcome": "complete",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "query_lab_result"
+            ]
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_notified",
+        "name": "Care team notified",
+        "acp": {
+          "outcome": "notified",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "notify_clinician"
+            ]
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_not_required",
+        "name": "Laboratory monitoring not required",
+        "acp": {
+          "outcome": "not_required",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "gw_lab_needed"
+            ]
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_timeout",
+        "name": "Follow-up window elapsed",
+        "acp": {
+          "outcome": "timed_out",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "period_elapsed"
+            ]
+          }
+        }
+      },
+      {
+        "type": "boundaryEvent",
+        "id": "period_elapsed",
+        "name": "Maximum duration elapsed",
+        "attachedToRef": "main",
+        "cancelActivity": true,
+        "timerEventDefinition": {
+          "timeDuration": {
+            "param": "max_duration"
+          }
+        },
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "plan-bound",
+            "supports": [
+              "run_monitoring_plan",
+              "gw_lab_needed",
+              "wait_lab_timing",
+              "query_lab_result",
+              "gw_result",
+              "notify_clinician"
+            ]
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_start",
+        "sourceRef": "start",
+        "targetRef": "run_monitoring_plan"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_decision_gateway",
+        "sourceRef": "run_monitoring_plan",
+        "targetRef": "gw_lab_needed"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_lab_required",
+        "sourceRef": "gw_lab_needed",
+        "targetRef": "wait_lab_timing",
+        "name": "laboratory timing defined",
+        "conditionExpression": "defined(lab_timing_weeks)",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_lab_not_required",
+        "sourceRef": "gw_lab_needed",
+        "targetRef": "end_not_required",
+        "name": "no laboratory timing",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_wait_query",
+        "sourceRef": "wait_lab_timing",
+        "targetRef": "query_lab_result",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "| Treatment Action | Has Kidney Disease | Lab Order | Lab Timing (weeks) |\n|---|---|---|---|\n| Start medication | Yes | Basic Metabolic Panel | 2 |\n| Start medication | No | Basic Metabolic Panel | 4 |\n| Lifestyle modification only | Yes | — | — |\n| Lifestyle modification only | No | — | — |"
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_query_gateway",
+        "sourceRef": "query_lab_result",
+        "targetRef": "gw_result",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "All patients starting ACE inhibitor therapy require a Basic Metabolic Panel (BMP) to monitor renal function and electrolytes."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_notify_end",
+        "sourceRef": "notify_clinician",
+        "targetRef": "end_notified"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_timeout",
+        "sourceRef": "period_elapsed",
+        "targetRef": "end_timeout"
+      }
+    ],
+    "acp": {
+      "triggers": [
+        {
+          "kind": "dmn-output",
+          "model_id": "treatment-recommendation",
+          "output_name": "Action",
+          "output_value": "Start medication"
+        }
+      ],
+      "parameters": [
+        {
+          "name": "treatment_action",
+          "type": "string",
+          "required": true,
+          "description": "Treatment Recommendation Action bound from the approved plan at synthesis."
+        },
+        {
+          "name": "has_kidney_disease",
+          "type": "boolean",
+          "required": true,
+          "description": "Patient kidney-disease status bound from the approved plan at synthesis."
+        },
+        {
+          "name": "lab_timing",
+          "type": "duration",
+          "required": true,
+          "description": "Required Monitoring Plan output interval for medication rows; no value is present when the decision says routine laboratory monitoring is not required."
+        },
+        {
+          "name": "notify_reason",
+          "type": "string",
+          "default": "The expected laboratory result was not available at the planned follow-up.",
+          "required": true,
+          "description": "Reason shown to the responsible clinician.",
+          "source": {
+            "kind": "authored"
+          }
+        },
+        {
+          "name": "max_duration",
+          "type": "duration",
+          "required": true,
+          "description": "Maximum time allowed for this automation.",
+          "reserved": true
+        }
+      ],
+      "invariants": [
+        "max_duration >= lab_timing"
+      ],
+      "produces": [],
+      "provenance": {
+        "source_cpg": "SYN-HTN-2026-002",
+        "section": "3.2 Treatment Decision; 3.3 Monitoring Plan"
+      }
+    }
+  }
+}

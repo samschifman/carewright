@@ -105,6 +105,7 @@ class Recommendation(BaseModel):
     provenance: RecommendationProvenance | None = None
     evidence_review_date: date | None = None
     source_location: SourceLocation | None = None
+    automation_template_ids: list[str] | None = None
 
 
 class RecommendationSummary(BaseModel):

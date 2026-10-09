@@ -6,6 +6,7 @@ from pathlib import Path
 from cpg_contracts import (
     Extraction,
     CPGMetadata,
+    CONTRACT_VERSION,
     DecisionModelSummary,
     Recommendation,
     RecommendationBundle,
@@ -65,6 +66,31 @@ def test_recommendation_without_source_location():
     assert rec.source_location is None
 
 
+def test_recommendation_can_link_automation_templates_additively():
+    rec = Recommendation(
+        id="rec-automation",
+        source_cpg="CPG-001",
+        title="Monitor readings",
+        content="Submit readings weekly.",
+        recommendation_type="monitoring",
+        automation_template_ids=["home-bp-monitoring"],
+    )
+
+    assert Recommendation.model_validate(rec.model_dump()).automation_template_ids == [
+        "home-bp-monitoring"
+    ]
+
+
+def test_contract_version_bumps_without_rejecting_legacy_payloads():
+    assert CONTRACT_VERSION == "1.1"
+    assert CPGMetadata(cpg_id="CPG-002", title="Test guideline").contract_version == "1.1"
+    assert RecommendationBundle(source_cpg="CPG-002", recommendations=[]).contract_version == "1.1"
+
+    raw = json.loads((FIXTURES / "sample-recommendations.json").read_text())
+    assert CPGMetadata.model_validate(raw["metadata"]).contract_version == "1.0"
+    assert RecommendationBundle.model_validate(raw["recommendation_bundle"]).contract_version == "1.0"
+
+
 def test_decision_model_summary_with_source_location():
     dm = DecisionModelSummary(
         id="dm-1",
@@ -81,6 +107,19 @@ def test_decision_model_summary_with_source_location():
     data = dm.model_dump()
     assert data["source_location"]["page_start"] == 47
     assert data["source_location"]["source_text"].startswith("Table 3")
+
+
+def test_decision_summary_namespace_is_optional_and_roundtrips():
+    summary = DecisionModelSummary(
+        id="dm-namespace",
+        name="Monitoring Plan",
+        inputs=[],
+        outputs=[],
+        namespace="https://example.org/dmn/monitoring-plan",
+    )
+
+    assert DecisionModelSummary.model_validate(summary.model_dump()).namespace == summary.namespace
+    assert DecisionModelSummary(id="dm-legacy", name="Legacy", inputs=[], outputs=[]).namespace is None
 
 
 def test_decision_model_id_is_stable():

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from collections import Counter
 from typing import Any
 
@@ -45,6 +46,12 @@ from cpg_contracts.automation.ir import (
 
 
 _IO_STRING_TYPES = frozenset({"enum", "unit"})
+_XML_ID_COMPONENT_RE = re.compile(r"[^A-Za-z0-9_.-]")
+
+
+def _xml_id_component(name: str) -> str:
+    """Make an external BPMN I/O label safe inside a generated XML id."""
+    return _XML_ID_COMPONENT_RE.sub("_", name)
 
 
 def _encode_literal(value: bool | int | float | str, literal_type: str) -> str:
@@ -268,7 +275,7 @@ def expand_dmn(task: BusinessRuleTask, namespace: str, model: str) -> XNode:
         source_ref, literal = _value_binding(value)
         io.append(
             XIo(
-                id=f"{task.id}_{name}_input",
+                id=f"{task.id}_{_xml_id_component(name)}_input",
                 name=name,
                 direction="input",
                 source_ref=source_ref,
@@ -278,7 +285,7 @@ def expand_dmn(task: BusinessRuleTask, namespace: str, model: str) -> XNode:
     for name, target in sorted(task.outputs.items()):
         io.append(
             XIo(
-                id=f"{task.id}_{name}_output",
+                id=f"{task.id}_{_xml_id_component(name)}_output",
                 name=name,
                 direction="output",
                 target_ref=target,

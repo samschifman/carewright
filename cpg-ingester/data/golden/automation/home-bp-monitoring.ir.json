@@ -1,0 +1,570 @@
+{
+  "ir_version": "1.0",
+  "process": {
+    "id": "home-bp-monitoring",
+    "kind": "template",
+    "isExecutable": true,
+    "name": "Home blood pressure monitoring with outreach and escalation",
+    "properties": [
+      {
+        "name": "reading_count",
+        "type": "integer"
+      },
+      {
+        "name": "avg_systolic",
+        "type": "quantity",
+        "unit": "mm[Hg]"
+      },
+      {
+        "name": "avg_diastolic",
+        "type": "quantity",
+        "unit": "mm[Hg]"
+      },
+      {
+        "name": "reminder_attempts",
+        "type": "integer"
+      }
+    ],
+    "acp": {
+      "triggers": [
+        {
+          "kind": "recommendation",
+          "recommendation_id": "<rec-guid: Home blood pressure monitoring>"
+        }
+      ],
+      "provenance": {
+        "source_cpg": "SYN-HTN-2026-002",
+        "section": "3.5 Home Blood Pressure Monitoring"
+      },
+      "parameters": [
+        {
+          "name": "reporting_interval",
+          "type": "duration",
+          "default": "P1W",
+          "required": true,
+          "source": {
+            "kind": "cpg",
+            "source_text": "transmit their readings to the care team weekly",
+            "source_location": {
+              "page_start": 3
+            }
+          }
+        },
+        {
+          "name": "notify_systolic_threshold",
+          "type": "quantity",
+          "unit": "mm[Hg]",
+          "default": 135,
+          "constraints": {
+            "min": 110,
+            "max": 180,
+            "source": {
+              "kind": "authored"
+            }
+          },
+          "source": {
+            "kind": "cpg",
+            "source_text": "weekly home average is 135/85 mmHg or higher"
+          }
+        },
+        {
+          "name": "notify_diastolic_threshold",
+          "type": "quantity",
+          "unit": "mm[Hg]",
+          "default": 85,
+          "constraints": {
+            "min": 70,
+            "max": 120,
+            "source": {
+              "kind": "authored"
+            }
+          },
+          "source": {
+            "kind": "cpg",
+            "source_text": "weekly home average is 135/85 mmHg or higher"
+          }
+        },
+        {
+          "name": "max_reminder_attempts",
+          "type": "integer",
+          "default": 3,
+          "constraints": {
+            "min": 1,
+            "max": 5,
+            "source": {
+              "kind": "authored"
+            }
+          },
+          "source": {
+            "kind": "cpg",
+            "source_text": "after three reminder attempts on different days"
+          }
+        },
+        {
+          "name": "instructions_text",
+          "type": "string",
+          "default": "Measure twice in the morning before medications and twice in the evening, one minute apart.",
+          "source": {
+            "kind": "authored"
+          }
+        },
+        {
+          "name": "reminder_text",
+          "type": "string",
+          "default": "Please submit this week's home blood pressure readings.",
+          "source": {
+            "kind": "authored"
+          }
+        },
+        {
+          "name": "escalation_reason",
+          "type": "string",
+          "default": "No home blood pressure readings after reminders.",
+          "source": {
+            "kind": "authored"
+          }
+        },
+        {
+          "name": "notify_reason",
+          "type": "string",
+          "default": "Weekly home blood pressure average above threshold.",
+          "source": {
+            "kind": "authored"
+          }
+        },
+        {
+          "name": "max_duration",
+          "type": "duration",
+          "required": true,
+          "reserved": true
+        }
+      ],
+      "invariants": [
+        "max_duration >= reporting_interval * (max_reminder_attempts + 1)"
+      ],
+      "produces": []
+    },
+    "flowElements": [
+      {
+        "type": "startEvent",
+        "id": "start",
+        "name": "Monitoring started",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "start-event",
+            "supports": [
+              "request_readings"
+            ]
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "loop_entry",
+        "name": "Begin monitoring cycle",
+        "gatewayDirection": "Converging",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-join",
+            "supports": [
+              "request_readings",
+              "notify",
+              "gw_threshold",
+              "gw_attempts"
+            ]
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "request_readings",
+        "name": "Request home BP readings",
+        "taskName": "patient.request_observation",
+        "inputs": {
+          "code": {
+            "concept": "blood pressure"
+          },
+          "due": {
+            "param": "reporting_interval"
+          },
+          "instructions": {
+            "param": "instructions_text"
+          }
+        },
+        "outputs": {},
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "take two readings one minute apart in the morning before medications and two readings one minute apart in the evening ... and transmit their readings to the care team weekly"
+          }
+        }
+      },
+      {
+        "type": "intermediateCatchEvent",
+        "id": "wait_interval",
+        "name": "Reporting interval elapsed",
+        "timerEventDefinition": {
+          "timeDuration": {
+            "param": "reporting_interval"
+          }
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "transmit their readings to the care team weekly"
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "query_systolic",
+        "name": "Check systolic readings received",
+        "taskName": "ehr.query_observations",
+        "inputs": {
+          "code": {
+            "concept": "systolic blood pressure"
+          },
+          "window": {
+            "param": "reporting_interval"
+          },
+          "unit": {
+            "literal": "mm[Hg]",
+            "type": "unit"
+          }
+        },
+        "outputs": {
+          "count": "reading_count",
+          "average_value": "avg_systolic"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "The care team reviews the weekly average systolic and diastolic readings"
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "query_diastolic",
+        "name": "Check diastolic readings received",
+        "taskName": "ehr.query_observations",
+        "inputs": {
+          "code": {
+            "concept": "diastolic blood pressure"
+          },
+          "window": {
+            "param": "reporting_interval"
+          },
+          "unit": {
+            "literal": "mm[Hg]",
+            "type": "unit"
+          }
+        },
+        "outputs": {
+          "average_value": "avg_diastolic"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "The care team reviews the weekly average systolic and diastolic readings"
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_received",
+        "name": "Readings received?",
+        "gatewayDirection": "Diverging",
+        "default": "f_none",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-split",
+            "supports": [
+              "f_some",
+              "f_none"
+            ]
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "remind",
+        "name": "Send reading reminder",
+        "taskName": "patient.send_message",
+        "inputs": {
+          "kind": {
+            "literal": "reminder",
+            "type": "enum"
+          },
+          "message": {
+            "param": "reminder_text"
+          }
+        },
+        "outputs": {},
+        "acp": {
+          "counter": "reminder_attempts",
+          "provenance": {
+            "kind": "source",
+            "source_text": "If a week passes without readings, a reminder should be sent to the patient"
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_attempts",
+        "name": "Reminder limit reached?",
+        "gatewayDirection": "Diverging",
+        "default": "f_retry",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-split",
+            "supports": [
+              "f_escalate"
+            ]
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "escalate",
+        "name": "Escalate to care team",
+        "taskName": "care_team.escalate",
+        "inputs": {
+          "reason": {
+            "param": "escalation_reason"
+          },
+          "attempts": {
+            "property": "reminder_attempts"
+          }
+        },
+        "outputs": {},
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "After three reminder attempts on different days without readings, the care team should contact the patient directly"
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_threshold",
+        "name": "Average above threshold?",
+        "gatewayDirection": "Diverging",
+        "default": "f_ok",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-split",
+            "supports": [
+              "f_high"
+            ]
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "notify",
+        "name": "Notify clinician",
+        "taskName": "clinician.notify",
+        "inputs": {
+          "urgency": {
+            "literal": "routine",
+            "type": "enum"
+          },
+          "reason": {
+            "param": "notify_reason"
+          }
+        },
+        "outputs": {},
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "The responsible clinician should be notified when the weekly home average is 135/85 mmHg or higher ... routine notification"
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_escalated",
+        "name": "Handed to care team",
+        "acp": {
+          "outcome": "escalated",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "escalate"
+            ]
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_period",
+        "name": "Monitoring period complete",
+        "acp": {
+          "outcome": "complete",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "period_elapsed"
+            ]
+          }
+        }
+      },
+      {
+        "type": "boundaryEvent",
+        "id": "period_elapsed",
+        "name": "Max duration elapsed",
+        "attachedToRef": "main",
+        "cancelActivity": true,
+        "timerEventDefinition": {
+          "timeDuration": {
+            "param": "max_duration"
+          }
+        },
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "plan-bound",
+            "supports": [
+              "request_readings"
+            ]
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_start",
+        "sourceRef": "start",
+        "targetRef": "loop_entry"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_loop",
+        "sourceRef": "loop_entry",
+        "targetRef": "request_readings"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_wait",
+        "sourceRef": "request_readings",
+        "targetRef": "wait_interval"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_query",
+        "sourceRef": "wait_interval",
+        "targetRef": "query_systolic"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_query2",
+        "sourceRef": "query_systolic",
+        "targetRef": "query_diastolic"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_received",
+        "sourceRef": "query_diastolic",
+        "targetRef": "gw_received"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_some",
+        "name": "yes",
+        "sourceRef": "gw_received",
+        "targetRef": "gw_threshold",
+        "conditionExpression": "defined(reading_count) and reading_count > 0",
+        "acp": {
+          "structural_constant": true,
+          "resets": [
+            "reminder_attempts"
+          ],
+          "provenance": {
+            "kind": "source",
+            "source_text": "The care team reviews the weekly average systolic and diastolic readings"
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_none",
+        "name": "no",
+        "sourceRef": "gw_received",
+        "targetRef": "remind"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_attempts",
+        "sourceRef": "remind",
+        "targetRef": "gw_attempts"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_escalate",
+        "name": "limit reached",
+        "sourceRef": "gw_attempts",
+        "targetRef": "escalate",
+        "conditionExpression": "reminder_attempts >= max_reminder_attempts",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "after three reminder attempts on different days"
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_retry",
+        "name": "try again",
+        "sourceRef": "gw_attempts",
+        "targetRef": "loop_entry"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_high",
+        "name": "above threshold",
+        "sourceRef": "gw_threshold",
+        "targetRef": "notify",
+        "conditionExpression": "avg_systolic >= notify_systolic_threshold or avg_diastolic >= notify_diastolic_threshold",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "weekly home average is 135/85 mmHg or higher"
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_ok",
+        "name": "within target",
+        "sourceRef": "gw_threshold",
+        "targetRef": "loop_entry"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_notified",
+        "sourceRef": "notify",
+        "targetRef": "loop_entry"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_end_escalated",
+        "sourceRef": "escalate",
+        "targetRef": "end_escalated"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_period",
+        "sourceRef": "period_elapsed",
+        "targetRef": "end_period"
+      }
+    ]
+  }
+}

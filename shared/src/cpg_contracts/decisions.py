@@ -113,6 +113,7 @@ class DecisionModelSummary(BaseModel):
     category: DecisionCategory | None = None
     modifies: list[str] | None = None
     source_location: SourceLocation | None = None
+    namespace: str | None = None
 
 
 class DecisionEvaluationRequest(BaseModel):

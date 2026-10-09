@@ -1,0 +1,348 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:drools="http://www.jboss.org/drools" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:acp="https://github.com/samschifman/cpg-to-acp/bpmn" id="follow-up-visit_defs" targetNamespace="https://github.com/samschifman/cpg-to-acp/bpmn/SYN-HTN-2026-002">
+  <bpmn2:itemDefinition id="_strItem" structureRef="String"/>
+  <bpmn2:itemDefinition id="_boolItem" structureRef="Boolean"/>
+  <bpmn2:process id="follow-up-visit" name="Follow-up visit scheduling and confirmation" isExecutable="true" processType="Public" drools:packageName="org.carewright.automation" drools:version="e76a60981bb7">
+    <bpmn2:extensionElements>
+      <drools:metaData name="acp.catalogVersion">1.0</drools:metaData>
+      <acp:template><![CDATA[{"catalog_version":"1.0","consolidated_boundaries":[],"description":"For medication patients, request a follow-up visit within the treatment decision interval, check for the visit order immediately, and notify the care team if no order is found.","invariants":["max_duration >= follow_up_interval"],"ir_version":"1.0","kind":"template","parameters":[{"description":"Interval derived from the Treatment Recommendation output Follow Up Weeks.","name":"follow_up_interval","required":true,"reserved":false,"type":"duration"},{"default":"Arrange the planned hypertension follow-up visit.","description":"Reason supplied with the visit request.","name":"visit_reason","required":true,"reserved":false,"source":{"kind":"authored"},"type":"string"},{"default":"No follow-up visit was found in the EHR during the expected interval.","description":"Reason shown to the responsible clinician.","name":"notify_reason","required":true,"reserved":false,"source":{"kind":"authored"},"type":"string"},{"description":"Maximum time allowed for this automation.","name":"max_duration","required":true,"reserved":true,"type":"duration"}],"produces":[],"profile":"kogito-10.2","provenance":{"section":"3.2 Treatment Decision; Table 1 Follow-up (weeks)","source_cpg":"SYN-HTN-2026-002"},"pruned":[],"template_id":"follow-up-visit","template_refs":[],"triggers":[{"kind":"dmn-output","model_id":"treatment-recommendation","output_name":"Follow Up Weeks","output_value":2},{"kind":"dmn-output","model_id":"treatment-recommendation","output_name":"Follow Up Weeks","output_value":4}],"unify":[],"version":"e76a60981bb7"}]]></acp:template>
+    </bpmn2:extensionElements>
+    <bpmn2:property id="follow_up_interval" itemSubjectRef="_strItem" name="follow_up_interval">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">duration</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="visit_reason" itemSubjectRef="_strItem" name="visit_reason">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="notify_reason" itemSubjectRef="_strItem" name="notify_reason">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="max_duration" itemSubjectRef="_strItem" name="max_duration">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">duration</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="visit_request_id" itemSubjectRef="_strItem" name="visit_request_id">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="visit_found" itemSubjectRef="_boolItem" name="visit_found">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">boolean</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="outcome" itemSubjectRef="_strItem" name="outcome">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:startEvent id="start" name="Follow-up process begins">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{"provenance":{"derivation_rule":"start-event","kind":"structural","supports":["request_visit"]}}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:outgoing>f_init</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    <bpmn2:scriptTask id="init" name="Initialise" scriptFormat="http://www.java.com/java">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_init</bpmn2:incoming>
+      <bpmn2:outgoing>f_main</bpmn2:outgoing>
+      <bpmn2:script>kcontext.setVariable("outcome", "");</bpmn2:script>
+    </bpmn2:scriptTask>
+    <bpmn2:subProcess id="main" name="Monitoring">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_main</bpmn2:incoming>
+      <bpmn2:outgoing>f_after</bpmn2:outgoing>
+      <bpmn2:startEvent id="main_start">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:outgoing>f_start</bpmn2:outgoing>
+      </bpmn2:startEvent>
+      <bpmn2:scriptTask id="end_complete_outcome" name="Outcome: complete" scriptFormat="http://www.java.com/java">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_visit_found</bpmn2:incoming>
+        <bpmn2:outgoing>end_complete_outcome_out</bpmn2:outgoing>
+        <bpmn2:script>kcontext.setVariable("outcome", "complete");</bpmn2:script>
+      </bpmn2:scriptTask>
+      <bpmn2:endEvent id="main_end_complete" name="Follow-up visit found">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"outcome":"complete","provenance":{"derivation_rule":"end-event","kind":"structural","supports":["query_visit_order"]}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>end_complete_outcome_out</bpmn2:incoming>
+      </bpmn2:endEvent>
+      <bpmn2:scriptTask id="end_notified_outcome" name="Outcome: notified" scriptFormat="http://www.java.com/java">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_notify_end</bpmn2:incoming>
+        <bpmn2:outgoing>end_notified_outcome_out</bpmn2:outgoing>
+        <bpmn2:script>kcontext.setVariable("outcome", "notified");</bpmn2:script>
+      </bpmn2:scriptTask>
+      <bpmn2:endEvent id="main_end_notified" name="Care team notified">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"outcome":"notified","provenance":{"derivation_rule":"end-event","kind":"structural","supports":["notify_clinician"]}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>end_notified_outcome_out</bpmn2:incoming>
+      </bpmn2:endEvent>
+      <bpmn2:exclusiveGateway id="gw_visit_found" name="Follow-up visit found?" gatewayDirection="Diverging" default="f_visit_missing">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"derivation_rule":"exclusive-split","kind":"structural","supports":["f_visit_found","f_visit_missing"]}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_query_gateway</bpmn2:incoming>
+        <bpmn2:outgoing>f_visit_found</bpmn2:outgoing>
+        <bpmn2:outgoing>f_visit_missing</bpmn2:outgoing>
+      </bpmn2:exclusiveGateway>
+      <bpmn2:task id="notify_clinician" name="Notify clinician about missing visit" drools:taskName="clinician.notify">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_visit_missing</bpmn2:incoming>
+        <bpmn2:outgoing>f_notify_end</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="notify_clinician_reason_input" name="reason" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="notify_clinician_urgency_input" name="urgency" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="notify_clinician_TaskName" name="TaskName" drools:dtype="Object"/>
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>notify_clinician_reason_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>notify_clinician_urgency_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>notify_clinician_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet/>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>notify_reason</bpmn2:sourceRef>
+          <bpmn2:targetRef>notify_clinician_reason_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>notify_clinician_urgency_input</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">routine</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">notify_clinician_urgency_input</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>notify_clinician_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">clinician_notify__notify_clinician</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">notify_clinician_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+      </bpmn2:task>
+      <bpmn2:task id="query_visit_order" name="Check for a follow-up visit order" drools:taskName="ehr.query_orders">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_request_query</bpmn2:incoming>
+        <bpmn2:outgoing>f_query_gateway</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="query_visit_order_code_input" name="code" drools:dtype="String"/>
+          <bpmn2:dataInput id="query_visit_order_window_input" name="window" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="query_visit_order_TaskName" name="TaskName" drools:dtype="Object"/>
+          <bpmn2:dataOutput id="query_visit_order_found_output" name="found" drools:dtype="Boolean" itemSubjectRef="_boolItem"/>
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>query_visit_order_code_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_visit_order_window_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_visit_order_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>query_visit_order_found_output</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_visit_order_code_input</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">concept:follow-up visit</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_visit_order_code_input</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>follow_up_interval</bpmn2:sourceRef>
+          <bpmn2:targetRef>query_visit_order_window_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_visit_order_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">ehr_query_orders__query_visit_order</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_visit_order_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_visit_order_found_output</bpmn2:sourceRef>
+          <bpmn2:targetRef>visit_found</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:task id="request_visit" name="Request the planned follow-up visit" drools:taskName="schedule.request_visit">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_start</bpmn2:incoming>
+        <bpmn2:outgoing>f_request_query</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="request_visit_reason_input" name="reason" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="request_visit_within_input" name="within" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="request_visit_TaskName" name="TaskName" drools:dtype="Object"/>
+          <bpmn2:dataOutput id="request_visit_request_id_output" name="request_id" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>request_visit_reason_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>request_visit_within_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>request_visit_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>request_visit_request_id_output</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>visit_reason</bpmn2:sourceRef>
+          <bpmn2:targetRef>request_visit_reason_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>follow_up_interval</bpmn2:sourceRef>
+          <bpmn2:targetRef>request_visit_within_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>request_visit_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">schedule_request_visit__request_visit</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">request_visit_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>request_visit_request_id_output</bpmn2:sourceRef>
+          <bpmn2:targetRef>visit_request_id</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:sequenceFlow id="f_notify_end" sourceRef="notify_clinician" targetRef="end_notified_outcome">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="end_notified_outcome_out" sourceRef="end_notified_outcome" targetRef="main_end_notified">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_query_gateway" sourceRef="query_visit_order" targetRef="gw_visit_found">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_request_query" sourceRef="request_visit" targetRef="query_visit_order">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."}}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_start" sourceRef="main_start" targetRef="request_visit">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_visit_found" sourceRef="gw_visit_found" targetRef="end_complete_outcome" name="visit found">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"conditionExpression":"defined(visit_found) and visit_found == true","provenance":{"kind":"source","source_text":"For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java"><![CDATA[return visit_found != null && Boolean.TRUE.equals(visit_found);]]></bpmn2:conditionExpression>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="end_complete_outcome_out" sourceRef="end_complete_outcome" targetRef="main_end_complete">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_visit_missing" sourceRef="gw_visit_found" targetRef="notify_clinician" name="visit missing">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+    </bpmn2:subProcess>
+    <bpmn2:boundaryEvent id="period_elapsed" name="Maximum duration elapsed" attachedToRef="main" cancelActivity="true">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{"provenance":{"derivation_rule":"plan-bound","kind":"structural","supports":["request_visit","query_visit_order","gw_visit_found","notify_clinician"]}}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:outgoing>f_timeout</bpmn2:outgoing>
+      <bpmn2:timerEventDefinition>
+        <bpmn2:timeDuration xsi:type="bpmn2:tFormalExpression">#{max_duration}</bpmn2:timeDuration>
+      </bpmn2:timerEventDefinition>
+    </bpmn2:boundaryEvent>
+    <bpmn2:exclusiveGateway id="gw_outcome" name="Outcome" gatewayDirection="Diverging" default="f_completed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_after</bpmn2:incoming>
+      <bpmn2:outgoing>end_complete_route</bpmn2:outgoing>
+      <bpmn2:outgoing>end_notified_route</bpmn2:outgoing>
+      <bpmn2:outgoing>f_completed</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:endEvent id="end_complete" name="Follow-up visit found">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>end_complete_route</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_notified" name="Care team notified">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>end_notified_route</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_completed" name="Completed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_completed</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_timeout" name="Follow-up window elapsed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{"outcome":"timed_out","provenance":{"derivation_rule":"end-event","kind":"structural","supports":["period_elapsed"]}}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_timeout</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:sequenceFlow id="f_init" sourceRef="start" targetRef="init">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_main" sourceRef="init" targetRef="main">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_after" sourceRef="main" targetRef="gw_outcome">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="end_complete_route" sourceRef="gw_outcome" targetRef="end_complete" name="complete">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java"><![CDATA[return "complete".equals(outcome);]]></bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="end_notified_route" sourceRef="gw_outcome" targetRef="end_notified" name="notified">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java"><![CDATA[return "notified".equals(outcome);]]></bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_completed" sourceRef="gw_outcome" targetRef="end_completed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_timeout" sourceRef="period_elapsed" targetRef="end_timeout">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+  </bpmn2:process>
+</bpmn2:definitions>

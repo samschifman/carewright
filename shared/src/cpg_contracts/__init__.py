@@ -34,6 +34,20 @@ from cpg_contracts.search import (
     RecommendationSearchResult,
 )
 from cpg_contracts.fhir import PatientSummary
+from cpg_contracts.automation.instances import (
+    ActivityAutomation,
+    Evidence,
+    ParameterBinding,
+    PublicationPayload,
+    PublishedAutomation,
+)
+from cpg_contracts.automation.templates import (
+    AutomationTemplate,
+    AutomationTemplateSummary,
+    Automatability,
+    PatternFamily,
+    ValidationRecord,
+)
 from cpg_contracts.cloud_events import post_callback
 from cpg_contracts.artifact_store import (  # noqa: F401 — lazy boto3 import
     ArtifactStore,
@@ -80,6 +94,17 @@ __all__ = [
     "RecommendationSummary",
     "RecommendationType",
     "SourceLocation",
+    # Automation templates and instances
+    "ActivityAutomation",
+    "AutomationTemplate",
+    "AutomationTemplateSummary",
+    "Automatability",
+    "Evidence",
+    "ParameterBinding",
+    "PatternFamily",
+    "PublicationPayload",
+    "PublishedAutomation",
+    "ValidationRecord",
     # Search
     "RecommendationSearchRequest",
     "RecommendationSearchResponse",

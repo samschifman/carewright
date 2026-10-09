@@ -1,0 +1,1503 @@
+{
+  "$defs": {
+    "AcpElement": {
+      "additionalProperties": false,
+      "properties": {
+        "counter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Counter"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outcome"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "source": "#/$defs/SourceProvenance",
+                  "structural": "#/$defs/StructuralProvenance"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/SourceProvenance"
+                },
+                {
+                  "$ref": "#/$defs/StructuralProvenance"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provenance"
+        },
+        "resets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resets"
+        },
+        "structural_constant": {
+          "default": false,
+          "title": "Structural Constant",
+          "type": "boolean"
+        },
+        "template_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TemplateRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "AcpElement",
+      "type": "object"
+    },
+    "AcpProcess": {
+      "additionalProperties": false,
+      "properties": {
+        "consolidated_boundaries": {
+          "items": {
+            "$ref": "#/$defs/ConsolidatedBoundary"
+          },
+          "title": "Consolidated Boundaries",
+          "type": "array"
+        },
+        "invariants": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Invariants",
+          "type": "array"
+        },
+        "parameters": {
+          "items": {
+            "$ref": "#/$defs/Parameter"
+          },
+          "title": "Parameters",
+          "type": "array"
+        },
+        "produces": {
+          "items": {
+            "$ref": "#/$defs/Produces"
+          },
+          "title": "Produces",
+          "type": "array"
+        },
+        "provenance": {
+          "$ref": "#/$defs/ProcessProvenance"
+        },
+        "pruned": {
+          "items": {
+            "$ref": "#/$defs/PruneRecord"
+          },
+          "title": "Pruned",
+          "type": "array"
+        },
+        "template_refs": {
+          "items": {
+            "$ref": "#/$defs/TemplateRef"
+          },
+          "title": "Template Refs",
+          "type": "array"
+        },
+        "triggers": {
+          "items": {
+            "$ref": "#/$defs/Trigger"
+          },
+          "minItems": 1,
+          "title": "Triggers",
+          "type": "array"
+        },
+        "unify": {
+          "items": {
+            "$ref": "#/$defs/UnifyRecord"
+          },
+          "title": "Unify",
+          "type": "array"
+        }
+      },
+      "required": [
+        "triggers",
+        "provenance"
+      ],
+      "title": "AcpProcess",
+      "type": "object"
+    },
+    "BoundaryEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpElement"
+        },
+        "attachedToRef": {
+          "title": "Attachedtoref",
+          "type": "string"
+        },
+        "cancelActivity": {
+          "default": true,
+          "title": "Cancelactivity",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "timerEventDefinition": {
+          "$ref": "#/$defs/TimerEventDefinition"
+        },
+        "type": {
+          "const": "boundaryEvent",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "attachedToRef",
+        "timerEventDefinition"
+      ],
+      "title": "BoundaryEvent",
+      "type": "object"
+    },
+    "BusinessRuleTask": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpElement"
+        },
+        "dmnModel": {
+          "title": "Dmnmodel",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ParamRef"
+              },
+              {
+                "$ref": "#/$defs/PropertyRef"
+              },
+              {
+                "$ref": "#/$defs/ConceptRef"
+              },
+              {
+                "$ref": "#/$defs/Literal_"
+              }
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "type": {
+          "const": "businessRuleTask",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "dmnModel"
+      ],
+      "title": "BusinessRuleTask",
+      "type": "object"
+    },
+    "ConceptRef": {
+      "additionalProperties": false,
+      "properties": {
+        "concept": {
+          "title": "Concept",
+          "type": "string"
+        }
+      },
+      "required": [
+        "concept"
+      ],
+      "title": "ConceptRef",
+      "type": "object"
+    },
+    "ConsolidatedBoundary": {
+      "additionalProperties": false,
+      "properties": {
+        "element_id": {
+          "title": "Element Id",
+          "type": "string"
+        },
+        "template_id": {
+          "title": "Template Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "template_id",
+        "element_id"
+      ],
+      "title": "ConsolidatedBoundary",
+      "type": "object"
+    },
+    "Constraints": {
+      "additionalProperties": false,
+      "properties": {
+        "enum": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enum"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pattern"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceRef"
+        }
+      },
+      "title": "Constraints",
+      "type": "object"
+    },
+    "EndEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpElement"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "const": "endEvent",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "EndEvent",
+      "type": "object"
+    },
+    "ExclusiveGateway": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpElement"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "gatewayDirection": {
+          "enum": [
+            "Diverging",
+            "Converging"
+          ],
+          "title": "Gatewaydirection",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "const": "exclusiveGateway",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "gatewayDirection"
+      ],
+      "title": "ExclusiveGateway",
+      "type": "object"
+    },
+    "IntermediateCatchEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpElement"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "timerEventDefinition": {
+          "$ref": "#/$defs/TimerEventDefinition"
+        },
+        "type": {
+          "const": "intermediateCatchEvent",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "timerEventDefinition"
+      ],
+      "title": "IntermediateCatchEvent",
+      "type": "object"
+    },
+    "Justification": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "trigger-chain",
+            "plan-sequence",
+            "clinician-directed"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "evidence_id"
+      ],
+      "title": "Justification",
+      "type": "object"
+    },
+    "Literal_": {
+      "additionalProperties": false,
+      "properties": {
+        "literal": {
+          "title": "Literal"
+        },
+        "type": {
+          "enum": [
+            "integer",
+            "decimal",
+            "boolean",
+            "duration",
+            "quantity",
+            "enum",
+            "unit",
+            "code"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "literal",
+        "type"
+      ],
+      "title": "Literal_",
+      "type": "object"
+    },
+    "ParamRef": {
+      "additionalProperties": false,
+      "properties": {
+        "param": {
+          "title": "Param",
+          "type": "string"
+        }
+      },
+      "required": [
+        "param"
+      ],
+      "title": "ParamRef",
+      "type": "object"
+    },
+    "Parameter": {
+      "additionalProperties": false,
+      "properties": {
+        "constraints": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Constraints"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "default": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "reserved": {
+          "default": false,
+          "title": "Reserved",
+          "type": "boolean"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "enum": [
+            "duration",
+            "integer",
+            "decimal",
+            "boolean",
+            "string",
+            "quantity"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "Parameter",
+      "type": "object"
+    },
+    "Process": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpProcess"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "flowElements": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "boundaryEvent": "#/$defs/BoundaryEvent",
+                "businessRuleTask": "#/$defs/BusinessRuleTask",
+                "endEvent": "#/$defs/EndEvent",
+                "exclusiveGateway": "#/$defs/ExclusiveGateway",
+                "intermediateCatchEvent": "#/$defs/IntermediateCatchEvent",
+                "sequenceFlow": "#/$defs/SequenceFlow",
+                "startEvent": "#/$defs/StartEvent",
+                "task": "#/$defs/Task",
+                "userTask": "#/$defs/UserTask"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/StartEvent"
+              },
+              {
+                "$ref": "#/$defs/EndEvent"
+              },
+              {
+                "$ref": "#/$defs/Task"
+              },
+              {
+                "$ref": "#/$defs/UserTask"
+              },
+              {
+                "$ref": "#/$defs/BusinessRuleTask"
+              },
+              {
+                "$ref": "#/$defs/ExclusiveGateway"
+              },
+              {
+                "$ref": "#/$defs/IntermediateCatchEvent"
+              },
+              {
+                "$ref": "#/$defs/BoundaryEvent"
+              },
+              {
+                "$ref": "#/$defs/SequenceFlow"
+              }
+            ]
+          },
+          "title": "Flowelements",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "isExecutable": {
+          "const": true,
+          "default": true,
+          "title": "Isexecutable",
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "template",
+            "instance"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "properties": {
+          "items": {
+            "$ref": "#/$defs/Property"
+          },
+          "title": "Properties",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "flowElements",
+        "acp"
+      ],
+      "title": "Process",
+      "type": "object"
+    },
+    "ProcessProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Section"
+        },
+        "source_cpg": {
+          "title": "Source Cpg",
+          "type": "string"
+        },
+        "source_location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "template_snapshots": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Process"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Template Snapshots"
+        }
+      },
+      "required": [
+        "source_cpg"
+      ],
+      "title": "ProcessProvenance",
+      "type": "object"
+    },
+    "Produces": {
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "title": "Outcome",
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/Trigger"
+        }
+      },
+      "required": [
+        "outcome",
+        "trigger"
+      ],
+      "title": "Produces",
+      "type": "object"
+    },
+    "Property": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "duration",
+            "integer",
+            "decimal",
+            "boolean",
+            "string",
+            "quantity",
+            "code"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "Property",
+      "type": "object"
+    },
+    "PropertyRef": {
+      "additionalProperties": false,
+      "properties": {
+        "property": {
+          "title": "Property",
+          "type": "string"
+        }
+      },
+      "required": [
+        "property"
+      ],
+      "title": "PropertyRef",
+      "type": "object"
+    },
+    "PruneRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "element_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Element Ids",
+          "type": "array"
+        },
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "inapplicable-dmn-output",
+            "inapplicable-category",
+            "clinician-directed"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "template_id": {
+          "title": "Template Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "template_id",
+        "element_ids",
+        "reason",
+        "evidence_id"
+      ],
+      "title": "PruneRecord",
+      "type": "object"
+    },
+    "SequenceFlow": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpElement"
+        },
+        "conditionExpression": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conditionexpression"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "sourceRef": {
+          "title": "Sourceref",
+          "type": "string"
+        },
+        "targetRef": {
+          "title": "Targetref",
+          "type": "string"
+        },
+        "type": {
+          "const": "sequenceFlow",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "sourceRef",
+        "targetRef"
+      ],
+      "title": "SequenceFlow",
+      "type": "object"
+    },
+    "SourceLocation": {
+      "description": "Where in the source CPG document this item was extracted from.\n\nPopulated from Docling ProvenanceItem data during ingestion.",
+      "properties": {
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bbox"
+        },
+        "page_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page End"
+        },
+        "page_start": {
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "source_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Text"
+        }
+      },
+      "required": [
+        "page_start"
+      ],
+      "title": "SourceLocation",
+      "type": "object"
+    },
+    "SourceProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "source",
+          "title": "Kind",
+          "type": "string"
+        },
+        "source_location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_text": {
+          "title": "Source Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "source_text"
+      ],
+      "title": "SourceProvenance",
+      "type": "object"
+    },
+    "SourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "cpg",
+            "authored",
+            "reviewer",
+            "policy"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy"
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer"
+        },
+        "source_location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Text"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "SourceRef",
+      "type": "object"
+    },
+    "StartEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpElement"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "const": "startEvent",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "title": "StartEvent",
+      "type": "object"
+    },
+    "StructuralProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "derivation_rule": {
+          "enum": [
+            "start-event",
+            "end-event",
+            "sequence",
+            "exclusive-split",
+            "exclusive-join",
+            "default-flow",
+            "plan-bound",
+            "fragment-boundary",
+            "fragment-merge",
+            "parameter-binding",
+            "branch-prune"
+          ],
+          "title": "Derivation Rule",
+          "type": "string"
+        },
+        "justification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Justification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "const": "structural",
+          "title": "Kind",
+          "type": "string"
+        },
+        "replaces": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Replaces"
+        },
+        "supports": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supports",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "derivation_rule",
+        "supports"
+      ],
+      "title": "StructuralProvenance",
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpElement"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ParamRef"
+              },
+              {
+                "$ref": "#/$defs/PropertyRef"
+              },
+              {
+                "$ref": "#/$defs/ConceptRef"
+              },
+              {
+                "$ref": "#/$defs/Literal_"
+              }
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "taskName": {
+          "title": "Taskname",
+          "type": "string"
+        },
+        "type": {
+          "const": "task",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "taskName"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "TemplateRef": {
+      "additionalProperties": false,
+      "properties": {
+        "element_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Element Id"
+        },
+        "source_cpg": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Cpg"
+        },
+        "template_id": {
+          "title": "Template Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "template_id",
+        "version"
+      ],
+      "title": "TemplateRef",
+      "type": "object"
+    },
+    "TimerEventDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "timeCycle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParamRef"
+            },
+            {
+              "$ref": "#/$defs/PropertyRef"
+            },
+            {
+              "$ref": "#/$defs/ConceptRef"
+            },
+            {
+              "$ref": "#/$defs/Literal_"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timecycle"
+        },
+        "timeDuration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParamRef"
+            },
+            {
+              "$ref": "#/$defs/PropertyRef"
+            },
+            {
+              "$ref": "#/$defs/ConceptRef"
+            },
+            {
+              "$ref": "#/$defs/Literal_"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeduration"
+        }
+      },
+      "title": "TimerEventDefinition",
+      "type": "object"
+    },
+    "Trigger": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "dmn-output",
+            "recommendation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Id"
+        },
+        "output_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Name"
+        },
+        "output_value": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Value"
+        },
+        "recommendation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recommendation Id"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "Trigger",
+      "type": "object"
+    },
+    "UnifyRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "members": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "members"
+      ],
+      "title": "UnifyRecord",
+      "type": "object"
+    },
+    "UserTask": {
+      "additionalProperties": false,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/AcpElement"
+        },
+        "groupId": {
+          "enum": [
+            "clinicians",
+            "care-team",
+            "patients"
+          ],
+          "title": "Groupid",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "type": {
+          "const": "userTask",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "groupId"
+      ],
+      "title": "UserTask",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "ir_version": {
+      "const": "1.0",
+      "title": "Ir Version",
+      "type": "string"
+    },
+    "process": {
+      "$ref": "#/$defs/Process"
+    }
+  },
+  "required": [
+    "ir_version",
+    "process"
+  ],
+  "title": "ProcessIR",
+  "type": "object"
+}

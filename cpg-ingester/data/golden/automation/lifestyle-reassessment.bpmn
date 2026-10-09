@@ -1,0 +1,315 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:drools="http://www.jboss.org/drools" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:acp="https://github.com/samschifman/cpg-to-acp/bpmn" id="lifestyle-reassessment_defs" targetNamespace="https://github.com/samschifman/cpg-to-acp/bpmn/SYN-HTN-2026-002">
+  <bpmn2:itemDefinition id="_strItem" structureRef="String"/>
+  <bpmn2:itemDefinition id="_boolItem" structureRef="Boolean"/>
+  <bpmn2:process id="lifestyle-reassessment" name="Lifestyle reassessment with home-reading review" isExecutable="true" processType="Public" drools:packageName="org.carewright.automation" drools:version="92c654938cef">
+    <bpmn2:extensionElements>
+      <drools:metaData name="acp.catalogVersion">1.0</drools:metaData>
+      <acp:template><![CDATA[{"catalog_version":"1.0","consolidated_boundaries":[],"description":"Send lifestyle education, request a follow-up visit within the treatment decision interval, wait for that interval, and have a clinician review home readings at the visit.","invariants":["max_duration >= reassessment_interval"],"ir_version":"1.0","kind":"template","parameters":[{"description":"Required interval bound from the Treatment Recommendation Follow Up Weeks output at synthesis.","name":"reassessment_interval","required":true,"reserved":false,"type":"duration"},{"default":"Follow the DASH eating plan, including fruits, vegetables, whole grains, low-fat dairy, and less than 2,300 mg of sodium daily. Aim for at least 150 minutes of moderate or 75 minutes of vigorous aerobic activity each week. Work toward and maintain a healthy body weight. Limit alcohol to no more than 2 drinks a day for men or 1 for women. If you smoke, ask your care team about smoking-cessation support. Bring your home blood pressure readings to your follow-up visit.","description":"Patient-facing lifestyle education covering the recommended diet, activity, weight, alcohol, and smoking measures.","name":"education_message","required":true,"reserved":false,"source":{"kind":"authored"},"type":"string"},{"default":"Review home blood pressure readings after lifestyle modification.","description":"Reason supplied with the visit request.","name":"visit_reason","required":true,"reserved":false,"source":{"kind":"authored"},"type":"string"},{"description":"Maximum time allowed for this automation.","name":"max_duration","required":true,"reserved":true,"type":"duration"}],"produces":[],"profile":"kogito-10.2","provenance":{"section":"3.2 Treatment Decision; 3.4 Lifestyle Modification Recommendations; Table 1 Follow-up (weeks)","source_cpg":"SYN-HTN-2026-002"},"pruned":[],"template_id":"lifestyle-reassessment","template_refs":[],"triggers":[{"kind":"dmn-output","model_id":"treatment-recommendation","output_name":"Follow Up Weeks","output_value":8},{"kind":"dmn-output","model_id":"treatment-recommendation","output_name":"Follow Up Weeks","output_value":12}],"unify":[],"version":"92c654938cef"}]]></acp:template>
+    </bpmn2:extensionElements>
+    <bpmn2:property id="reassessment_interval" itemSubjectRef="_strItem" name="reassessment_interval">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">duration</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="education_message" itemSubjectRef="_strItem" name="education_message">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="visit_reason" itemSubjectRef="_strItem" name="visit_reason">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="max_duration" itemSubjectRef="_strItem" name="max_duration">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">duration</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="education_delivered" itemSubjectRef="_boolItem" name="education_delivered">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">boolean</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="visit_request_id" itemSubjectRef="_strItem" name="visit_request_id">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:property id="outcome" itemSubjectRef="_strItem" name="outcome">
+      <bpmn2:extensionElements>
+        <drools:metaData name="acp.type">string</drools:metaData>
+      </bpmn2:extensionElements>
+    </bpmn2:property>
+    <bpmn2:startEvent id="start" name="Lifestyle reassessment begins">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{"provenance":{"derivation_rule":"start-event","kind":"structural","supports":["send_education"]}}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:outgoing>f_init</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    <bpmn2:scriptTask id="init" name="Initialise" scriptFormat="http://www.java.com/java">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_init</bpmn2:incoming>
+      <bpmn2:outgoing>f_main</bpmn2:outgoing>
+      <bpmn2:script>kcontext.setVariable("outcome", "");</bpmn2:script>
+    </bpmn2:scriptTask>
+    <bpmn2:subProcess id="main" name="Monitoring">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_main</bpmn2:incoming>
+      <bpmn2:outgoing>f_after</bpmn2:outgoing>
+      <bpmn2:startEvent id="main_start">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:outgoing>f_start</bpmn2:outgoing>
+      </bpmn2:startEvent>
+      <bpmn2:scriptTask id="end_complete_outcome" name="Outcome: complete" scriptFormat="http://www.java.com/java">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_review_end</bpmn2:incoming>
+        <bpmn2:outgoing>end_complete_outcome_out</bpmn2:outgoing>
+        <bpmn2:script>kcontext.setVariable("outcome", "complete");</bpmn2:script>
+      </bpmn2:scriptTask>
+      <bpmn2:endEvent id="main_end_complete" name="Home readings reviewed at follow-up visit">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"outcome":"complete","provenance":{"derivation_rule":"end-event","kind":"structural","supports":["review_readings"]}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>end_complete_outcome_out</bpmn2:incoming>
+      </bpmn2:endEvent>
+      <bpmn2:task id="request_reassessment_visit" name="Request lifestyle follow-up visit" drools:taskName="schedule.request_visit">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_send_request</bpmn2:incoming>
+        <bpmn2:outgoing>f_request_wait</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="request_reassessment_visit_reason_input" name="reason" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="request_reassessment_visit_within_input" name="within" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="request_reassessment_visit_TaskName" name="TaskName" drools:dtype="Object"/>
+          <bpmn2:dataOutput id="request_reassessment_visit_request_id_output" name="request_id" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>request_reassessment_visit_reason_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>request_reassessment_visit_within_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>request_reassessment_visit_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>request_reassessment_visit_request_id_output</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>visit_reason</bpmn2:sourceRef>
+          <bpmn2:targetRef>request_reassessment_visit_reason_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>reassessment_interval</bpmn2:sourceRef>
+          <bpmn2:targetRef>request_reassessment_visit_within_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>request_reassessment_visit_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">schedule_request_visit__request_reassessment_visit</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">request_reassessment_visit_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>request_reassessment_visit_request_id_output</bpmn2:sourceRef>
+          <bpmn2:targetRef>visit_request_id</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:userTask id="review_readings" name="Review home readings at follow-up visit">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_wait_review</bpmn2:incoming>
+        <bpmn2:outgoing>f_review_end</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="review_readings_TaskName" name="TaskName" drools:dtype="Object"/>
+          <bpmn2:dataInput id="review_readings_Skippable" name="Skippable" drools:dtype="Object"/>
+          <bpmn2:dataInput id="review_readings_GroupId" name="GroupId" drools:dtype="Object"/>
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>review_readings_TaskName</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>review_readings_Skippable</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>review_readings_GroupId</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet/>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>review_readings_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">review_readings</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">review_readings_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>review_readings_Skippable</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">false</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">review_readings_Skippable</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>review_readings_GroupId</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">clinicians</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">review_readings_GroupId</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+      </bpmn2:userTask>
+      <bpmn2:task id="send_education" name="Send home blood pressure education" drools:taskName="patient.send_message">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"All patients with hypertension, regardless of whether pharmacological therapy is initiated, should receive counseling on the following lifestyle modifications: Dietary changes: Adopt the DASH (Dietary Approaches to Stop Hypertension) diet, which emphasizes fruits, vegetables, whole grains, and low-fat dairy products while limiting saturated fat and sodium intake to less than 2,300 mg per day. Physical activity: Engage in at least 150 minutes per week of moderate-intensity aerobic exercise, such as brisk walking, or 75 minutes per week of vigorous-intensity aerobic exercise. Weight management: Achieve and maintain a healthy body weight (BMI 18.5-24.9 kg/m2). Even modest weight loss of 5-10% can significantly reduce blood pressure. Alcohol limitation: Limit alcohol intake to no more than 2 drinks per day for men and 1 drink per day for women. Smoking cessation: If applicable, provide smoking cessation counseling and resources."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_start</bpmn2:incoming>
+        <bpmn2:outgoing>f_send_request</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="send_education_kind_input" name="kind" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="send_education_message_input" name="message" drools:dtype="String" itemSubjectRef="_strItem"/>
+          <bpmn2:dataInput id="send_education_TaskName" name="TaskName" drools:dtype="Object"/>
+          <bpmn2:dataOutput id="send_education_delivered_output" name="delivered" drools:dtype="Boolean" itemSubjectRef="_boolItem"/>
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>send_education_kind_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>send_education_message_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>send_education_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>send_education_delivered_output</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>send_education_kind_input</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">education</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">send_education_kind_input</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>education_message</bpmn2:sourceRef>
+          <bpmn2:targetRef>send_education_message_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>send_education_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">patient_send_message__send_education</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">send_education_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>send_education_delivered_output</bpmn2:sourceRef>
+          <bpmn2:targetRef>education_delivered</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:intermediateCatchEvent id="wait_reassessment" name="Wait for lifestyle reassessment">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"Patients with Stage 1 hypertension without high-risk comorbidities should attempt lifestyle modification for 8 weeks before reassessment. Patients with elevated but sub-hypertensive blood pressure (SBP < 130) should focus on lifestyle modifications with follow-up in 12 weeks."}}]]></acp:element>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_request_wait</bpmn2:incoming>
+        <bpmn2:outgoing>f_wait_review</bpmn2:outgoing>
+        <bpmn2:timerEventDefinition>
+          <bpmn2:timeDuration xsi:type="bpmn2:tFormalExpression">#{reassessment_interval}</bpmn2:timeDuration>
+        </bpmn2:timerEventDefinition>
+      </bpmn2:intermediateCatchEvent>
+      <bpmn2:sequenceFlow id="f_request_wait" sourceRef="request_reassessment_visit" targetRef="wait_reassessment">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1."}}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_review_end" sourceRef="review_readings" targetRef="end_complete_outcome">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="end_complete_outcome_out" sourceRef="end_complete_outcome" targetRef="main_end_complete">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_send_request" sourceRef="send_education" targetRef="request_reassessment_visit">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{"provenance":{"kind":"source","source_text":"All patients with hypertension, regardless of whether pharmacological therapy is initiated, should receive counseling on the following lifestyle modifications: Dietary changes: Adopt the DASH (Dietary Approaches to Stop Hypertension) diet, which emphasizes fruits, vegetables, whole grains, and low-fat dairy products while limiting saturated fat and sodium intake to less than 2,300 mg per day. Physical activity: Engage in at least 150 minutes per week of moderate-intensity aerobic exercise, such as brisk walking, or 75 minutes per week of vigorous-intensity aerobic exercise. Weight management: Achieve and maintain a healthy body weight (BMI 18.5-24.9 kg/m2). Even modest weight loss of 5-10% can significantly reduce blood pressure. Alcohol limitation: Limit alcohol intake to no more than 2 drinks per day for men and 1 drink per day for women. Smoking cessation: If applicable, provide smoking cessation counseling and resources."}}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_start" sourceRef="main_start" targetRef="send_education">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_wait_review" sourceRef="wait_reassessment" targetRef="review_readings">
+        <bpmn2:extensionElements>
+          <acp:element><![CDATA[{}]]></acp:element>
+        </bpmn2:extensionElements>
+      </bpmn2:sequenceFlow>
+    </bpmn2:subProcess>
+    <bpmn2:boundaryEvent id="period_elapsed" name="Maximum duration elapsed" attachedToRef="main" cancelActivity="true">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{"provenance":{"derivation_rule":"plan-bound","kind":"structural","supports":["send_education","request_reassessment_visit","wait_reassessment","review_readings"]}}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:outgoing>f_timeout</bpmn2:outgoing>
+      <bpmn2:timerEventDefinition>
+        <bpmn2:timeDuration xsi:type="bpmn2:tFormalExpression">#{max_duration}</bpmn2:timeDuration>
+      </bpmn2:timerEventDefinition>
+    </bpmn2:boundaryEvent>
+    <bpmn2:exclusiveGateway id="gw_outcome" name="Outcome" gatewayDirection="Diverging" default="f_completed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_after</bpmn2:incoming>
+      <bpmn2:outgoing>end_complete_route</bpmn2:outgoing>
+      <bpmn2:outgoing>f_completed</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:endEvent id="end_complete" name="Home readings reviewed at follow-up visit">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>end_complete_route</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_completed" name="Completed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_completed</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_timeout" name="Reassessment window elapsed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{"outcome":"timed_out","provenance":{"derivation_rule":"end-event","kind":"structural","supports":["period_elapsed"]}}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>f_timeout</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:sequenceFlow id="f_init" sourceRef="start" targetRef="init">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_main" sourceRef="init" targetRef="main">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_after" sourceRef="main" targetRef="gw_outcome">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="end_complete_route" sourceRef="gw_outcome" targetRef="end_complete" name="complete">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java"><![CDATA[return "complete".equals(outcome);]]></bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_completed" sourceRef="gw_outcome" targetRef="end_completed">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_timeout" sourceRef="period_elapsed" targetRef="end_timeout">
+      <bpmn2:extensionElements>
+        <acp:element><![CDATA[{}]]></acp:element>
+      </bpmn2:extensionElements>
+    </bpmn2:sequenceFlow>
+  </bpmn2:process>
+</bpmn2:definitions>

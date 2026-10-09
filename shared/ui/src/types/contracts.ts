@@ -81,6 +81,137 @@ export interface SourceLocation {
   source_text?: string;
 }
 
+export type PatternFamily =
+  | "schedule-and-check"
+  | "wait-for-result-then-decide"
+  | "remind-until-done"
+  | "escalate-on-threshold"
+  | "do-confirm-repeat"
+  | "other";
+
+export interface Automatability {
+  tier: "A" | "B";
+  rationale: string;
+}
+
+export interface ValidationRecord {
+  status: "valid" | "incomplete" | "escalated";
+  rungs_passed: string[];
+  deferred_invariants: string[];
+  kogito_checked: boolean;
+  warnings: string[];
+  errors: string[];
+  acknowledgement?: string | null;
+}
+
+export interface AutomationParameter {
+  name: string;
+  type: "duration" | "integer" | "decimal" | "boolean" | "string" | "quantity";
+  unit?: string | null;
+  default?: unknown;
+  constraints?: Record<string, unknown> | null;
+  required: boolean;
+  description: string;
+  source?: Record<string, unknown> | null;
+  reserved: boolean;
+}
+
+export interface ProcessIR {
+  ir_version: "1.0";
+  process: {
+    id: string;
+    name: string;
+    description: string;
+    kind: "template" | "instance";
+    properties: Record<string, unknown>[];
+    flowElements: Record<string, unknown>[];
+    acp: Record<string, unknown>;
+  };
+}
+
+export interface TemplateRef {
+  template_id: string;
+  version: string;
+  source_cpg?: string | null;
+  element_id?: string | null;
+}
+
+export interface AutomationTemplateSummary {
+  id: string;
+  version: string;
+  name: string;
+  description: string;
+  source_cpg: string;
+  section?: string | null;
+  source_location?: SourceLocation | null;
+  triggers: Record<string, unknown>[];
+  linked_recommendation_ids: string[];
+  linked_decision_model_ids: string[];
+  parameters: AutomationParameter[];
+  capabilities_used: string[];
+  catalog_version: string;
+  ir_version: string;
+  pattern_family: PatternFamily;
+  automatability: Automatability;
+  validation: ValidationRecord;
+  artifact_id: string;
+}
+
+export interface AutomationTemplate {
+  contract_version: "1.1";
+  summary: AutomationTemplateSummary;
+  ir: ProcessIR;
+  bpmn_xml: string;
+}
+
+export interface ParameterBinding {
+  name: string;
+  value: unknown;
+  source: "cpg-default" | "clinician" | "plan-derived" | "reviewer" | "authored";
+  unit?: string | null;
+  note?: string | null;
+}
+
+export interface Evidence {
+  kind: string;
+  payload: unknown;
+}
+
+export interface ActivityAutomation {
+  id: string;
+  template_refs: TemplateRef[];
+  template_snapshots: ProcessIR[];
+  ir: ProcessIR;
+  bpmn_xml: string;
+  bindings: ParameterBinding[];
+  derivation_evidence: Record<string, Evidence>;
+  capabilities_used: string[];
+  validation: ValidationRecord;
+  enabled: boolean;
+  revision: string;
+  review_notes: string[];
+}
+
+export interface PublishedAutomation {
+  automation_id: string;
+  activity_ids: string[];
+  revision: string;
+  template_refs: TemplateRef[];
+  task: Record<string, unknown>;
+  document_reference: Record<string, unknown>;
+}
+
+export interface PublicationPayload {
+  job_id: string;
+  careplan_id: string;
+  careplan_server_id: string;
+  patient_server_id: string;
+  replaces_careplan_id?: string | null;
+  approved_at: string;
+  reviewer: string;
+  automations: PublishedAutomation[];
+}
+
 export interface CertaintyGrade {
   strength: RecommendationStrength;
   evidence_quality: EvidenceQuality;
@@ -109,6 +240,7 @@ export interface Recommendation {
   provenance?: RecommendationProvenance;
   evidence_review_date?: string;
   source_location?: SourceLocation;
+  automation_template_ids?: string[] | null;
 }
 
 export interface RecommendationSummary {
@@ -152,6 +284,7 @@ export interface DecisionModelSummary {
   category?: DecisionCategory;
   modifies?: string[];
   source_location?: SourceLocation;
+  namespace?: string | null;
 }
 
 export interface DecisionEvaluationRequest {

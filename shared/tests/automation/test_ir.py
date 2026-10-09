@@ -56,7 +56,11 @@ def rename_element(data: dict[str, Any], old: str, new: str) -> None:
 
 def test_appendix_b_fixture_round_trips_through_canonical_json() -> None:
     ir = ProcessIR.model_validate_json(FIXTURE.read_text())
-    assert ProcessIR.model_validate_json(canonical_json(ir)) == ir
+    parsed = ProcessIR.model_validate_json(canonical_json(ir))
+    assert canonical_json(parsed) == canonical_json(ir)
+    assert [element.id for element in parsed.process.flowElements] == sorted(
+        element.id for element in parsed.process.flowElements
+    )
     assert len(ir.process.flowElements) == 31
 
 
@@ -73,6 +77,17 @@ def test_canonical_json_and_hash_ignore_object_key_order() -> None:
     assert canonical_json(ir) == canonical_json(reordered)
     assert ir_version(ir) == ir_version(reordered)
     assert len(ir_version(ir)) == 12
+
+
+def test_canonical_json_and_hash_ignore_flow_element_order() -> None:
+    data = fixture_data()
+    reordered_data = copy.deepcopy(data)
+    reordered_data["process"]["flowElements"].reverse()
+    ir = ProcessIR.model_validate(data)
+    reordered = ProcessIR.model_validate(reordered_data)
+
+    assert canonical_json(ir) == canonical_json(reordered)
+    assert ir_version(ir) == ir_version(reordered)
 
 
 def test_template_id_uses_the_decision_model_slug_rule() -> None:
@@ -158,6 +173,19 @@ def test_template_id_uses_the_decision_model_slug_rule() -> None:
             "requires exactly one reserved parameter 'max_duration'",
         ),
         (
+            lambda d: [
+                d["process"]["flowElements"].remove(flow(d, element_id))
+                for element_id in ("period_elapsed", "f_period")
+            ],
+            "requires exactly one boundaryEvent attached to 'main'",
+        ),
+        (
+            lambda d: d["process"]["flowElements"].append(
+                {**copy.deepcopy(flow(d, "period_elapsed")), "id": "period_elapsed_2"}
+            ),
+            "requires exactly one boundaryEvent attached to 'main'",
+        ),
+        (
             lambda d: d["process"]["acp"].update(bindings=[]),
             "Extra inputs are not permitted",
         ),
@@ -168,12 +196,36 @@ def test_template_id_uses_the_decision_model_slug_rule() -> None:
             "string literals are not allowed",
         ),
         (
+            lambda d: flow(d, "request_readings")["inputs"].update(
+                due={"literal": "P1W", "type": "duration"}
+            ),
+            "duration literals must use day/hour form",
+        ),
+        (
+            lambda d: flow(d, "wait_interval")["timerEventDefinition"].update(
+                timeDuration={"literal": "P1W", "type": "duration"}
+            ),
+            "duration literals must use day/hour form",
+        ),
+        (
             lambda d: d["process"]["properties"][1].pop("unit"),
             "quantity property 'avg_systolic' requires unit",
         ),
         (
             lambda d: flow(d, "period_elapsed").update(attachedToRef="start"),
             "boundaryEvent 'period_elapsed'",
+        ),
+        (
+            lambda d: flow(d, "period_elapsed")["timerEventDefinition"].update(
+                timeDuration={"param": "reporting_interval"}
+            ),
+            "must use timeDuration {param: 'max_duration'}",
+        ),
+        (
+            lambda d: flow(d, "period_elapsed")["acp"]["provenance"].update(
+                derivation_rule="end-event"
+            ),
+            "requires structural provenance 'plan-bound'",
         ),
         (
             lambda d: d["process"]["acp"]["parameters"][0].update(source=None),
@@ -219,10 +271,40 @@ def test_invalid_structural_variants_are_rejected(mutator, message: str) -> None
             "element id 'init' is compiler-reserved",
         ),
         (
-            lambda d: d["process"]["flowElements"].append(
-                {"type": "endEvent", "id": "remind_counter", "name": "Bad suffix"}
-            ),
-            "uses compiler-reserved suffix '_counter'",
+            lambda d: rename_element(d, "f_start", "f_init"),
+            "element id 'f_init' is compiler-reserved",
+        ),
+        (
+            lambda d: rename_element(d, "f_start", "f_main"),
+            "element id 'f_main' is compiler-reserved",
+        ),
+        (
+            lambda d: rename_element(d, "f_start", "f_after"),
+            "element id 'f_after' is compiler-reserved",
+        ),
+        (
+            lambda d: rename_element(d, "f_start", "f_completed"),
+            "element id 'f_completed' is compiler-reserved",
+        ),
+        (
+            lambda d: rename_element(d, "request_readings", "main_inner"),
+            "uses compiler-reserved prefix 'main_'",
+        ),
+        (
+            lambda d: rename_element(d, "request_readings", "request_counter_suffix"),
+            "contains compiler-reserved sequence '_counter'",
+        ),
+        (
+            lambda d: rename_element(d, "request_readings", "request_reset_suffix"),
+            "contains compiler-reserved sequence '_reset'",
+        ),
+        (
+            lambda d: rename_element(d, "request_readings", "request_outcome_suffix"),
+            "contains compiler-reserved sequence '_outcome'",
+        ),
+        (
+            lambda d: rename_element(d, "request_readings", "request_route_suffix"),
+            "contains compiler-reserved sequence '_route'",
         ),
         (
             lambda d: d["process"]["properties"].append(
@@ -253,6 +335,7 @@ def test_duplicate_boundary_names_are_allowed_at_l0() -> None:
     data = fixture_data()
     duplicate = copy.deepcopy(flow(data, "period_elapsed"))
     duplicate["id"] = "period_elapsed_2"
+    duplicate["attachedToRef"] = "query_systolic"
     data["process"]["flowElements"].append(duplicate)
     ir = ProcessIR.model_validate(data)
     boundaries = [

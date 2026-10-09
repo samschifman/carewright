@@ -21,6 +21,7 @@ from pydantic import (
 )
 
 from cpg_contracts.decisions import decision_model_id
+from cpg_contracts.automation.expressions import ExpressionError, parse_duration
 from cpg_contracts.recommendations import SourceLocation
 
 
@@ -36,7 +37,17 @@ JAVA_RESERVED = frozenset(
     """.split()
 )
 RESERVED_ELEMENT_IDS = frozenset(
-    {"init", "main", "main_start", "gw_outcome", "end_completed"}
+    {
+        "init",
+        "main",
+        "main_start",
+        "gw_outcome",
+        "end_completed",
+        "f_init",
+        "f_main",
+        "f_after",
+        "f_completed",
+    }
 )
 RESERVED_PARAMETERS = ("max_duration",)
 
@@ -151,6 +162,16 @@ def _validate_value_ref_shape(value: Any) -> Any:
             raise ValueError("literal ValueRef requires type")
         if value.get("type") == "string":
             raise ValueError("string literals are not allowed in ValueRef")
+        if value.get("type") == "duration":
+            duration = value.get("literal")
+            if not isinstance(duration, str):
+                raise ValueError("duration literals must be ISO-8601 strings")
+            if "W" in duration:
+                raise ValueError("duration literals must use day/hour form; week form is not allowed")
+            try:
+                parse_duration(duration)
+            except ExpressionError as exc:
+                raise ValueError(f"invalid duration literal: {exc}") from exc
     elif "type" in value:
         raise ValueError(f"{variant} ValueRef must not include type")
     return value
@@ -459,6 +480,30 @@ class Process(StrictModel):
             elif gateway.default is not None:
                 raise ValueError(f"converging gateway {gateway.id!r} cannot declare a default flow")
 
+        main_boundaries = [
+            node
+            for node in nodes
+            if isinstance(node, BoundaryEvent) and node.attachedToRef == "main"
+        ]
+        if len(main_boundaries) != 1:
+            raise ValueError(
+                "process requires exactly one boundaryEvent attached to 'main'"
+            )
+        max_duration_boundary = main_boundaries[0]
+        timer = max_duration_boundary.timerEventDefinition.timeDuration
+        if not isinstance(timer, ParamRef) or timer.param != "max_duration":
+            raise ValueError(
+                f"boundaryEvent {max_duration_boundary.id!r} must use timeDuration {{param: 'max_duration'}}"
+            )
+        provenance = max_duration_boundary.acp.provenance
+        if not (
+            isinstance(provenance, StructuralProvenance)
+            and provenance.derivation_rule == "plan-bound"
+        ):
+            raise ValueError(
+                f"boundaryEvent {max_duration_boundary.id!r} requires structural provenance 'plan-bound'"
+            )
+
         max_duration = [
             parameter for parameter in self.acp.parameters if parameter.name == "max_duration"
         ]
@@ -496,10 +541,14 @@ class Process(StrictModel):
             self._check_identifier(element.id, "element id")
             if element.id in RESERVED_ELEMENT_IDS:
                 raise ValueError(f"element id {element.id!r} is compiler-reserved")
-            for suffix in ("_counter", "_reset", "_outcome"):
-                if element.id.endswith(suffix):
+            if element.id.startswith("main_"):
+                raise ValueError(
+                    f"element id {element.id!r} uses compiler-reserved prefix 'main_'"
+                )
+            for marker in ("_counter", "_reset", "_outcome", "_route"):
+                if marker in element.id:
                     raise ValueError(
-                        f"element id {element.id!r} uses compiler-reserved suffix {suffix!r}"
+                        f"element id {element.id!r} contains compiler-reserved sequence {marker!r}"
                     )
         for prop in self.properties:
             self._check_identifier(prop.name, "property name")
@@ -533,6 +582,9 @@ class ProcessIR(StrictModel):
 def canonical_json(ir: ProcessIR) -> str:
     """Return stable compact JSON for hashing and artifact comparisons."""
     data = ir.model_dump(mode="json", exclude_none=True)
+    data["process"]["flowElements"] = sorted(
+        data["process"]["flowElements"], key=lambda element: element["id"]
+    )
     return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 

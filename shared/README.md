@@ -17,6 +17,7 @@ Contract version: `1.0` (see `CONTRACT_VERSION` in `cpg_contracts.guidelines`)
 | `cpg_contracts.recommendations` | `Recommendation`, `RecommendationBundle`, `RecommendationSummary`, `CertaintyGrade`, `CrossReference`, enums (`RecommendationStrength`, `EvidenceQuality`, `RecommendationType`, `RecommendationProvenance`, `CrossReferenceRelationship`) | cpg-ingester → acp-writer (knowledge ingestion) |
 | `cpg_contracts.search` | `RecommendationSearchRequest`, `RecommendationSearchResult`, `RecommendationSearchResponse` | acp-writer internal (knowledge retrieval) |
 | `cpg_contracts.fhir` | `PatientSummary` | mock-EHR → acp-writer (patient data) |
+| `cpg_contracts.automation` | BPMN automation IR, compiler, catalog and validation contracts | cpg-ingester → acp-writer → automation |
 
 ### Installation
 

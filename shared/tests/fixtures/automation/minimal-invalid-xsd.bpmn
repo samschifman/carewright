@@ -1,0 +1,493 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn2:definitions xmlns:acp="https://github.com/samschifman/cpg-to-acp/bpmn" xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:drools="http://www.jboss.org/drools" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="home-bp-monitoring_defs" targetNamespace="https://github.com/samschifman/cpg-to-acp/bpmn/SYN-HTN-2026-002">
+  <bpmn2:itemDefinition id="_strItem" structureRef="String" />
+  <bpmn2:itemDefinition id="_intItem" structureRef="Integer" />
+  <bpmn2:itemDefinition id="_dblItem" structureRef="Double" />
+  <bpmn2:process id="home-bp-monitoring" name="Home blood pressure monitoring with outreach and escalation" isExecutable="true" processType="Public" drools:packageName="org.carewright.automation" drools:version="9f8e7d6c5b4a">
+    <bpmn2:extensionElements>
+      <acp:template>{"template_id":"home-bp-monitoring","version":"9f8e7d6c5b4a","catalog_version":"1.0","ir_version":"1.0","profile":"kogito-10.2",
+        "triggers":[{"kind":"recommendation","recommendation_id":"&lt;rec-guid&gt;"}],
+        "parameters":[{"name":"reporting_interval","type":"duration","default":"P1W","source":{"kind":"cpg","source_text":"transmit their readings to the care team weekly"}},
+                      {"name":"notify_systolic_threshold","type":"quantity","unit":"mm[Hg]","default":135,"source":{"kind":"cpg","source_text":"weekly home average is 135/85 mmHg or higher"}},
+                      {"name":"notify_diastolic_threshold","type":"quantity","unit":"mm[Hg]","default":85,"source":{"kind":"cpg","source_text":"weekly home average is 135/85 mmHg or higher"}},
+                      {"name":"max_reminder_attempts","type":"integer","default":3,"source":{"kind":"cpg","source_text":"after three reminder attempts on different days"}},
+                      {"name":"instructions_text","type":"string","default":"Measure twice in the morning before medications and twice in the evening, one minute apart.","source":{"kind":"authored"}},
+                      {"name":"reminder_text","type":"string","default":"Please submit this week's home blood pressure readings.","source":{"kind":"authored"}},
+                      {"name":"escalation_reason","type":"string","default":"No home blood pressure readings after reminders.","source":{"kind":"authored"}},
+                      {"name":"max_duration","type":"duration","required":true,"reserved":true}],
+        "invariants":["max_duration &gt;= reporting_interval * (max_reminder_attempts + 1)"]}</acp:template>
+    </bpmn2:extensionElements>
+    <bpmn2:property id="reporting_interval" itemSubjectRef="_strItem" name="reporting_interval" />
+    <bpmn2:property id="notify_systolic_threshold" itemSubjectRef="_dblItem" name="notify_systolic_threshold" />
+    <bpmn2:property id="notify_diastolic_threshold" itemSubjectRef="_dblItem" name="notify_diastolic_threshold" />
+    <bpmn2:property id="max_reminder_attempts" itemSubjectRef="_intItem" name="max_reminder_attempts" />
+    <bpmn2:property id="instructions_text" itemSubjectRef="_strItem" name="instructions_text" />
+    <bpmn2:property id="reminder_text" itemSubjectRef="_strItem" name="reminder_text" />
+    <bpmn2:property id="escalation_reason" itemSubjectRef="_strItem" name="escalation_reason" />
+    <bpmn2:property id="max_duration" itemSubjectRef="_strItem" name="max_duration" />
+    <bpmn2:property id="reading_count" itemSubjectRef="_intItem" name="reading_count" />
+    <bpmn2:property id="avg_systolic" itemSubjectRef="_dblItem" name="avg_systolic" />
+    <bpmn2:property id="avg_diastolic" itemSubjectRef="_dblItem" name="avg_diastolic" />
+    <bpmn2:property id="reminder_attempts" itemSubjectRef="_intItem" name="reminder_attempts" />
+    <bpmn2:property id="outcome" itemSubjectRef="_strItem" name="outcome" />
+    <bpmn2:property id="diastolic_reading_count" itemSubjectRef="_intItem" name="diastolic_reading_count" />
+    <bpmn2:property id="systolic_latest_value" itemSubjectRef="_dblItem" name="systolic_latest_value" />
+    <bpmn2:property id="systolic_latest_date" itemSubjectRef="_strItem" name="systolic_latest_date" />
+    <bpmn2:property id="diastolic_latest_value" itemSubjectRef="_dblItem" name="diastolic_latest_value" />
+    <bpmn2:property id="diastolic_latest_date" itemSubjectRef="_strItem" name="diastolic_latest_date" />
+    <bpmn2:property id="message_delivered" itemSubjectRef="_boolItem" name="message_delivered" />
+    <bpmn2:property id="request_id" itemSubjectRef="_strItem" name="request_id" />
+    <bpmn2:property id="escalation_id" itemSubjectRef="_strItem" name="escalation_id" />
+    <bpmn2:property id="notification_id" itemSubjectRef="_strItem" name="notification_id" />
+    <bpmn2:property id="notify_reason" itemSubjectRef="_strItem" name="notify_reason" />
+    <bpmn2:property id="notify_context" itemSubjectRef="_strItem" name="notify_context" />
+    <bpmn2:startEvent id="start" name="Monitoring started">
+      <bpmn2:outgoing>f_init</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    <bpmn2:scriptTask id="init" name="Initialise" scriptFormat="http://www.java.com/java">
+      <bpmn2:incoming>f_init</bpmn2:incoming>
+      <bpmn2:outgoing>f_main</bpmn2:outgoing>
+      <bpmn2:script>kcontext.setVariable("reminder_attempts", 0); kcontext.setVariable("outcome", "");</bpmn2:script>
+    </bpmn2:scriptTask>
+    <bpmn2:subProcess id="main" name="Monitoring">
+      <bpmn2:incoming>f_main</bpmn2:incoming>
+      <bpmn2:outgoing>f_after</bpmn2:outgoing>
+      <bpmn2:startEvent id="main_start">
+        <bpmn2:outgoing>f_start</bpmn2:outgoing>
+      </bpmn2:startEvent>
+      <bpmn2:exclusiveGateway id="loop_entry" name="Begin monitoring cycle" gatewayDirection="Converging">
+        <bpmn2:incoming>f_start</bpmn2:incoming>
+        <bpmn2:incoming>f_retry</bpmn2:incoming>
+        <bpmn2:incoming>f_ok</bpmn2:incoming>
+        <bpmn2:incoming>f_notified</bpmn2:incoming>
+        <bpmn2:outgoing>f_loop</bpmn2:outgoing>
+      </bpmn2:exclusiveGateway>
+      <bpmn2:task id="request_readings" unknownAttribute="invalid" name="Request home BP readings" drools:taskName="patient.request_observation">
+        <bpmn2:extensionElements>
+          <acp:provenance>{"kind":"source","source_text":"take two readings one minute apart in the morning before medications and two readings one minute apart in the evening ... and transmit their readings to the care team weekly"}</acp:provenance>
+        </bpmn2:extensionElements>
+        <bpmn2:incoming>f_loop</bpmn2:incoming>
+        <bpmn2:outgoing>f_wait</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="request_readings_code" drools:dtype="String" name="code" />
+          <bpmn2:dataInput id="request_readings_instructions" drools:dtype="String" name="instructions" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="request_readings_due" drools:dtype="String" name="due" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="request_readings_channel_policy" drools:dtype="String" name="channel_policy" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="request_readings_TaskName" drools:dtype="Object" name="TaskName" />
+          <bpmn2:dataOutput id="request_readings_request_id" drools:dtype="String" name="request_id" itemSubjectRef="_strItem" />
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>request_readings_code</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>request_readings_instructions</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>request_readings_due</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>request_readings_channel_policy</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>request_readings_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>request_readings_request_id</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>request_readings_code</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">concept:blood pressure</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">request_readings_code</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>instructions_text</bpmn2:sourceRef>
+          <bpmn2:targetRef>request_readings_instructions</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>reporting_interval</bpmn2:sourceRef>
+          <bpmn2:targetRef>request_readings_due</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>request_readings_channel_policy</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">preferred</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">request_readings_channel_policy</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>request_readings_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">patient_request_observation__request_readings</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">request_readings_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>request_readings_request_id</bpmn2:sourceRef>
+          <bpmn2:targetRef>request_id</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:intermediateCatchEvent id="wait_interval" name="Reporting interval elapsed">
+        <bpmn2:incoming>f_wait</bpmn2:incoming>
+        <bpmn2:outgoing>f_query</bpmn2:outgoing>
+        <bpmn2:timerEventDefinition>
+          <bpmn2:timeDuration xsi:type="bpmn2:tFormalExpression">#{reporting_interval}</bpmn2:timeDuration>
+        </bpmn2:timerEventDefinition>
+      </bpmn2:intermediateCatchEvent>
+      <bpmn2:task id="query_systolic" name="Check systolic readings received" drools:taskName="ehr.query_observations">
+        <bpmn2:incoming>f_query</bpmn2:incoming>
+        <bpmn2:outgoing>f_query2</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="query_systolic_code" drools:dtype="String" name="code" />
+          <bpmn2:dataInput id="query_systolic_window" drools:dtype="String" name="window" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="query_systolic_unit" drools:dtype="String" name="unit" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="query_systolic_min_count" drools:dtype="Integer" name="min_count" itemSubjectRef="_intItem" />
+          <bpmn2:dataInput id="query_systolic_TaskName" drools:dtype="Object" name="TaskName" />
+          <bpmn2:dataOutput id="query_systolic_count" drools:dtype="Integer" name="count" itemSubjectRef="_intItem" />
+          <bpmn2:dataOutput id="query_systolic_latest_value" drools:dtype="Double" name="latest_value" itemSubjectRef="_dblItem" />
+          <bpmn2:dataOutput id="query_systolic_latest_date" drools:dtype="String" name="latest_date" itemSubjectRef="_strItem" />
+          <bpmn2:dataOutput id="query_systolic_average_value" drools:dtype="Double" name="average_value" itemSubjectRef="_dblItem" />
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>query_systolic_code</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_systolic_window</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_systolic_unit</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_systolic_min_count</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_systolic_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>query_systolic_count</bpmn2:dataOutputRefs>
+            <bpmn2:dataOutputRefs>query_systolic_latest_value</bpmn2:dataOutputRefs>
+            <bpmn2:dataOutputRefs>query_systolic_latest_date</bpmn2:dataOutputRefs>
+            <bpmn2:dataOutputRefs>query_systolic_average_value</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_systolic_code</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">concept:systolic blood pressure</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_systolic_code</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>reporting_interval</bpmn2:sourceRef>
+          <bpmn2:targetRef>query_systolic_window</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_systolic_unit</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">mm[Hg]</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_systolic_unit</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_systolic_min_count</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">1</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_systolic_min_count</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_systolic_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">ehr_query_observations__query_systolic</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_systolic_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_systolic_count</bpmn2:sourceRef>
+          <bpmn2:targetRef>reading_count</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_systolic_latest_value</bpmn2:sourceRef>
+          <bpmn2:targetRef>systolic_latest_value</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_systolic_latest_date</bpmn2:sourceRef>
+          <bpmn2:targetRef>systolic_latest_date</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_systolic_average_value</bpmn2:sourceRef>
+          <bpmn2:targetRef>avg_systolic</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:task id="query_diastolic" name="Check diastolic readings received" drools:taskName="ehr.query_observations">
+        <bpmn2:incoming>f_query2</bpmn2:incoming>
+        <bpmn2:outgoing>f_received</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="query_diastolic_code" drools:dtype="String" name="code" />
+          <bpmn2:dataInput id="query_diastolic_window" drools:dtype="String" name="window" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="query_diastolic_unit" drools:dtype="String" name="unit" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="query_diastolic_min_count" drools:dtype="Integer" name="min_count" itemSubjectRef="_intItem" />
+          <bpmn2:dataInput id="query_diastolic_TaskName" drools:dtype="Object" name="TaskName" />
+          <bpmn2:dataOutput id="query_diastolic_count" drools:dtype="Integer" name="count" itemSubjectRef="_intItem" />
+          <bpmn2:dataOutput id="query_diastolic_latest_value" drools:dtype="Double" name="latest_value" itemSubjectRef="_dblItem" />
+          <bpmn2:dataOutput id="query_diastolic_latest_date" drools:dtype="String" name="latest_date" itemSubjectRef="_strItem" />
+          <bpmn2:dataOutput id="query_diastolic_average_value" drools:dtype="Double" name="average_value" itemSubjectRef="_dblItem" />
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>query_diastolic_code</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_diastolic_window</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_diastolic_unit</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_diastolic_min_count</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>query_diastolic_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>query_diastolic_count</bpmn2:dataOutputRefs>
+            <bpmn2:dataOutputRefs>query_diastolic_latest_value</bpmn2:dataOutputRefs>
+            <bpmn2:dataOutputRefs>query_diastolic_latest_date</bpmn2:dataOutputRefs>
+            <bpmn2:dataOutputRefs>query_diastolic_average_value</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_diastolic_code</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">concept:diastolic blood pressure</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_diastolic_code</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>reporting_interval</bpmn2:sourceRef>
+          <bpmn2:targetRef>query_diastolic_window</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_diastolic_unit</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">mm[Hg]</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_diastolic_unit</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_diastolic_min_count</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">1</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_diastolic_min_count</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>query_diastolic_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">ehr_query_observations__query_diastolic</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">query_diastolic_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_diastolic_count</bpmn2:sourceRef>
+          <bpmn2:targetRef>diastolic_reading_count</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_diastolic_latest_value</bpmn2:sourceRef>
+          <bpmn2:targetRef>diastolic_latest_value</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_diastolic_latest_date</bpmn2:sourceRef>
+          <bpmn2:targetRef>diastolic_latest_date</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>query_diastolic_average_value</bpmn2:sourceRef>
+          <bpmn2:targetRef>avg_diastolic</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:exclusiveGateway id="gw_received" name="Readings received?" gatewayDirection="Diverging" default="f_none">
+        <bpmn2:incoming>f_received</bpmn2:incoming>
+        <bpmn2:outgoing>f_some</bpmn2:outgoing>
+        <bpmn2:outgoing>f_none</bpmn2:outgoing>
+      </bpmn2:exclusiveGateway>
+      <bpmn2:scriptTask id="reset_attempts" name="Reset reminder attempts" scriptFormat="http://www.java.com/java">
+        <bpmn2:incoming>f_some</bpmn2:incoming>
+        <bpmn2:outgoing>f_some_reset</bpmn2:outgoing>
+        <bpmn2:script>kcontext.setVariable("reminder_attempts", 0);</bpmn2:script>
+      </bpmn2:scriptTask>
+      <bpmn2:task id="remind" name="Send reading reminder" drools:taskName="patient.send_message">
+        <bpmn2:incoming>f_none</bpmn2:incoming>
+        <bpmn2:outgoing>f_count</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="remind_message" drools:dtype="String" name="message" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="remind_kind" drools:dtype="String" name="kind" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="remind_TaskName" drools:dtype="Object" name="TaskName" />
+          <bpmn2:dataOutput id="remind_delivered" drools:dtype="Boolean" name="delivered" itemSubjectRef="_boolItem" />
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>remind_message</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>remind_kind</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>remind_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>remind_delivered</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>reminder_text</bpmn2:sourceRef>
+          <bpmn2:targetRef>remind_message</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>remind_kind</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">reminder</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">remind_kind</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>remind_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">patient_send_message__remind</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">remind_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>remind_delivered</bpmn2:sourceRef>
+          <bpmn2:targetRef>message_delivered</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:scriptTask id="remind_counter" name="Count reminder attempt" scriptFormat="http://www.java.com/java">
+        <bpmn2:incoming>f_count</bpmn2:incoming>
+        <bpmn2:outgoing>f_attempts</bpmn2:outgoing>
+        <bpmn2:script>kcontext.setVariable("reminder_attempts", ((Integer) kcontext.getVariable("reminder_attempts")) + 1);</bpmn2:script>
+      </bpmn2:scriptTask>
+      <bpmn2:exclusiveGateway id="gw_attempts" name="Reminder limit reached?" gatewayDirection="Diverging" default="f_retry">
+        <bpmn2:incoming>f_attempts</bpmn2:incoming>
+        <bpmn2:outgoing>f_escalate</bpmn2:outgoing>
+        <bpmn2:outgoing>f_retry</bpmn2:outgoing>
+      </bpmn2:exclusiveGateway>
+      <bpmn2:task id="escalate" name="Escalate to care team" drools:taskName="care_team.escalate">
+        <bpmn2:incoming>f_escalate</bpmn2:incoming>
+        <bpmn2:outgoing>f_set_escalated</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="escalate_reason" drools:dtype="String" name="reason" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="escalate_attempts" drools:dtype="Integer" name="attempts" itemSubjectRef="_intItem" />
+          <bpmn2:dataInput id="escalate_TaskName" drools:dtype="Object" name="TaskName" />
+          <bpmn2:dataOutput id="escalate_escalation_id" drools:dtype="String" name="escalation_id" itemSubjectRef="_strItem" />
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>escalate_reason</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>escalate_attempts</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>escalate_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>escalate_escalation_id</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>escalation_reason</bpmn2:sourceRef>
+          <bpmn2:targetRef>escalate_reason</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>reminder_attempts</bpmn2:sourceRef>
+          <bpmn2:targetRef>escalate_attempts</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>escalate_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">care_team_escalate__escalate</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">escalate_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>escalate_escalation_id</bpmn2:sourceRef>
+          <bpmn2:targetRef>escalation_id</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:scriptTask id="end_escalated_outcome" name="Outcome: escalated" scriptFormat="http://www.java.com/java">
+        <bpmn2:incoming>f_set_escalated</bpmn2:incoming>
+        <bpmn2:outgoing>f_end_escalated</bpmn2:outgoing>
+        <bpmn2:script>kcontext.setVariable("outcome", "escalated");</bpmn2:script>
+      </bpmn2:scriptTask>
+      <bpmn2:endEvent id="main_end_escalated" name="Handed to care team">
+        <bpmn2:incoming>f_end_escalated</bpmn2:incoming>
+      </bpmn2:endEvent>
+      <bpmn2:exclusiveGateway id="gw_threshold" name="Average above threshold?" gatewayDirection="Diverging" default="f_ok">
+        <bpmn2:incoming>f_some_reset</bpmn2:incoming>
+        <bpmn2:outgoing>f_high</bpmn2:outgoing>
+        <bpmn2:outgoing>f_ok</bpmn2:outgoing>
+      </bpmn2:exclusiveGateway>
+      <bpmn2:task id="notify" name="Notify clinician" drools:taskName="clinician.notify">
+        <bpmn2:incoming>f_high</bpmn2:incoming>
+        <bpmn2:outgoing>f_notified</bpmn2:outgoing>
+        <bpmn2:ioSpecification>
+          <bpmn2:dataInput id="notify_urgency" drools:dtype="String" name="urgency" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="notify_reason_input" drools:dtype="String" name="reason" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="notify_context_input" drools:dtype="String" name="context" itemSubjectRef="_strItem" />
+          <bpmn2:dataInput id="notify_TaskName" drools:dtype="Object" name="TaskName" />
+          <bpmn2:dataOutput id="notify_notification_id" drools:dtype="String" name="notification_id" itemSubjectRef="_strItem" />
+          <bpmn2:inputSet>
+            <bpmn2:dataInputRefs>notify_urgency</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>notify_reason_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>notify_context_input</bpmn2:dataInputRefs>
+            <bpmn2:dataInputRefs>notify_TaskName</bpmn2:dataInputRefs>
+          </bpmn2:inputSet>
+          <bpmn2:outputSet>
+            <bpmn2:dataOutputRefs>notify_notification_id</bpmn2:dataOutputRefs>
+          </bpmn2:outputSet>
+        </bpmn2:ioSpecification>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>notify_urgency</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">routine</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">notify_urgency</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>notify_reason</bpmn2:sourceRef>
+          <bpmn2:targetRef>notify_reason_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:sourceRef>notify_context</bpmn2:sourceRef>
+          <bpmn2:targetRef>notify_context_input</bpmn2:targetRef>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataInputAssociation>
+          <bpmn2:targetRef>notify_TaskName</bpmn2:targetRef>
+          <bpmn2:assignment>
+            <bpmn2:from xsi:type="bpmn2:tFormalExpression">clinician_notify__notify</bpmn2:from>
+            <bpmn2:to xsi:type="bpmn2:tFormalExpression">notify_TaskName</bpmn2:to>
+          </bpmn2:assignment>
+        </bpmn2:dataInputAssociation>
+        <bpmn2:dataOutputAssociation>
+          <bpmn2:sourceRef>notify_notification_id</bpmn2:sourceRef>
+          <bpmn2:targetRef>notification_id</bpmn2:targetRef>
+        </bpmn2:dataOutputAssociation>
+      </bpmn2:task>
+      <bpmn2:sequenceFlow id="f_start" sourceRef="main_start" targetRef="loop_entry" />
+      <bpmn2:sequenceFlow id="f_loop" sourceRef="loop_entry" targetRef="request_readings" />
+      <bpmn2:sequenceFlow id="f_wait" sourceRef="request_readings" targetRef="wait_interval" />
+      <bpmn2:sequenceFlow id="f_query" sourceRef="wait_interval" targetRef="query_systolic" />
+      <bpmn2:sequenceFlow id="f_query2" sourceRef="query_systolic" targetRef="query_diastolic" />
+      <bpmn2:sequenceFlow id="f_received" sourceRef="query_diastolic" targetRef="gw_received" />
+      <bpmn2:sequenceFlow id="f_some" name="yes" sourceRef="gw_received" targetRef="reset_attempts">
+        <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java">return reading_count != null &amp;&amp; reading_count &gt; 0;</bpmn2:conditionExpression>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_some_reset" sourceRef="reset_attempts" targetRef="gw_threshold" />
+      <bpmn2:sequenceFlow id="f_none" name="no" sourceRef="gw_received" targetRef="remind" />
+      <bpmn2:sequenceFlow id="f_count" sourceRef="remind" targetRef="remind_counter" />
+      <bpmn2:sequenceFlow id="f_attempts" sourceRef="remind_counter" targetRef="gw_attempts" />
+      <bpmn2:sequenceFlow id="f_escalate" name="limit reached" sourceRef="gw_attempts" targetRef="escalate">
+        <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java">return reminder_attempts != null &amp;&amp; max_reminder_attempts != null &amp;&amp; reminder_attempts &gt;= max_reminder_attempts;</bpmn2:conditionExpression>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_retry" name="try again" sourceRef="gw_attempts" targetRef="loop_entry" />
+      <bpmn2:sequenceFlow id="f_set_escalated" sourceRef="escalate" targetRef="end_escalated_outcome" />
+      <bpmn2:sequenceFlow id="f_end_escalated" sourceRef="end_escalated_outcome" targetRef="main_end_escalated" />
+      <bpmn2:sequenceFlow id="f_high" name="above threshold" sourceRef="gw_threshold" targetRef="notify">
+        <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java">return (avg_systolic != null &amp;&amp; notify_systolic_threshold != null &amp;&amp; avg_systolic &gt;= notify_systolic_threshold) || (avg_diastolic != null &amp;&amp; notify_diastolic_threshold != null &amp;&amp; avg_diastolic &gt;= notify_diastolic_threshold);</bpmn2:conditionExpression>
+      </bpmn2:sequenceFlow>
+      <bpmn2:sequenceFlow id="f_ok" name="within target" sourceRef="gw_threshold" targetRef="loop_entry" />
+      <bpmn2:sequenceFlow id="f_notified" sourceRef="notify" targetRef="loop_entry" />
+    </bpmn2:subProcess>
+    <bpmn2:boundaryEvent id="period_elapsed" name="Max duration elapsed" attachedToRef="main" cancelActivity="true">
+      <bpmn2:outgoing>f_period</bpmn2:outgoing>
+      <bpmn2:timerEventDefinition>
+        <bpmn2:timeDuration xsi:type="bpmn2:tFormalExpression">#{max_duration}</bpmn2:timeDuration>
+      </bpmn2:timerEventDefinition>
+    </bpmn2:boundaryEvent>
+    <bpmn2:exclusiveGateway id="gw_outcome" name="Outcome" gatewayDirection="Diverging" default="f_completed">
+      <bpmn2:incoming>f_after</bpmn2:incoming>
+      <bpmn2:outgoing>f_escalated_end</bpmn2:outgoing>
+      <bpmn2:outgoing>f_completed</bpmn2:outgoing>
+    </bpmn2:exclusiveGateway>
+    <bpmn2:endEvent id="end_escalated" name="Handed to care team">
+      <bpmn2:incoming>f_escalated_end</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_completed" name="Completed">
+      <bpmn2:incoming>f_completed</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:endEvent id="end_period" name="Monitoring period complete">
+      <bpmn2:incoming>f_period</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:sequenceFlow id="f_init" sourceRef="start" targetRef="init" />
+    <bpmn2:sequenceFlow id="f_main" sourceRef="init" targetRef="main" />
+    <bpmn2:sequenceFlow id="f_after" sourceRef="main" targetRef="gw_outcome" />
+    <bpmn2:sequenceFlow id="f_escalated_end" name="escalated" sourceRef="gw_outcome" targetRef="end_escalated">
+      <bpmn2:conditionExpression xsi:type="bpmn2:tFormalExpression" language="http://www.java.com/java">return "escalated".equals(outcome);</bpmn2:conditionExpression>
+    </bpmn2:sequenceFlow>
+    <bpmn2:sequenceFlow id="f_completed" sourceRef="gw_outcome" targetRef="end_completed" />
+    <bpmn2:sequenceFlow id="f_period" sourceRef="period_elapsed" targetRef="end_period" />
+  </bpmn2:process>
+  <bpmn2:itemDefinition id="_boolItem" structureRef="Boolean" />
+</bpmn2:definitions>

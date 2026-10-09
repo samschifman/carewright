@@ -11,11 +11,17 @@ license = "Apache-2.0"
 dependencies = [
     "pydantic>=2.0",
     "requests>=2.28",
+    "lxml>=5",
 ]
 
 [project.optional-dependencies]
 s3 = ["boto3>=1.28"]
 llm = ["langchain-openai>=0.3"]
+dev = ["pytest"]
+tracing = ["mlflow>=2.15"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+cpg_contracts = ["automation/schemas/*.xsd", "automation/catalog.v1.json"]

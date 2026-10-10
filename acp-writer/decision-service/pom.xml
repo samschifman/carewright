@@ -63,6 +63,21 @@
             <artifactId>drools-io</artifactId>
             <version>${kie.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.kie.kogito</groupId>
+            <artifactId>jbpm-bpmn2</artifactId>
+            <version>${kie.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.kie.kogito</groupId>
+            <artifactId>jbpm-flow</artifactId>
+            <version>${kie.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.kie.kogito</groupId>
+            <artifactId>jbpm-flow-builder</artifactId>
+            <version>${kie.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

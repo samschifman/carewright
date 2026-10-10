@@ -9,8 +9,12 @@ describe("RunDetailPage", () => {
       routePath: "/runs/:runId",
       initialPath: "/runs/run-123",
     });
-    // name is rendered inside the h1 ("Care Plan Run — Ada Lovelace"), so match a substring
-    await waitFor(() => expect(screen.getByText(/Ada Lovelace/)).toBeInTheDocument());
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Care Plan Run — Ada Lovelace",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByText("DMN decisions evaluated")).toBeInTheDocument();
     // running -> no review panel yet
     expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();

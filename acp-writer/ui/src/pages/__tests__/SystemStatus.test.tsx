@@ -7,7 +7,7 @@ describe("SystemStatus", () => {
   it("renders BFF-shaped health fields", async () => {
     renderWithRouter(<SystemStatus />);
     await waitFor(() => expect(screen.getByText("0.1.0")).toBeInTheDocument());
-    expect(screen.getByText(/2 models deployed/)).toBeInTheDocument(); // modelsDeployed
+    expect(screen.getByText(/2 decisions deployed/)).toBeInTheDocument();
     expect(screen.getByText(/12 recommendations/)).toBeInTheDocument(); // recommendations
   });
 });

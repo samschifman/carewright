@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import "@cpg-to-acp/ui-shared/dist/index.css";
 import "@patternfly/react-core/dist/styles/base.css";
 import "@patternfly/chatbot/dist/css/main.css";
 import { App } from "./App";

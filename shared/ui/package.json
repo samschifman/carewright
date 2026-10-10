@@ -4,6 +4,7 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "style": "dist/index.css",
   "files": [
     "dist"
   ],
@@ -34,5 +35,9 @@
     "vite": "^6.0.0",
     "vite-plugin-dts": "^4.0.0",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "bpmn-auto-layout": "2.0.0-alpha.2",
+    "bpmn-js": "^18.31.0"
   }
 }

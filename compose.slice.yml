@@ -1,0 +1,12 @@
+services:
+  acp-writer:
+    environment:
+      - ACP_RUN_ARTIFACT_DIR=/slice-run/careplans
+    volumes:
+      - ./working/slice-run:/slice-run
+
+  cpg-ingester-bff:
+    environment:
+      - CPG_INGESTER_MOCK_RUN_DIR=${CPG_INGESTER_MOCK_RUN_DIR:-/slice-run}
+    volumes:
+      - ./working/slice-run:/slice-run:ro

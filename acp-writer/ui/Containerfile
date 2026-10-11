@@ -6,7 +6,6 @@
 FROM registry.access.redhat.com/ubi9/nodejs-22 AS build
 USER 0
 WORKDIR /build
-
 # Layer 1: install deps (cached unless lockfiles change)
 COPY shared/ui/package.json shared/ui/package-lock.json shared/ui/
 RUN cd shared/ui && npm ci

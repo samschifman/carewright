@@ -18,11 +18,18 @@ from acp_writer.nodes.fhir_server_writer import (
     list_care_plans,
     reject_care_plan,
 )
+from acp_writer.services.automation_publisher import get_publisher
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="acp-writer-fhir-server", version="0.1.0")
 _phi_store = get_phi_store()
+
+
+@app.on_event("startup")
+def reconcile_publications():
+    """Resume approvals interrupted by a process restart."""
+    get_publisher().reconcile_on_start()
 
 
 @app.get("/health")
@@ -44,6 +51,13 @@ async def write(request: Request):
     approved = data.get("approved", True)
     state = {
         "fhir_bundle": fhir_bundle,
+        "careplan_id": (
+            data.get("careplan_id")
+            or data.get("business_key")
+            or data.get("workflow_business_key")
+            or data.get("process_instance_id")
+            or data.get("run_id")
+        ),
         "patient_reference": data.get("patient_reference", ""),
         "approved": approved,
         # The approving clinician from the care-plan review gate. Threaded so the
@@ -86,4 +100,13 @@ async def update_status(careplan_id: str, request: Request):
     if not result:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
+    return result
+
+
+@app.post("/api/v1/careplans/{careplan_id}/automations/publish")
+def retry_automation_publication(careplan_id: str):
+    result = get_publisher().retry(careplan_id)
+    if result is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No retryable publication job found")
     return result

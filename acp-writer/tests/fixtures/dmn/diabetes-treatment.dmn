@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="diabetes-treatment"
+             name="Glycemic Treatment Decision"
+             namespace="https://redhat.com/cpg-to-acp/dmn/diabetes-treatment">
+  <inputData id="input_hba1c" name="HbA1c">
+    <variable id="var_hba1c" name="HbA1c" typeRef="number"/>
+  </inputData>
+  <decision id="decision_glycemic_treatment" name="Glycemic Treatment Decision">
+    <variable id="var_glycemic_treatment" name="Glycemic Treatment Decision" typeRef="string"/>
+    <informationRequirement id="req_hba1c"><requiredInput href="#input_hba1c"/></informationRequirement>
+    <decisionTable id="table_glycemic_treatment" hitPolicy="UNIQUE" preferredOrientation="Rule-as-Row">
+      <input id="input_column_hba1c"><inputExpression id="expression_hba1c" typeRef="number"><text><![CDATA[HbA1c]]></text></inputExpression></input>
+      <output id="output_treatment" name="Treatment" typeRef="string"/>
+      <rule id="rule_combination"><inputEntry id="entry_combination"><text><![CDATA[>= 9]]></text></inputEntry><outputEntry id="output_combination"><text><![CDATA["Combination therapy"]]></text></outputEntry></rule>
+      <rule id="rule_metformin"><inputEntry id="entry_metformin"><text><![CDATA[< 9]]></text></inputEntry><outputEntry id="output_metformin"><text><![CDATA["Metformin plus lifestyle"]]></text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+</definitions>

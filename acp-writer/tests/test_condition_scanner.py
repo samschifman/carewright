@@ -181,7 +181,7 @@ class TestConditionScanner:
 class TestPipelineIntegration:
     def test_condition_scanner_in_pipeline(self):
         from unittest.mock import MagicMock, patch
-        from acp_writer.pipeline import build_pipeline
+        from .pipeline_helpers import build_pipeline
 
         with patch("acp_writer.nodes.plan_composer.get_llm") as mock_compose, \
              patch("acp_writer.nodes.brief_reviewer.get_llm") as mock_brief, \

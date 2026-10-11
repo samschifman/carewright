@@ -46,7 +46,13 @@ class SentenceTransformerProvider(EmbeddingProvider):
 
     def _load_model(self):
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ImportError as exc:
+                raise RuntimeError(
+                    "The local sentence-transformers provider requires "
+                    "the 'local-embeddings' extra: pip install 'acp-writer[local-embeddings]'"
+                ) from exc
             logger.info("Loading embedding model: %s", self._model_name)
             self._model = SentenceTransformer(self._model_name)
             self._dims = self._model.get_sentence_embedding_dimension()

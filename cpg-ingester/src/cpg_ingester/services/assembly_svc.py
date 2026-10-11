@@ -1,4 +1,4 @@
-"""Assembly pod service — deterministic cross-reference resolution and integrity checks.
+"""Assembly pod service — link resolution and integrity checks for generated artifacts.
 
 Consumes: generate_result_ref (or analysis_result_ref for legacy flow).
 Produces: assembly_result_ref.
@@ -28,7 +28,7 @@ def health():
 
 @app.post("/api/v1/assemble")
 async def assemble(request: Request):
-    """Assemble validated outputs from DMN and Rec generation."""
+    """Assemble validated DMN, recommendation, and BPMN generation results."""
     data = await request.json()
 
     source = resolve_ref(data, "generate_result", _store)
@@ -39,6 +39,7 @@ async def assemble(request: Request):
         item_manifest = source.get("item_manifest", data.get("item_manifest", []))
         dmn_results = source.get("dmn_results", [])
         recommendation_results = source.get("recommendation_results", [])
+        bpmn_results = source.get("bpmn_results", [])
         recommendation_escalations = source.get(
             "recommendation_escalations", data.get("recommendation_escalations", [])
         )
@@ -47,6 +48,7 @@ async def assemble(request: Request):
         item_manifest = data.get("item_manifest", [])
         dmn_results = data.get("dmn_results", [])
         recommendation_results = data.get("recommendation_results", [])
+        bpmn_results = data.get("bpmn_results", [])
         recommendation_escalations = data.get("recommendation_escalations", [])
 
     with tempfile.TemporaryDirectory() as output_dir:
@@ -55,6 +57,7 @@ async def assemble(request: Request):
             "item_manifest": item_manifest,
             "dmn_results": dmn_results,
             "recommendation_results": recommendation_results,
+            "bpmn_results": bpmn_results,
             "recommendation_escalations": recommendation_escalations,
             "output_dir": output_dir,
         }
@@ -65,6 +68,7 @@ async def assemble(request: Request):
             "cpg_metadata": cpg_metadata,
             "dmn_results": result.get("dmn_results", []),
             "recommendation_results": result.get("recommendation_results", []),
+            "bpmn_results": result.get("bpmn_results", []),
             "escalated_items": result.get("escalated_items", []),
             "assembly_report": result.get("assembly_report", {}),
         }

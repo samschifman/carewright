@@ -46,12 +46,22 @@ flowchart TD
 
 Both the decision engine and vector store are internal implementation details, hidden behind the API.
 
+The decision engine also validates and stores immutable BPMN automation template versions; the BFF reloads published templates from MinIO at startup.
+
 ## Getting Started
 
 ```bash
 cd acp-writer
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e "../shared" -e ".[test]"
+```
+
+The local Sentence Transformers embedding provider is optional because it adds
+PyTorch and a local model runtime. Install it only when
+`EMBEDDING_PROVIDER=sentence-transformers` is selected:
+
+```bash
+pip install -e ".[local-embeddings]"
 ```
 
 ### Run the pipeline via CLI

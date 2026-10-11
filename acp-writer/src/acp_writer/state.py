@@ -61,6 +61,7 @@ class CarePlanComposerState(TypedDict, total=False):
     # Phase 1: Plan Composer outputs
     planning_brief: dict[str, Any]
     plan_composer_prompt: str  # rendered user prompt, captured for AI-InputPrompt (WS3)
+    automation_prompts: dict[str, str]
 
     # Phase 1: Brief Reviewer
     brief_review_count: int

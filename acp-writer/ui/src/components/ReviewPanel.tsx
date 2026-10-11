@@ -153,7 +153,11 @@ export function ReviewPanel({
           <StackItem>
             <strong>Activities ({activities.length})</strong>
             <Stack hasGutter>
-              {activities.map((a) => <StackItem key={a.id}><ActivityCard activity={a} /></StackItem>)}
+              {activities.map((a) => (
+                <StackItem key={a.id}>
+                  <ActivityCard activity={a} />
+                </StackItem>
+              ))}
             </Stack>
           </StackItem>
 

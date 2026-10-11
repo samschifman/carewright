@@ -70,6 +70,16 @@ class ScriptedLLM:
         return next(m["content"] for m in self.calls[call] if m["role"] == "system")
 
 
+class EmptyTemplateClient:
+    """Keep revision-flow tests independent of the decision-engine service."""
+
+    def list(self, *, recommendation_id=None, dmn_model_id=None):
+        return []
+
+    def validate(self, payload):
+        raise AssertionError("no automation template was selected")
+
+
 def _brief_json(goals: list[dict], activities: list[dict]) -> str:
     return json.dumps({
         "patient_reference": "Patient/robert",
@@ -181,7 +191,8 @@ def _run_pipeline(payload, composer: ScriptedLLM, reviewer: ScriptedLLM, analyst
          patch.object(llm_reasoning, "_phi_store", None), \
          patch.object(plan_composer_mod, "get_llm", return_value=composer), \
          patch.object(brief_reviewer_mod, "get_llm", return_value=reviewer), \
-         patch.object(conflict_analyst_mod, "get_llm", return_value=analyst):
+         patch.object(conflict_analyst_mod, "get_llm", return_value=analyst), \
+         patch.object(llm_reasoning, "TemplateClient", EmptyTemplateClient):
         return llm_reasoning._compose_pipeline(dict(payload))
 
 

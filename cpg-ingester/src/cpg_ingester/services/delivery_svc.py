@@ -35,12 +35,14 @@ async def deliver(request: Request):
         cpg_metadata = assembly_result.get("cpg_metadata", data.get("cpg_metadata", {}))
         dmn_results = assembly_result.get("dmn_results", [])
         recommendation_results = assembly_result.get("recommendation_results", [])
+        bpmn_results = assembly_result.get("bpmn_results", [])
         escalated_items = assembly_result.get("escalated_items", [])
         assembly_report = assembly_result.get("assembly_report", {})
     else:
         cpg_metadata = data.get("cpg_metadata", {})
         dmn_results = data.get("dmn_results", [])
         recommendation_results = data.get("recommendation_results", [])
+        bpmn_results = data.get("bpmn_results", [])
         escalated_items = data.get("escalated_items", [])
         assembly_report = data.get("assembly_report", {})
 
@@ -49,6 +51,7 @@ async def deliver(request: Request):
             "cpg_metadata": cpg_metadata,
             "dmn_results": dmn_results,
             "recommendation_results": recommendation_results,
+            "bpmn_results": bpmn_results,
             "escalated_items": escalated_items,
             "assembly_report": assembly_report,
             "artifact_store": _store,

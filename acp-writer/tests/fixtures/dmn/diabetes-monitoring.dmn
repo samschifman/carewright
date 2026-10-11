@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="diabetes-monitoring"
+             name="Diabetes Monitoring Plan"
+             namespace="https://redhat.com/cpg-to-acp/dmn/diabetes-monitoring">
+  <inputData id="input_treatment" name="Treatment">
+    <variable id="var_treatment" name="Treatment" typeRef="string"/>
+  </inputData>
+  <decision id="decision_diabetes_monitoring" name="Diabetes Monitoring Plan">
+    <variable id="var_diabetes_monitoring" name="Diabetes Monitoring Plan" typeRef="number"/>
+    <informationRequirement id="req_treatment"><requiredInput href="#input_treatment"/></informationRequirement>
+    <decisionTable id="table_diabetes_monitoring" hitPolicy="UNIQUE" preferredOrientation="Rule-as-Row">
+      <input id="input_column_treatment"><inputExpression id="expression_treatment" typeRef="string"><text><![CDATA[Treatment]]></text></inputExpression></input>
+      <output id="output_followup" name="Follow-up Months" typeRef="number"/>
+      <rule id="rule_combination_followup"><inputEntry id="entry_combination_followup"><text><![CDATA["Combination therapy"]]></text></inputEntry><outputEntry id="output_combination_followup"><text><![CDATA[3]]></text></outputEntry></rule>
+      <rule id="rule_metformin_followup"><inputEntry id="entry_metformin_followup"><text><![CDATA["Metformin plus lifestyle"]]></text></inputEntry><outputEntry id="output_metformin_followup"><text><![CDATA[6]]></text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+</definitions>

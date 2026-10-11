@@ -9,6 +9,7 @@ export type { PipelineStep, PipelineStepperProps, StepStatus } from "./component
 
 export { BpmnViewer } from "./components/BpmnViewer";
 export type { BpmnViewerProps } from "./components/BpmnViewer";
+export { mergeExpandedSubprocess } from "./utils/mergeExpandedSubprocess.js";
 
 export { useAdaptivePolling } from "./hooks/useAdaptivePolling";
 export type { UseAdaptivePollingOptions, UseAdaptivePollingResult } from "./hooks/useAdaptivePolling";

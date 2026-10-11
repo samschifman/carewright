@@ -6,6 +6,8 @@ degrades gracefully when SonataFlow or MinIO is not configured.
 """
 
 import asyncio
+import base64
+import binascii
 import json
 import logging
 import os
@@ -21,7 +23,14 @@ from fastapi.responses import JSONResponse, Response
 
 from cpg_contracts.artifact_store import ArtifactStore
 
-from acp_writer.services.ai_transparency import plan_conflict_from_provenance
+from acp_writer.services.ai_transparency import (
+    ACTIVITY_AUTOMATION_EXT,
+    AUTOMATION_ID_SYSTEM,
+    AUTOMATION_PARAMETER_SOURCE_EXT,
+    AUTOMATION_REVISION_SYSTEM,
+    AUTOMATION_TEMPLATE_EXT,
+    plan_conflict_from_provenance,
+)
 from acp_writer.services.artifact_resolver import _format_number, enrich_run_detail
 from acp_writer.services.sonataflow_client import (
     SonataFlowClient,
@@ -122,6 +131,10 @@ async def artifacts_available(request: Request):
                 count = _register_recommendations(ref, cpg_id)
                 results["registered"].append({"type": "recommendations", "ref": ref, "count": count})
 
+            elif art_type == "bpmn":
+                _register_automation_template(ref, cpg_id)
+                results["registered"].append({"type": "bpmn", "ref": ref})
+
             else:
                 logger.debug("Skipping artifact type %s (ref=%s)", art_type, ref)
         except Exception as exc:
@@ -184,6 +197,28 @@ def _register_recommendations(ref: str, cpg_id: str) -> int:
     return count
 
 
+@mlflow.trace(name="bff.register_automation_template")
+def _register_automation_template(ref: str, cpg_id: str) -> None:
+    """Pull a published template from MinIO and register it with decision-engine."""
+    if not _artifacts_store:
+        raise RuntimeError("No artifact store configured")
+    template = _artifacts_store.get(ref)
+    response = http_requests.post(
+        f"{DECISION_ENGINE_URL}/api/v1/automation/templates",
+        params={"source_cpg": cpg_id},
+        json=template,
+        timeout=30,
+    )
+    response.raise_for_status()
+    logger.info(
+        "Registered automation template %s version %s for CPG %s",
+        template.get("summary", {}).get("id", "?"),
+        template.get("summary", {}).get("version", "?"),
+        cpg_id,
+    )
+
+
+@mlflow.trace(name="bff.reload_cpg_artifacts")
 def _reload_cpg_artifacts() -> None:
     """Scan MinIO published/ prefix and re-register all CPG artifacts.
 
@@ -227,6 +262,36 @@ def _reload_cpg_artifacts() -> None:
             _register_recommendations(rec_ref, cpg_id)
         except Exception as exc:
             logger.warning("Failed to reload recommendations for %s: %s", cpg_id, exc)
+
+        try:
+            bpmn_resp = client.list_objects_v2(
+                Bucket="cpg-artifacts", Prefix=f"{prefix}bpmn/",
+            )
+            objects = bpmn_resp.get("Contents", [])
+            latest_versions = {}
+            for obj in objects:
+                key = obj["Key"]
+                if not key.endswith("/latest.json"):
+                    continue
+                try:
+                    pointer = _artifacts_store.get(f"cpg-artifacts:{key}")
+                    latest_versions[key.rsplit("/", 2)[-2]] = pointer.get("version")
+                except Exception as exc:
+                    logger.warning("Could not read latest template pointer %s: %s", key, exc)
+            templates = [
+                obj["Key"] for obj in objects
+                if obj["Key"].endswith(".template.json")
+            ]
+            templates.sort(key=lambda key: (
+                key.rsplit("/", 2)[-2],
+                key.rsplit("/", 1)[-1].removesuffix(".template.json")
+                == latest_versions.get(key.rsplit("/", 2)[-2]),
+                key,
+            ))
+            for key in templates:
+                _register_automation_template(f"cpg-artifacts:{key}", cpg_id)
+        except Exception as exc:
+            logger.warning("Failed to reload automation templates for %s: %s", cpg_id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -712,18 +777,30 @@ def _extract_patient_from_bundle(bundle: dict) -> dict | None:
     return None
 
 
+@mlflow.trace(name="bff.extract_careplan_view")
 def _extract_view_from_bundle(bundle: dict) -> tuple[list, list, list]:
     """Extract goals, activities, and conflicts from a FHIR CarePlan bundle."""
     entries = bundle.get("entry", [])
-    resources = {
-        e.get("fullUrl", ""): e.get("resource", {})
-        for e in entries
-    }
+    resources = {}
+    resource_items = []
+    for entry in entries:
+        resource = entry.get("resource", {})
+        full_url = entry.get("fullUrl")
+        canonical_ref = full_url or (
+            f"{resource.get('resourceType')}/{resource.get('id')}"
+            if resource.get("resourceType") and resource.get("id") else ""
+        )
+        if canonical_ref:
+            resource_items.append((canonical_ref, resource))
+        if full_url:
+            resources[full_url] = resource
+        if resource.get("resourceType") and resource.get("id"):
+            resources[f"{resource['resourceType']}/{resource['id']}"] = resource
 
     source_cpgs = _extract_source_cpgs(resources)
 
     goals = []
-    for url, r in resources.items():
+    for url, r in resource_items:
         if r.get("resourceType") == "Goal":
             target_text = _format_goal_target(r.get("target", []))
             goals.append({
@@ -733,37 +810,86 @@ def _extract_view_from_bundle(bundle: dict) -> tuple[list, list, list]:
                 "sourceCpgId": source_cpgs.get(url),
             })
 
-    activities = []
-    for url, r in resources.items():
-        rt = r.get("resourceType")
-        if rt == "MedicationRequest":
-            activities.append({
-                "id": r.get("id", ""),
-                "description": r.get("medicationCodeableConcept", {}).get("text", ""),
-                "goalId": None,
-                "detail": "; ".join(d.get("text", "") for d in r.get("dosageInstruction", [])),
-            })
-        elif rt == "ServiceRequest":
-            activities.append({
-                "id": r.get("id", ""),
-                "description": r.get("code", {}).get("text", ""),
-                "goalId": None,
-                "detail": "; ".join(n.get("text", "") for n in r.get("note", [])),
-            })
+    careplan = next((r for _url, r in resource_items if r.get("resourceType") == "CarePlan"), {})
+    careplan_activities = careplan.get("activity", [])
+    task_activity_ids: dict[str, list[str]] = {}
+    for act in careplan_activities:
+        activity_id = act.get("id")
+        for extension in act.get("extension", []) or []:
+            if extension.get("url") != ACTIVITY_AUTOMATION_EXT:
+                continue
+            fields = {item.get("url"): item for item in extension.get("extension", [])}
+            task_ref = fields.get("instance", {}).get("valueReference", {}).get("reference")
+            if activity_id and task_ref:
+                ids = task_activity_ids.setdefault(task_ref, [])
+                if activity_id not in ids:
+                    ids.append(activity_id)
 
-    careplan = next((r for r in resources.values() if r.get("resourceType") == "CarePlan"), {})
-    for act in careplan.get("activity", []):
+    activities = []
+    represented_resource_refs = set()
+    for act in careplan_activities:
+        reference = act.get("reference", {}).get("reference")
+        resource = resources.get(reference, {}) if reference else {}
+        if reference:
+            represented_resource_refs.add(reference)
         detail = act.get("detail")
-        if detail and not act.get("reference"):
+        description = ""
+        extra_detail = ""
+        if resource.get("resourceType") == "MedicationRequest":
+            description = resource.get("medicationCodeableConcept", {}).get("text", "")
+            extra_detail = "; ".join(
+                item.get("text", "") for item in resource.get("dosageInstruction", [])
+            )
+        elif resource.get("resourceType") == "ServiceRequest":
+            description = resource.get("code", {}).get("text", "")
+            extra_detail = "; ".join(item.get("text", "") for item in resource.get("note", []))
+        if detail:
+            description = detail.get("description") or detail.get("code", {}).get("text") or description
+        activity: dict = {
+            "id": act.get("id") or resource.get("id", ""),
+            "description": description,
+            "goalId": None,
+        }
+        if extra_detail:
+            activity["detail"] = extra_detail
+        elif detail and detail.get("description"):
+            activity["detail"] = detail["description"]
+        automations = []
+        for extension in act.get("extension", []) or []:
+            if extension.get("url") != ACTIVITY_AUTOMATION_EXT:
+                continue
+            automation = _automation_view_from_fhir_extension(
+                extension, resources, task_activity_ids
+            )
+            if automation:
+                automations.append(automation)
+        if automations:
+            activity["automations"] = automations
+        activities.append(activity)
+
+    # Preserve old bundles whose CarePlan omitted activity rows.
+    for reference, resource in resource_items:
+        if reference in represented_resource_refs:
+            continue
+        if resource.get("resourceType") == "MedicationRequest":
             activities.append({
-                "id": detail.get("code", {}).get("text", "")[:8],
-                "description": detail.get("description", ""),
+                "id": resource.get("id", ""),
+                "description": resource.get("medicationCodeableConcept", {}).get("text", ""),
                 "goalId": None,
-                "detail": None,
+                "detail": "; ".join(
+                    item.get("text", "") for item in resource.get("dosageInstruction", [])
+                ),
+            })
+        elif resource.get("resourceType") == "ServiceRequest":
+            activities.append({
+                "id": resource.get("id", ""),
+                "description": resource.get("code", {}).get("text", ""),
+                "goalId": None,
+                "detail": "; ".join(item.get("text", "") for item in resource.get("note", [])),
             })
 
     conflicts = []
-    for r in resources.values():
+    for _url, r in resource_items:
         if r.get("resourceType") != "Provenance":
             continue
         # plan_conflict_from_provenance returns None for any Provenance without
@@ -773,6 +899,93 @@ def _extract_view_from_bundle(bundle: dict) -> tuple[list, list, list]:
             conflicts.append(pc)
 
     return goals, activities, conflicts
+
+
+@mlflow.trace(name="bff.read_activity_automation")
+def _automation_view_from_fhir_extension(
+    extension: dict, resources: dict, task_activity_ids: dict[str, list[str]]
+) -> dict | None:
+    """Reconstruct the UI automation summary from linked Task and DocumentReference resources."""
+    fields = {item.get("url"): item for item in extension.get("extension", [])}
+    task_ref = fields.get("instance", {}).get("valueReference", {}).get("reference")
+    docref_ref = fields.get("definition", {}).get("valueReference", {}).get("reference")
+    task = resources.get(task_ref, {}) if task_ref else {}
+    docref = resources.get(docref_ref, {}) if docref_ref else {}
+    if task.get("resourceType") != "Task" or docref.get("resourceType") != "DocumentReference":
+        return None
+
+    identifiers = {item.get("system"): item.get("value") for item in task.get("identifier", [])}
+    template_refs = []
+    for item in task.get("extension", []) or []:
+        if item.get("url") != AUTOMATION_TEMPLATE_EXT:
+            continue
+        template_fields = {field.get("url"): field for field in item.get("extension", [])}
+        ref = {
+            "templateId": template_fields.get("templateId", {}).get("valueString", ""),
+            "version": template_fields.get("version", {}).get("valueString", ""),
+        }
+        source_cpg = template_fields.get("sourceCpg", {}).get("valueString")
+        if source_cpg:
+            ref["sourceCpg"] = source_cpg
+        template_refs.append(ref)
+
+    bindings = []
+    for item in task.get("input", []) or []:
+        coding = (item.get("type", {}).get("coding") or [{}])[0]
+        if coding.get("code") != "parameter":
+            continue
+        name = item.get("type", {}).get("text") or coding.get("text")
+        if not name:
+            continue
+        value = next((value for key, value in item.items() if key.startswith("value") and key != "valueReference"), None)
+        unit = None
+        if isinstance(value, dict):
+            if "valueQuantity" in item:
+                unit = value.get("code") or value.get("unit")
+                value = value.get("value")
+            elif "valueDuration" in item:
+                amount = value.get("value")
+                unit = value.get("code") or value.get("unit")
+                value = amount if amount is not None else ""
+            elif "valueCodeableConcept" in item:
+                code = (value.get("coding") or [{}])[0]
+                value = f"{code.get('system', '')}|{code.get('code', '')}"
+        source_extension = next((
+            child for child in item.get("extension", [])
+            if child.get("url") == AUTOMATION_PARAMETER_SOURCE_EXT
+        ), {})
+        binding = {
+            "name": name,
+            "value": value,
+            "source": source_extension.get("valueCode", "authored"),
+        }
+        if unit:
+            binding["unit"] = unit
+        bindings.append(binding)
+
+    attachment = ((docref.get("content") or [{}])[0].get("attachment") or {})
+    encoded = attachment.get("data", "")
+    try:
+        bpmn_xml = base64.b64decode(encoded, validate=True).decode("utf-8") if encoded else ""
+    except (ValueError, binascii.Error, UnicodeDecodeError):
+        bpmn_xml = ""
+    status = next((
+        child.get("valueCode") for child in extension.get("extension", [])
+        if child.get("url") == "status"
+    ), "enabled")
+    revision = identifiers.get(AUTOMATION_REVISION_SYSTEM, "")
+    return {
+        "id": identifiers.get(AUTOMATION_ID_SYSTEM, ""),
+        "templateRefs": template_refs,
+        "activityIds": task_activity_ids.get(task_ref, []),
+        "enabled": status == "enabled",
+        "revision": revision,
+        "bpmnXml": bpmn_xml,
+        "capabilitiesUsed": [],
+        "bindings": bindings,
+        "validation": {"status": "valid", "rungsPassed": [], "warnings": [], "errors": []},
+        "reviewNotes": [],
+    }
 
 
 def _format_goal_target(targets: list) -> str:

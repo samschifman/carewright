@@ -361,6 +361,53 @@ components:
         sourceRecommendationId: { type: string }
         sourceCpg: { type: string, description: Source guideline the activity derives from. }
         clinicalRationale: { type: string, description: Why the activity was selected. }
+        automations:
+          type: array
+          description: Pinned per-activity automation definitions and their plan-specific bindings.
+          items: { $ref: '#/components/schemas/ActivityAutomationView' }
+
+    ActivityAutomationView:
+      type: object
+      required: [id, templateRefs, enabled, validation, revision, bindings, bpmnXml]
+      properties:
+        id: { type: string, format: uuid }
+        templateRefs:
+          type: array
+          items:
+            type: object
+            required: [templateId, version]
+            properties:
+              templateId: { type: string }
+              version: { type: string, pattern: '^[0-9a-f]{12}$' }
+              sourceCpg: { type: string }
+        activityIds:
+          type: array
+          description: Activities served by a shared/composed automation.
+          items: { type: string }
+        enabled: { type: boolean }
+        revision: { type: string, pattern: '^[0-9a-f]{12}$' }
+        bpmnXml: { type: string, description: Compiled patient-free BPMN definition. }
+        capabilitiesUsed: { type: array, items: { type: string } }
+        bindings:
+          type: array
+          items:
+            type: object
+            required: [name, value, source]
+            properties:
+              name: { type: string }
+              value: {}
+              source: { type: string, enum: [cpg-default, clinician, plan-derived, reviewer, authored] }
+              unit: { type: string }
+              note: { type: string }
+        validation:
+          type: object
+          required: [status, rungsPassed]
+          properties:
+            status: { type: string, enum: [valid, incomplete, escalated] }
+            rungsPassed: { type: array, items: { type: string } }
+            warnings: { type: array, items: { type: string } }
+            errors: { type: array, items: { type: string } }
+        reviewNotes: { type: array, items: { type: string } }
 
     PlanConflict:
       type: object

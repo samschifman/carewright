@@ -38,8 +38,10 @@ from acp_writer.nodes.recommendation_retriever import recommendation_retriever
 from acp_writer.nodes.plan_composer import plan_composer
 from acp_writer.nodes.brief_reviewer import brief_reviewer
 from acp_writer.nodes.conflict_analyst import conflict_analyst
+from acp_writer.nodes.automation_synthesizer import synthesize_automations_for_brief
 from acp_writer.nodes.fhir_semantic_reviewer import fhir_semantic_reviewer
 from acp_writer.pipeline import MAX_BRIEF_REVIEWS
+from acp_writer.services.template_client import TemplateClient
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,25 @@ def health():
 
 
 DECISION_ENGINE_URL = os.environ.get("DECISION_ENGINE_URL", "http://acp-decision-engine:8080")
+
+
+def _in_process_decision_models() -> list[dict]:
+    return [
+        entry["summary"].model_dump(mode="json")
+        for entry in api._dynamic_models.values()
+    ]
+
+
+def _resolve_guidelines(state: dict) -> dict:
+    return guideline_resolver(
+        state,
+        guidelines_store=api._guidelines_store,
+        decision_models_provider=_in_process_decision_models,
+    )
+
+
+def _retrieve_recommendations(state: dict) -> dict:
+    return recommendation_retriever(state, vector_store=api._vector_store)
 
 
 @app.get("/api/v1/status")
@@ -214,7 +235,7 @@ async def resolve(request: Request):
         "llm_model": LLM_MODEL,
         "llm_api_key": LLM_API_KEY,
     }
-    result = guideline_resolver(state)
+    result = _resolve_guidelines(state)
     return {
         "applicable_cpgs": result.get("applicable_cpgs", []),
         "applicable_dmn_models": result.get("applicable_dmn_models", []),
@@ -240,7 +261,7 @@ def _run_resolve_background(data: dict, callback_url: str, process_instance_id: 
             "llm_model": LLM_MODEL,
             "llm_api_key": LLM_API_KEY,
         }
-        result = guideline_resolver(state)
+        result = _resolve_guidelines(state)
         result = {
             "applicable_cpgs": result.get("applicable_cpgs", []),
             "applicable_dmn_models": result.get("applicable_dmn_models", []),
@@ -262,7 +283,7 @@ async def retrieve(request: Request):
         "dmn_results": data.get("dmn_results", []),
         "applicable_cpgs": data.get("applicable_cpgs", []),
     }
-    result = recommendation_retriever(state)
+    result = _retrieve_recommendations(state)
     recs = result.get("recommendations", [])
 
     _, ref = store_artifact(_store, f"{uuid4()}/recommendations.json", recs)
@@ -288,7 +309,7 @@ def _run_retrieve_background(data: dict, callback_url: str, process_instance_id:
             "dmn_results": data.get("dmn_results", []),
             "applicable_cpgs": data.get("applicable_cpgs", []),
         }
-        result = recommendation_retriever(state)
+        result = _retrieve_recommendations(state)
         recs = result.get("recommendations", [])
 
         _, ref = store_artifact(_store, f"{uuid4()}/recommendations.json", recs)
@@ -341,7 +362,7 @@ def _render_enforcement_note(unapplied_ids: list[str], conflicts: list[dict]) ->
 def _prompt_artifact(state: dict) -> dict:
     """Capture rendered prompts from composer state for AI-InputPrompt DocRefs.
 
-    The monolith keeps ``plan_composer_prompt``/``conflict_prompt`` in state so
+    The monolith keeps the composer, conflict, and automation prompts in state so
     ``fhir_bundle_generator`` can emit AI-InputPrompt DocumentReferences. The
     split path must ferry them across the compose→generate-bundle service
     boundary or the deployed bundle silently loses that prompt traceability
@@ -350,7 +371,7 @@ def _prompt_artifact(state: dict) -> dict:
     """
     prompts = {
         k: state[k]
-        for k in ("plan_composer_prompt", "conflict_prompt")
+        for k in ("plan_composer_prompt", "conflict_prompt", "automation_prompts")
         if state.get(k)
     }
     if not prompts:
@@ -408,6 +429,13 @@ def _compose_pipeline(data: dict, strict_store: bool = False) -> dict:
         if state.get("brief_review_count", 0) >= MAX_BRIEF_REVIEWS:
             break
 
+    template_client = TemplateClient()
+    state.update(synthesize_automations_for_brief(
+        state,
+        registry=template_client,
+        validator=template_client.validate,
+    ))
+
     # Detect plan-level conflicts on the converged brief (annotates the brief in
     # place — never edits goals/activities). Mirrors the monolith pipeline order
     # (brief-review loop → conflict_analyst → FHIR generation); the brief carries
@@ -428,6 +456,11 @@ def _compose_pipeline(data: dict, strict_store: bool = False) -> dict:
         logger.warning("Enforcing %d unapplied clinician directive(s) — composer retry", len(unapplied))
         state.update(plan_composer(state))
         state.update(conflict_analyst(state))
+        state.update(synthesize_automations_for_brief(
+            state,
+            registry=template_client,
+            validator=template_client.validate,
+        ))
         unapplied = state.get("unapplied_directed_conflicts") or []
         if unapplied:
             brief = dict(state.get("planning_brief") or {})
@@ -444,6 +477,8 @@ def _compose_pipeline(data: dict, strict_store: bool = False) -> dict:
 
     brief = state.get("planning_brief", {})
     result = _prompt_artifact(state)
+    if state.get("automation_synthesis_warnings"):
+        result["automation_synthesis_warnings"] = state["automation_synthesis_warnings"]
     _, ref = store_artifact(_phi_store, f"{uuid4()}/planning_brief.json", brief)
     if ref:
         result["planning_brief_ref"] = ref

@@ -2,7 +2,7 @@
 
 Two async endpoints:
   /api/v1/analyze-async  — classify sections, build manifest, extract metadata
-  /api/v1/generate-async — generate DMN decision tables and recommendations
+  /api/v1/generate-async — generate DMN, recommendations, and BPMN templates
 
 Split so human review gates can approve the manifest before spending LLM
 tokens on generation.
@@ -164,6 +164,7 @@ def _do_analyze(data: dict) -> dict:
 
         result = {
             "markdown": markdown,
+            "figures": state.get("figures", []),
             "section_map": state.get("section_map", []),
             "abbreviations": state.get("abbreviations", {}),
             "grading_definitions": state.get("grading_definitions", ""),
@@ -181,7 +182,7 @@ def _do_analyze(data: dict) -> dict:
 
 
 def _do_generate(data: dict) -> dict:
-    """Generate DMN decision tables and recommendations from an approved manifest."""
+    """Generate DMN, recommendations, and BPMN templates from an approved manifest."""
     from cpg_ingester.generation import generate_all
 
     analysis = resolve_ref(data, "analysis_result", _store)
@@ -195,6 +196,7 @@ def _do_generate(data: dict) -> dict:
     with tempfile.TemporaryDirectory() as output_dir:
         state = {
             "markdown": analysis.get("markdown", ""),
+            "figures": analysis.get("figures", []),
             "section_map": analysis.get("section_map", []),
             "abbreviations": analysis.get("abbreviations", {}),
             "grading_definitions": analysis.get("grading_definitions", ""),
@@ -220,6 +222,7 @@ def _do_generate(data: dict) -> dict:
             "dmn_results": state.get("dmn_results", []),
             "recommendation_results": state.get("recommendation_results", []),
             "recommendation_escalations": state.get("recommendation_escalations", []),
+            "bpmn_results": state.get("bpmn_results", []),
         }
 
         _, ref = store_artifact(_store, f"{uuid4()}/generate_result.json", result)

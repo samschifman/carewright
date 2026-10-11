@@ -103,6 +103,8 @@ class TestReviewRoundCaching:
         cached = store.get(_ENRICHED_REF)
         assert cached["markdown"] == "ENRICHED round-1"
         assert cached["figures"][0]["interpretation"] == {"description": "d"}
+        analysis = store.get(result["analysis_result_ref"])
+        assert analysis["figures"][0]["interpretation"] == {"description": "d"}
         assert _markdown_of(store, result) == "ENRICHED round-1"
 
     def test_second_round_reuses_cache_no_vision(self, monkeypatch):

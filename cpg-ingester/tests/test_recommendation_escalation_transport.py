@@ -31,19 +31,38 @@ def _generate_result() -> dict:
 
 def test_generate_service_includes_recommendation_escalations(monkeypatch):
     monkeypatch.setattr(llm_analysis, "_store", None)
-    monkeypatch.setattr(
-        generation,
-        "generate_all",
-        lambda state: {
+    passed_state = {}
+
+    def _generate(state):
+        passed_state.update(state)
+        return {
             "dmn_results": [],
             "recommendation_results": [],
             "recommendation_escalations": [ESCALATION],
-        },
+            "bpmn_results": [{"item": {"name": "Home BP"}, "bpmn_xml": "<definitions/>"}],
+        }
+
+    monkeypatch.setattr(
+        generation,
+        "generate_all",
+        _generate,
     )
 
-    result = llm_analysis._do_generate({"analysis_result": {"item_manifest": []}})
+    result = llm_analysis._do_generate({
+        "analysis_result": {
+            "item_manifest": [],
+            "figures": [{"id": "fig-1", "interpretation": {"mermaid": "flowchart LR"}}],
+        },
+        "review_feedback": "Preserve the clinician's source-grounded follow-up interval.",
+        "review_comment": "Do not infer a new interval.",
+        "review_iteration": 1,
+    })
 
     assert result["recommendation_escalations"] == [ESCALATION]
+    assert result["bpmn_results"][0]["bpmn_xml"] == "<definitions/>"
+    assert passed_state["figures"][0]["id"] == "fig-1"
+    assert passed_state["review_feedback"] == "Preserve the clinician's source-grounded follow-up interval."
+    assert passed_state["review_comment"] == "Do not infer a new interval."
 
 
 def test_assembly_service_carries_section_escalation_from_generate_result(monkeypatch):

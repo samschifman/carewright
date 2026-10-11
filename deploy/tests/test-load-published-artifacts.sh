@@ -53,10 +53,17 @@ case "${1:-}" in
                 *metadata.json*) printf '{"cpg_id":"fixture"}\n';;
                 *recommendations.json*) printf '{"recommendations":[]}\n';;
                 *list_objects_v2*)
-                    printf '%s\n' \
-                        '{"key":"published/fixture/dmn/model-one.dmn","name":"model-one"}' \
-                        '{"key":"published/fixture/dmn/model-two.dmn","name":"model-two"}'
+                    if [[ "$python_source" == *"/bpmn/"* ]]; then
+                        printf '%s\n' \
+                            '{"latest_key":"published/fixture/bpmn/home-bp-monitoring/latest.json","template_ref":"cpg-artifacts:published/fixture/bpmn/home-bp-monitoring/499a6a2c1b81.template.json","template_id":"home-bp-monitoring"}'
+                    else
+                        printf '%s\n' \
+                            '{"key":"published/fixture/dmn/model-one.dmn","name":"model-one"}' \
+                            '{"key":"published/fixture/dmn/model-two.dmn","name":"model-two"}'
+                    fi
                     ;;
+                *latest.json*) printf '{"template_id":"home-bp-monitoring","version":"499a6a2c1b81","template_ref":"cpg-artifacts:published/fixture/bpmn/home-bp-monitoring/499a6a2c1b81.template.json"}\n';;
+                *template_ref*) printf '{"contract_version":"1.1"}\n';;
                 *) printf '<definitions/>\n';;
             esac
             exit 0
@@ -73,14 +80,22 @@ case "${1:-}" in
             IFS=',' read -r -a response_codes <<< "${TEST_CODES:-201,201,201,201}"
             response_code="${response_codes[$call_index]:-201}"
             status_marker=false
+            automation_request=false
             for arg in "$@"; do
                 [[ "$arg" == *__HTTP_STATUS__* ]] && status_marker=true
                 [[ "$arg" == http://localhost:* ]] && printf '%s\n' "$arg" >> "$TEST_URL_LOG"
+                [[ "$arg" == *"/api/v1/automation/templates"* ]] && automation_request=true
             done
 
             case "$response_code" in
                 409) response_body='{"error":"Decision model id already belongs to another source CPG","existing_source_cpg":"CPG-X","source_cpg":"CPG-Y"}';;
-                422) response_body='{"error":"DMN engine validation failed","messages":[{"severity":"ERROR","text":"rejected DMN"}]}';;
+                422)
+                    if [ "$automation_request" = true ]; then
+                        response_body='{"error":"BPMN registration failed","messages":[{"severity":"ERROR","text":"rejected BPMN"}]}'
+                    else
+                        response_body='{"error":"DMN engine validation failed","messages":[{"severity":"ERROR","text":"rejected DMN"}]}'
+                    fi
+                    ;;
                 500) response_body='{"error":"server down"}';;
                 *) response_body='{"ok":true}';;
             esac
@@ -160,8 +175,9 @@ run_loader() {
 
 run_loader '201,201,201,201' 'CPG-COUNT'
 [[ "$result_status" -eq 0 ]] || { cat "$TEST_OUTPUT" >&2; exit 1; }
-assert_contains 'Published artifacts loaded: 1 guideline, 1 recommendations bundle, 2 DMN models' "$TEST_OUTPUT"
-echo 'PASS: successful uploads report the two loaded DMN models'
+assert_contains 'Published artifacts loaded: 1 guideline, 1 recommendations bundle, 2 DMN models, 1 automation templates' "$TEST_OUTPUT"
+assert_contains 'home-bp-monitoring: HTTP 201' "$TEST_OUTPUT"
+echo 'PASS: successful uploads report DMN models and the latest BPMN template'
 
 run_loader '201,201,409' 'CPG-COLLISION'
 [[ "$result_status" -eq 1 ]] || { cat "$TEST_OUTPUT" >&2; exit 1; }
@@ -173,12 +189,19 @@ echo 'PASS: a DMN source collision fails without --replace and prints the confli
 run_loader '201,201,201,201' --replace 'A/B C&D'
 [[ "$result_status" -eq 0 ]] || { cat "$TEST_OUTPUT" >&2; exit 1; }
 assert_contains 'http://localhost:8080/api/v1/decisions/models?source_cpg=A%2FB%20C%26D&replace=true' "$TEST_URL_LOG"
+assert_contains 'http://localhost:8080/api/v1/automation/templates?source_cpg=A%2FB%20C%26D&replace=true' "$TEST_URL_LOG"
 echo 'PASS: CPG ids are URL-encoded and --replace is sent to the decision engine'
 
 run_loader '201,201,422' 'CPG-INVALID'
 [[ "$result_status" -eq 1 ]] || { cat "$TEST_OUTPUT" >&2; exit 1; }
 assert_contains 'rejected DMN' "$TEST_OUTPUT"
 echo 'PASS: validation failures stop loading and print the engine message'
+
+run_loader '201,201,201,201,422' 'CPG-BPMN-INVALID'
+[[ "$result_status" -eq 1 ]] || { cat "$TEST_OUTPUT" >&2; exit 1; }
+assert_contains 'Failed to register BPMN template' "$TEST_OUTPUT"
+assert_contains 'rejected BPMN' "$TEST_OUTPUT"
+echo 'PASS: BPMN template validation failures stop loading and print the engine message'
 
 run_loader '201,201,500' 'CPG-ERROR'
 [[ "$result_status" -eq 1 ]] || { cat "$TEST_OUTPUT" >&2; exit 1; }

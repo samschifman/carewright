@@ -42,16 +42,14 @@ def _build_search_query(
 
 
 @mlflow.trace(name="recommendation_retriever")
-def recommendation_retriever(state: CarePlanComposerState) -> dict:
+def recommendation_retriever(state: CarePlanComposerState, *, vector_store: Any) -> dict:
     """Retrieve applicable recommendations from the vector store."""
     logger.info("── Recommendation Retriever ──")
-    from acp_writer.api import _vector_store
-
     condition_codes = state.get("condition_codes", [])
     dmn_results = state.get("dmn_results", [])
     applicable_cpgs = state.get("applicable_cpgs", [])
 
-    if _vector_store.count() == 0:
+    if vector_store.count() == 0:
         logger.info("Vector store empty — no recommendations to retrieve")
         return {"recommendations": []}
 
@@ -68,17 +66,17 @@ def recommendation_retriever(state: CarePlanComposerState) -> dict:
             top_k=20,
             source_cpg=cpg_id,
         )
-        response = _vector_store.search(request)
+        response = vector_store.search(request)
         for result in response.results:
-            rec = _vector_store.get(result.recommendation.id)
+            rec = vector_store.get(result.recommendation.id)
             if rec:
                 all_recs.append(rec.model_dump(mode="json"))
 
     if not cpg_ids:
         request = RecommendationSearchRequest(query=query, top_k=20)
-        response = _vector_store.search(request)
+        response = vector_store.search(request)
         for result in response.results:
-            rec = _vector_store.get(result.recommendation.id)
+            rec = vector_store.get(result.recommendation.id)
             if rec:
                 all_recs.append(rec.model_dump(mode="json"))
 

@@ -11,6 +11,7 @@ from cpg_ingester.generation import (
     MAX_DMN_SEMANTIC_RETRIES,
     MAX_DMN_SYNTAX_RETRIES,
     _dmn_escalate,
+    _decision_summary,
     _rec_escalate,
     _route_after_dmn_engine,
     _route_after_dmn_semantic,
@@ -142,6 +143,16 @@ class TestGenerateAllNoSilentDrop:
     both become flagged entries."""
 
     _MANIFEST = [{"type": "decision", "name": "D1", "section": "S1"}]
+
+    def test_decision_summary_includes_dmn_namespace(self):
+        summary = _decision_summary(
+            {"name": "Treatment", "inputs": [], "outputs": []},
+            {},
+            [],
+            '<definitions namespace="https://example.org/dmn">'
+            '<decision><decisionTable/></decision></definitions>',
+        )
+        assert summary["namespace"] == "https://example.org/dmn"
 
     def _run_with_graph(self, fake_graph):
         state = {"item_manifest": self._MANIFEST, "markdown": "", "section_map": []}

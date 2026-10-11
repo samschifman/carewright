@@ -10,9 +10,14 @@ import {
 } from "@patternfly/react-core";
 import { RunningIcon } from "@patternfly/react-icons";
 import type { PlanActivity } from "@app/api/models";
+import { AutomationSection } from "./AutomationSection";
 import { provenanceListStyle } from "./provenanceStyle";
 
-export function ActivityCard({ activity }: { activity: PlanActivity }) {
+interface ActivityCardProps {
+  activity: PlanActivity;
+}
+
+export function ActivityCard({ activity }: ActivityCardProps) {
   const dosing = [activity.dose, activity.route, activity.frequency]
     .filter(Boolean)
     .join(" · ");
@@ -22,6 +27,7 @@ export function ActivityCard({ activity }: { activity: PlanActivity }) {
     activity.sourceCpg ||
     activity.sourceRecommendationId ||
     activity.clinicalRationale;
+  const automations = activity.automations ?? [];
 
   return (
     <Card isCompact>
@@ -31,9 +37,10 @@ export function ActivityCard({ activity }: { activity: PlanActivity }) {
         </span>
         {activity.description}
       </CardTitle>
-      {hasProvenance ? (
+      {hasProvenance || automations.length > 0 ? (
         <CardBody>
-          <ExpandableSection toggleText="Provenance" isIndented>
+          {!hasProvenance && activity.detail && <p>{activity.detail}</p>}
+          {hasProvenance && <ExpandableSection toggleText="Provenance" isIndented>
             <DescriptionList isHorizontal isCompact style={provenanceListStyle}>
               {dosing && (
                 <DescriptionListGroup>
@@ -66,7 +73,12 @@ export function ActivityCard({ activity }: { activity: PlanActivity }) {
                 </DescriptionListGroup>
               )}
             </DescriptionList>
-          </ExpandableSection>
+          </ExpandableSection>}
+          {automations.length > 0 && (
+            <AutomationSection
+              automations={automations}
+            />
+          )}
         </CardBody>
       ) : (
         activity.detail && <CardBody>{activity.detail}</CardBody>

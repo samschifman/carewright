@@ -1,0 +1,73 @@
+# Paths are relative to cpg-ingester/. Goldens are approved ProcessIR files.
+corpora:
+  hypertension-v2:
+    source_cpg: data/synthetic-hypertension-cpg-v2.md
+    templates:
+      - id: home-bp-monitoring
+        name: Home blood pressure monitoring with outreach and escalation
+        description: Repeated home blood pressure reporting, reminders, and escalation.
+        section: 3.5 Home Blood Pressure Monitoring
+        source_sections:
+          - 3.5 Home Blood Pressure Monitoring
+          - 3.6 Follow-up Contact and Outreach
+        tier_hint: A
+        pattern_family_hint: remind-until-done
+        trigger_hint: Home blood pressure monitoring after a treatment decision
+        actors: [patient, care team, clinician]
+        steps: [request readings, review weekly average, remind, escalate, notify clinician]
+        timing_cues: [weekly, after three reminder attempts on different days]
+        linked_recommendations: [Home blood pressure monitoring]
+        linked_decisions: []
+        golden_ir: data/golden/automation/home-bp-monitoring.ir.json
+        golden_template: data/golden/automation/home-bp-monitoring.template.json
+      - id: acei-lab-follow-up
+        name: ACE inhibitor laboratory follow-up
+        description: Determine laboratory timing and notify when a required result is missing.
+        section: 3.3 Monitoring Plan
+        source_sections:
+          - 3.2 Treatment Decision
+          - 3.3 Monitoring Plan
+        tier_hint: A
+        pattern_family_hint: wait-for-result-then-decide
+        trigger_hint: Treatment Recommendation Action equals Start medication
+        actors: [clinician, care team]
+        steps: [determine laboratory timing, wait, check result, notify clinician if missing]
+        timing_cues: [2 weeks, 4 weeks]
+        linked_recommendations: [ACE inhibitor laboratory follow-up]
+        linked_decisions: [treatment-recommendation, monitoring-plan]
+        golden_ir: data/golden/automation/acei-lab-follow-up.ir.json
+        golden_template: data/golden/automation/acei-lab-follow-up.template.json
+      - id: follow-up-visit
+        name: Follow-up visit scheduling and confirmation
+        description: Request and confirm the medication follow-up visit.
+        section: 3.6 Follow-up Contact and Outreach
+        source_sections:
+          - 3.2 Treatment Decision
+          - 3.6 Follow-up Contact and Outreach
+        tier_hint: A
+        pattern_family_hint: schedule-and-check
+        trigger_hint: Treatment Recommendation Follow Up Weeks is 2 or 4
+        actors: [patient, clinician, care team]
+        steps: [request visit, query visit order, notify clinician if absent]
+        timing_cues: [2 to 4 weeks after a medication change]
+        linked_recommendations: [Medication follow-up visit]
+        linked_decisions: [treatment-recommendation]
+        golden_ir: data/golden/automation/follow-up-visit.ir.json
+        golden_template: data/golden/automation/follow-up-visit.template.json
+      - id: lifestyle-reassessment
+        name: Lifestyle reassessment with home-reading review
+        description: Provide lifestyle education and review readings at reassessment.
+        section: 3.4 Lifestyle Modification Recommendations
+        source_sections:
+          - 3.2 Treatment Decision
+          - 3.4 Lifestyle Modification Recommendations
+        tier_hint: A
+        pattern_family_hint: schedule-and-check
+        trigger_hint: Treatment Recommendation Follow Up Weeks is 8 or 12
+        actors: [patient, clinician, care team]
+        steps: [send education, request reassessment visit, wait, review readings]
+        timing_cues: [8 weeks, 12 weeks]
+        linked_recommendations: [Lifestyle modification and reassessment]
+        linked_decisions: [treatment-recommendation]
+        golden_ir: data/golden/automation/lifestyle-reassessment.ir.json
+        golden_template: data/golden/automation/lifestyle-reassessment.template.json

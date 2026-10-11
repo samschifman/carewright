@@ -9,6 +9,7 @@ import logging
 
 import mlflow
 
+from cpg_contracts.automation.templates import AutomationTemplate
 from cpg_ingester.artifact_id import make_artifact_id
 from cpg_ingester.output import write_artifact
 
@@ -22,6 +23,7 @@ def delivery(state: dict) -> dict:
     cpg_metadata = state.get("cpg_metadata", {})
     dmn_results = state.get("dmn_results", []) or []
     recommendation_results = state.get("recommendation_results", [])
+    bpmn_results = state.get("bpmn_results", []) or []
     escalated_items = state.get("escalated_items", [])
     assembly_report = state.get("assembly_report", {})
     output_dir = state.get("output_dir", "output")
@@ -92,6 +94,54 @@ def delivery(state: dict) -> dict:
         except Exception as e:
             errors.append(f"Failed to publish recommendations: {e}")
             logger.error("Failed to publish recommendations: %s", e)
+
+    for result in bpmn_results:
+        if not isinstance(result, dict) or result.get("escalated"):
+            continue
+        raw_template = result.get("automation_template")
+        if not raw_template:
+            continue
+        try:
+            template = AutomationTemplate.model_validate(raw_template)
+            summary = template.summary
+            base = f"{base_key}/bpmn/{summary.id}"
+            template_key = f"{base}/{summary.version}.template.json"
+            bpmn_key = f"{base}/{summary.version}.bpmn"
+            latest_key = f"{base}/latest.json"
+            template_payload = template.model_dump(mode="json", exclude_none=True)
+            template_ref = store.put(template_key, template_payload)
+            bpmn_ref = store.put_raw(
+                bpmn_key,
+                template.bpmn_xml.encode("utf-8"),
+                "application/xml",
+            )
+            store.put(latest_key, {
+                "template_id": summary.id,
+                "version": summary.version,
+                "template_ref": template_ref,
+                "bpmn_ref": bpmn_ref,
+                "artifact_id": summary.artifact_id,
+                "name": summary.name,
+            })
+            artifacts.append({
+                "type": "bpmn",
+                "ref": template_ref,
+                "name": summary.name,
+                "artifact_id": summary.artifact_id,
+                "template_id": summary.id,
+                "version": summary.version,
+            })
+            logger.info(
+                "Published BPMN template %s version %s: %s",
+                summary.id, summary.version, template_ref,
+            )
+        except Exception as exc:
+            message = (
+                "Failed to publish BPMN template "
+                f"{result.get('template_summary', {}).get('id', 'unknown')}: {exc}"
+            )
+            errors.append(message)
+            logger.error("%s", message)
 
     if assembly_report:
         try:

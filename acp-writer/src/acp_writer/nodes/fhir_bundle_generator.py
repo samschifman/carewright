@@ -57,12 +57,16 @@ def fhir_bundle_generator(state: CarePlanComposerState) -> dict:
         prompts["plan_composer"] = state["plan_composer_prompt"]
     if state.get("conflict_prompt"):
         prompts["conflict_analyst"] = state["conflict_prompt"]
+    for label, prompt in (state.get("automation_prompts") or {}).items():
+        if prompt:
+            prompts[label] = prompt
 
     bundle = build_fhir_bundle(
         brief,
         patient_demographics=state.get("patient_demographics"),
         model_id=state.get("llm_model"),
         prompts=prompts,
+        careplan_id=state.get("careplan_id"),
     )
 
     resource_types: dict[str, int] = {}
@@ -74,5 +78,10 @@ def fhir_bundle_generator(state: CarePlanComposerState) -> dict:
 
     if output_dir:
         write_artifact(output_dir, "fhir-bundle.json", bundle)
+        write_artifact(
+            output_dir,
+            "planning-brief.json",
+            brief.model_dump(mode="json", exclude_none=True),
+        )
 
     return {"fhir_bundle": bundle}

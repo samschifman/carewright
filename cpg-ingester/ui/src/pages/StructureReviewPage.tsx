@@ -85,6 +85,12 @@ export function StructureReviewPage({ run }: StructureReviewPageProps) {
 
   const hasSectionData = run.sectionMap && run.sectionMap.length > 0;
   const analyzeError = run.errors?.find(e => e.step === 'Analyze');
+  const groupedManifest = new Map<string, NonNullable<RunDetail['manifest']>>();
+  for (const item of run.manifest ?? []) {
+    const group = groupedManifest.get(item.type) ?? [];
+    group.push(item);
+    groupedManifest.set(item.type, group);
+  }
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -92,6 +98,44 @@ export function StructureReviewPage({ run }: StructureReviewPageProps) {
         <Alert variant="danger" title="Analysis failed" isInline style={{ marginBottom: 16 }}>
           {analyzeError.message}
         </Alert>
+      )}
+
+      {groupedManifest.size > 0 && (
+        <Card style={{ marginBottom: 16 }}>
+          <CardTitle>Identified items</CardTitle>
+          <CardBody>
+            {[...groupedManifest.entries()].map(([type, items]) => (
+              <section key={type} aria-label={`${type} items`} style={{ marginBottom: 12 }}>
+                <Content component="h3">{type[0]?.toUpperCase()}{type.slice(1)} ({items.length})</Content>
+                <ul>
+                  {items.map((item) => {
+                    const automatability = item.automatability as { tier?: string } | undefined;
+                    const tier = item.tier_hint ?? item.tier ?? automatability?.tier;
+                    const trigger = item.trigger_hint
+                      ?? item.trigger_summary
+                      ?? (typeof item.trigger === 'string' ? item.trigger : undefined);
+                    return (
+                      <li key={item.id}>
+                        <strong>{item.name}</strong>
+                        {type === 'process' && (
+                          <>
+                            {tier ? ` · Tier ${tier}` : ''}
+                            {trigger ? ` · Trigger: ${String(trigger)}` : ''}
+                            {(item.linked_recommendations?.length || item.linked_decisions?.length) ? (
+                              <div>
+                                Linked: {[...(item.linked_recommendations ?? []), ...(item.linked_decisions ?? [])].join(', ')}
+                              </div>
+                            ) : null}
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </CardBody>
+        </Card>
       )}
 
       {hasSectionData ? (

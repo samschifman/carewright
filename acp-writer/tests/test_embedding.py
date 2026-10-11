@@ -125,6 +125,15 @@ class TestMakeEmbeddingProvider:
         monkeypatch.setenv("EMBEDDING_PROVIDER", "bogus")
         assert isinstance(make_embedding_provider(), FakeEmbeddingProvider)
 
+    def test_local_provider_explains_optional_dependency(self, monkeypatch):
+        import sys
+
+        from acp_writer.store.embedding import SentenceTransformerProvider
+
+        monkeypatch.setitem(sys.modules, "sentence_transformers", None)
+        with pytest.raises(RuntimeError, match="acp-writer\\[local-embeddings\\]"):
+            SentenceTransformerProvider().embed(["blood pressure"])
+
 
 class TestReasoningServiceStoreWiring:
     """Regression guard for the split llm_reasoning service's store binding.

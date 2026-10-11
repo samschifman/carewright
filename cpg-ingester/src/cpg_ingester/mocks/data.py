@@ -1,7 +1,11 @@
 """Mock data for BFF development. Not shipped in production images."""
 
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 from typing import Any
+
+import mlflow
 
 from cpg_ingester.artifact_id import make_artifact_id
 
@@ -220,6 +224,63 @@ def _failed_steps() -> list[dict[str, Any]]:
         if s["status"] == "active":
             s["status"] = "failed"
     return steps
+
+
+@mlflow.trace(name="cpg_ingester.mock.read_run_artifact")
+def _read_run_artifact(directory: Path, name: str, default: Any) -> Any:
+    try:
+        return json.loads((directory / name).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
+@mlflow.trace(name="cpg_ingester.mock.load_run_directory")
+def load_run_directory(directory: str | Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load completed monolith artifacts into the UI-facing run models."""
+    from cpg_ingester.services.artifact_resolver import enrich_run_detail
+
+    root = Path(directory).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"mock run directory does not exist: {root}")
+    summary = _read_run_artifact(root, "run-summary.json", {})
+    metadata_file = _read_run_artifact(root, "metadata.json", {})
+    analysis = _read_run_artifact(root, "analysis-result.json", {
+        "cpg_metadata": metadata_file,
+        "section_map": _read_run_artifact(root, "section-map.json", []),
+        "item_manifest": _read_run_artifact(root, "manifest.json", []),
+    })
+    generation = _read_run_artifact(root, "generation-result.json", {
+        "dmn_results": _read_run_artifact(root, "dmn-results.json", []),
+        "recommendation_results": _read_run_artifact(root, "recommendation-results.json", []),
+        "bpmn_results": _read_run_artifact(root, "bpmn-results.json", []),
+    })
+    assembly_report = _read_run_artifact(root, "assembly-report.json", {})
+    delivery_status = _read_run_artifact(root, "delivery-status.json", {})
+    metadata = analysis.get("cpg_metadata") or metadata_file or {}
+    run_id = summary.get("run_id") or root.name
+    created_at = summary.get("created_at") or datetime.fromtimestamp(
+        (root / "run-summary.json").stat().st_mtime if (root / "run-summary.json").exists()
+        else root.stat().st_mtime,
+        timezone.utc,
+    ).isoformat()
+    run = {
+        "id": run_id,
+        "status": "completed",
+        "cpgName": metadata.get("title") or summary.get("cpg_name") or root.name,
+        "createdAt": created_at,
+        "currentStep": "Done",
+    }
+    detail = enrich_run_detail({
+        **run,
+        "steps": _completed_steps(),
+        "workflowData": {
+            "analysisResult": analysis,
+            "generateResult": generation,
+            "assemblyResult": {"assembly_report": assembly_report},
+            "deliveryResult": {"delivery_status": delivery_status},
+        },
+    }, None)
+    return run, detail
 
 
 RUNS: dict[str, dict[str, Any]] = {

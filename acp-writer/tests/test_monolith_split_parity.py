@@ -14,8 +14,13 @@ paths call) is tracked in issue #174; until then, this test is the backstop.
 """
 
 from pathlib import Path
+from types import SimpleNamespace
+import json
 
-from acp_writer.pipeline import build_pipeline
+from cpg_contracts.automation.ir import TemplateRef
+from cpg_contracts.automation.templates import AutomationTemplate
+from acp_writer.nodes.automation_synthesizer import synthesize_automations_for_brief
+from .pipeline_helpers import build_pipeline
 
 _SERVICES_DIR = Path(__file__).resolve().parent.parent / "src" / "acp_writer" / "services"
 
@@ -49,3 +54,73 @@ def test_conflict_analyst_specifically_runs_in_split_compose():
     # service (llm_reasoning), not only in the monolith graph.
     llm_reasoning_src = (_SERVICES_DIR / "llm_reasoning.py").read_text()
     assert "conflict_analyst" in llm_reasoning_src
+
+
+class _Registry:
+    def __init__(self, template):
+        self.template = template
+
+    def list(self, *, recommendation_id=None, dmn_model_id=None):
+        return [self.template] if recommendation_id in self.template.summary.linked_recommendation_ids else []
+
+
+class _LLM:
+    def __init__(self, response):
+        self.response = response
+
+    def invoke(self, _messages):
+        return SimpleNamespace(content=json.dumps(self.response))
+
+
+def test_monolith_and_split_compose_share_automation_synthesis_result():
+    golden = Path(__file__).parent / "fixtures/home-bp-monitoring.template.json"
+    template = AutomationTemplate.model_validate_json(golden.read_text())
+    instance = template.ir.model_copy(deep=True)
+    instance.process.id = "instance_home_bp"
+    instance.process.kind = "instance"
+    instance.process.acp.template_refs = [TemplateRef(
+        template_id=template.summary.id,
+        version=template.summary.version,
+        source_cpg=template.summary.source_cpg,
+    )]
+    response = {"ir": instance.model_dump(mode="json", exclude_none=True), "bindings": []}
+    brief = {
+        "patient_reference": "Patient/example",
+        "applicable_cpgs": [template.summary.source_cpg],
+        "goals": [],
+        "activities": [{
+            "id": "activity-1",
+            "type": "monitoring",
+            "description": "Monitor home blood pressure readings.",
+            "source_recommendation_id": template.summary.linked_recommendation_ids[0],
+            "source_cpg": template.summary.source_cpg,
+        }],
+    }
+    common = {
+        "planning_brief": brief,
+        "dmn_results": [],
+        "patient_demographics": {},
+        "litellm_url": "http://unused",
+    }
+    validator = lambda _payload: {"valid": True}
+
+    # Both orchestration paths call this same node with the same inputs.
+    monolith = synthesize_automations_for_brief(
+        common,
+        registry=_Registry(template),
+        validator=validator,
+        llm=_LLM(response),
+    )
+    split = synthesize_automations_for_brief(
+        common,
+        registry=_Registry(template),
+        validator=validator,
+        llm=_LLM(response),
+    )
+
+    left = monolith["planning_brief"]["activities"][0]["automations"][0]
+    right = split["planning_brief"]["activities"][0]["automations"][0]
+    for field in ("template_refs", "ir", "bpmn_xml", "bindings", "enabled", "revision", "validation"):
+        assert left[field] == right[field]
+    llm_reasoning_src = (_SERVICES_DIR / "llm_reasoning.py").read_text()
+    assert "synthesize_automations_for_brief" in llm_reasoning_src

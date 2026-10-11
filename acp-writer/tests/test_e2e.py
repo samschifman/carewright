@@ -16,7 +16,7 @@ import pytest
 import acp_writer.api as api_module
 from acp_writer.api import _dynamic_models, init_stores
 from acp_writer.nodes.fhir_server_writer import _care_plans
-from acp_writer.pipeline import build_pipeline
+from .pipeline_helpers import build_pipeline
 from acp_writer.store.embedding import FakeEmbeddingProvider
 
 # Prefer LLM_BASE_URL per the no-tech-specific-names convention; fall back to
@@ -28,7 +28,7 @@ pytestmark = pytest.mark.skipif(
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "mock-EHR" / "data"
-DMN_DIR = PROJECT_ROOT / "cpg-ingester" / "data" / "golden"
+DMN_DIR = Path(__file__).parent / "fixtures" / "dmn"
 FIXTURES = PROJECT_ROOT / "shared" / "tests" / "fixtures"
 INT_FIXTURES = PROJECT_ROOT / "tests" / "integration" / "fixtures"
 

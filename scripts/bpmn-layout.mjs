@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const uiRequire = createRequire(resolve(scriptDirectory, "../shared/ui/package.json"));
 const { layoutProcess } = uiRequire("bpmn-auto-layout");
+const { mergeExpandedSubprocess } = await import("../shared/ui/src/utils/mergeExpandedSubprocess.js");
 const inputPath = process.argv[2];
 
 if (!inputPath) {
@@ -18,8 +19,9 @@ if (!inputPath) {
 try {
   const xml = await readFile(resolve(inputPath), "utf8");
   const { xml: laidOutXml, warnings } = await layoutProcess(xml);
-  process.stdout.write(laidOutXml);
-  for (const warning of warnings) {
+  const merged = await mergeExpandedSubprocess(laidOutXml);
+  process.stdout.write(merged.xml);
+  for (const warning of [...warnings, ...merged.warnings]) {
     process.stderr.write(`${warning.message ?? warning}\n`);
   }
 } catch (error) {

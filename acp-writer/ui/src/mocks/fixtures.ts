@@ -6,6 +6,9 @@ import type {
   RunSummary,
   SystemHealth,
 } from "@app/api/models";
+import sliceCarePlanViewData from "./fixtures/slice-careplan.json";
+
+const sliceCarePlanView = sliceCarePlanViewData as CarePlanView;
 
 const patient = {
   name: "Ada Lovelace",
@@ -158,6 +161,15 @@ export const carePlanDetail: CarePlanDetail = {
   ...carePlanSummaries[0],
   patient,
   view: carePlanView,
+};
+
+export const sliceCarePlanDetail: CarePlanDetail = {
+  ...carePlanDetail,
+  id: "slice-careplan-example",
+  patientName: "Ada Lovelace",
+  status: "active",
+  runId: "run-slice",
+  view: sliceCarePlanView,
 };
 
 export const systemHealth: SystemHealth = {

@@ -50,7 +50,6 @@ services:
         condition: service_healthy
       medplum-redis:
         condition: service_healthy
-    command: ["env"]
     environment:
       MEDPLUM_PORT: "8103"
       MEDPLUM_BASE_URL: "http://localhost:8103/"
@@ -80,8 +79,10 @@ services:
       MEDPLUM_ALLOWED_ORIGINS: "*"
       MEDPLUM_INTROSPECTION_ENABLED: "true"
       MEDPLUM_SHUTDOWN_TIMEOUT_MILLISECONDS: "30000"
+    volumes:
+      - ./mock-EHR/deploy/medplum.config.json:/usr/src/medplum/medplum.config.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:8103/healthcheck').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))\""]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -152,7 +153,7 @@ services:
       - "5000:5000"
     command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -168,9 +169,17 @@ services:
         condition: service_healthy
       mlflow:
         condition: service_healthy
+      automation:
+        condition: service_healthy
+      litellm:
+        condition: service_started
+      medplum-server:
+        condition: service_healthy
     environment:
       - KOGITO_URL=http://kogito:8081
       - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - AUTOMATION_SERVICE_URL=http://automation:8080
+      - ACP_JOB_STORE_DIR=/data/jobs
       - LITELLM_URL=http://litellm:4000
       - LITELLM_API_KEY=sk-change-me
       - FHIR_SERVER_URL=http://medplum-server:8103/fhir/R4
@@ -188,8 +197,47 @@ services:
     env_file:
       - path: .medplum/medplum-fhir.env
         required: false
+    volumes:
+      - acp-job-data:/data/jobs
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8082/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  acp-writer-ui:
+    build:
+      context: .
+      dockerfile: acp-writer/ui/Containerfile
+    ports:
+      - "3001:8080"
+    depends_on:
+      acp-writer:
+        condition: service_healthy
+    environment:
+      - BFF_HOST=acp-writer:8082
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  automation:
+    build:
+      context: .
+      dockerfile: automation/deploy/Containerfile
+    ports:
+      - "8096:8080"
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    environment:
+      - AUTOMATION_STORE_DIR=/data
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - automation-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -282,6 +330,7 @@ services:
       dockerfile: cpg-ingester/deploy/pods/Containerfile.bff
     ports:
       - "8095:8080"
+    environment:
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 5s
@@ -292,10 +341,13 @@ services:
 
   cpg-ingester-ui:
     build:
-      context: ./cpg-ingester/ui
-      dockerfile: Containerfile
+      context: .
+      dockerfile: cpg-ingester/ui/Containerfile
     ports:
       - "3003:8080"
+    depends_on:
+      cpg-ingester-bff:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 5s
@@ -306,3 +358,5 @@ services:
 
 volumes:
   medplum-postgres-data:
+  automation-data:
+  acp-job-data:

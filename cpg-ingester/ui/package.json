@@ -10,18 +10,22 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@cpg-to-acp/ui-shared": "file:../../shared/ui",
     "@patternfly/chatbot": "^6.0.0",
     "@patternfly/react-core": "^6.0.0",
     "@patternfly/react-icons": "^6.0.0",
     "@patternfly/react-table": "^6.0.0",
     "@tanstack/react-query": "^5.0.0",
-    "dmn-js": "^17.10.1",
+    "dmn-js": "^17.12.3",
     "mermaid": "^11.16.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router": "^7.0.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "jsdom": "^26.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.0.0",

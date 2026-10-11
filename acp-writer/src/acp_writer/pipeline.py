@@ -18,6 +18,7 @@ import logging
 from langgraph.graph import END, START, StateGraph
 
 from acp_writer.nodes.brief_reviewer import brief_reviewer
+from acp_writer.nodes.automation_synthesizer import synthesize_automations_for_brief
 from acp_writer.nodes.condition_scanner import condition_scanner
 from acp_writer.nodes.conflict_analyst import conflict_analyst
 from acp_writer.nodes.dmn_executor import dmn_executor
@@ -48,10 +49,10 @@ MAX_FHIR_REVIEWS = 4
 def _route_after_brief_review(state: CarePlanComposerState) -> str:
     feedback = state.get("brief_review_feedback")
     if not feedback:
-        return "conflict_analyst"
+        return "automation_synthesizer"
     if state.get("brief_review_count", 0) >= MAX_BRIEF_REVIEWS:
         logger.warning("Brief review exhausted after %d iterations", MAX_BRIEF_REVIEWS)
-        return "conflict_analyst"
+        return "automation_synthesizer"
     return "plan_composer"
 
 
@@ -68,17 +69,42 @@ def _route_after_fhir_review(state: CarePlanComposerState) -> str:
 # --- Pipeline builder ---
 
 
-def build_pipeline() -> StateGraph:
+def build_pipeline(
+    *,
+    automation_registry,
+    automation_validator,
+    guidelines_store,
+    vector_store,
+    decision_models_provider,
+) -> StateGraph:
     """Build the full care plan composition pipeline graph."""
     graph = StateGraph(CarePlanComposerState)
 
     # Phase 1: Clinical Reasoning
     graph.add_node("condition_scanner", condition_scanner)
-    graph.add_node("guideline_resolver", guideline_resolver)
+    graph.add_node(
+        "guideline_resolver",
+        lambda state: guideline_resolver(
+            state,
+            guidelines_store=guidelines_store,
+            decision_models_provider=decision_models_provider,
+        ),
+    )
     graph.add_node("dmn_executor", dmn_executor)
-    graph.add_node("recommendation_retriever", recommendation_retriever)
+    graph.add_node(
+        "recommendation_retriever",
+        lambda state: recommendation_retriever(state, vector_store=vector_store),
+    )
     graph.add_node("plan_composer", plan_composer)
     graph.add_node("brief_reviewer", brief_reviewer)
+    graph.add_node(
+        "automation_synthesizer",
+        lambda state: synthesize_automations_for_brief(
+            state,
+            registry=automation_registry,
+            validator=automation_validator,
+        ),
+    )
     graph.add_node("conflict_analyst", conflict_analyst)
 
     # Phase 2: FHIR Generation
@@ -101,8 +127,10 @@ def build_pipeline() -> StateGraph:
         {
             "conflict_analyst": "conflict_analyst",
             "plan_composer": "plan_composer",
+            "automation_synthesizer": "automation_synthesizer",
         },
     )
+    graph.add_edge("automation_synthesizer", "conflict_analyst")
     graph.add_edge("conflict_analyst", "fhir_bundle_generator")
 
     # Phase 2 edges (validators in parallel, then FHIR review loop)

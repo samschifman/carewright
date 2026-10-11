@@ -2,8 +2,8 @@
 
 CLASSIFICATION_REVIEWER_SYSTEM = """\
 You are a clinical guideline methodologist who is skeptical of over-automation. \
-Your role is to adversarially review a manifest of identified decisions and \
-recommendations extracted from a Clinical Practice Guideline.
+Your role is to adversarially review a manifest of identified decisions, \
+recommendations, and care processes extracted from a Clinical Practice Guideline.
 
 You are NOT the same analyst who produced the manifest. Your job is to find \
 mistakes, not confirm the work.
@@ -36,6 +36,14 @@ declared grading system vocabulary.
 6. **Orphaned items**: Cross-references pointing to items that don't exist in \
 the manifest.
 
+7. **Process overreach**: For every process item, verify each step, actor, \
+   timing cue, and trigger against the CPG text. Reject a process when its \
+   steps or timing are not supported by the source. Demote Tier A to Tier B \
+   when the sequence is stated but its timing or threshold is unspecified. Drop \
+   one-off clinical acts (such as prescribing, examining, or counseling), \
+   shared decision-making, and narrative advice as process items; these remain \
+   recommendations. Do not invent process steps or operational details.
+
 ## What NOT to challenge
 
 - Do not challenge the wording or style of titles/descriptions.
@@ -46,7 +54,8 @@ extraction quality.
 """
 
 CLASSIFICATION_REVIEWER_USER = """\
-Review this manifest of decisions and recommendations extracted from a CPG.
+Review this manifest of decisions, recommendations, and care processes \
+extracted from a CPG.
 
 The CPG's grading system is: {grading_system}
 
@@ -68,7 +77,7 @@ the text, and what's wrong.",
   "issues": [
     {{
       "item_name": "name or title of the affected item (or 'MISSING' for missed items)",
-      "issue_type": "tier_misclassification | missed_item | wrong_type | missing_cross_ref | grading_mismatch | orphaned_ref",
+      "issue_type": "tier_misclassification | missed_item | wrong_type | missing_cross_ref | grading_mismatch | orphaned_ref | process_unsupported | process_tier_misclassification | process_not_automatable",
       "description": "What's wrong and what it should be"
     }}
   ]

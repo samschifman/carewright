@@ -6,7 +6,10 @@ import "@patternfly/chatbot/dist/css/main.css";
 import { App } from "./App";
 
 async function enableMocking() {
-  if (import.meta.env.VITE_USE_MOCKS !== "true") return;
+  if (
+    import.meta.env.VITE_USE_MOCKS !== "true" &&
+    import.meta.env.VITE_MOCK_SCENARIO !== "slice"
+  ) return;
   const { worker } = await import("./mocks/browser");
   await worker.start({ onUnhandledRequest: "bypass" });
 }

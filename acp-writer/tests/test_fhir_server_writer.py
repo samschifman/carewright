@@ -1,10 +1,15 @@
 """Tests for the FHIR Server Writer node and approval workflow."""
 
 from datetime import datetime, timezone
+from copy import deepcopy
+from types import SimpleNamespace
 
+import acp_writer.nodes.fhir_server_writer as writer_module
+import acp_writer.services.automation_publisher as automation_publisher_module
 from acp_writer.nodes.fhir_server_writer import (
     _care_plans,
     _parse_server_ids,
+    _post_bundle,
     approve_care_plan,
     fhir_server_writer,
     get_care_plan,
@@ -27,6 +32,8 @@ from acp_writer.planning_brief import (
 )
 from acp_writer.services.ai_transparency import ACP_EXT_BASE, is_conflict_provenance
 from acp_writer.services.reviewer import ReviewerContext, reviewer_from_payload
+from acp_writer.services.automation_publisher import AutomationPublisher
+from acp_writer.services.job_store import JobStore
 from acp_writer.validators.fhir_bundle_builder import build_fhir_bundle
 
 import pytest
@@ -88,20 +95,68 @@ def _bundle_with_conflict() -> dict:
 
 
 @pytest.fixture(autouse=True)
-def clear_care_plans():
+def clear_care_plans(monkeypatch, tmp_path):
     _care_plans.clear()
+    calls = []
+
+    monkeypatch.setattr(
+        automation_publisher_module,
+        "_publisher",
+        AutomationPublisher(JobStore(directory=tmp_path), automation_url="http://automation"),
+    )
+
+    def fake_post(url, *, json=None, headers=None, timeout):
+        calls.append(json)
+        if json is None:
+            return SimpleNamespace(status_code=200, content=b"{}", text="", json=lambda: {})
+        response_entries = []
+        for entry in json.get("entry", []):
+            resource = entry.get("resource", {})
+            response_entries.append({
+                "response": {
+                    "location": f"{resource.get('resourceType')}/{resource.get('id')}/_history/1",
+                },
+            })
+        return SimpleNamespace(
+            status_code=201,
+            content=b"{}",
+            text="",
+            json=lambda: {"entry": response_entries},
+        )
+
+    monkeypatch.setattr(writer_module.requests, "post", fake_post)
     yield
     _care_plans.clear()
 
 
 class TestFHIRServerWriter:
+    def test_non_json_success_response_is_left_for_reconciliation(self, monkeypatch):
+        def fake_post(*args, **kwargs):
+            def invalid_json():
+                raise ValueError("not JSON")
+
+            return SimpleNamespace(
+                status_code=201,
+                content=b"created",
+                text="created",
+                json=invalid_json,
+            )
+
+        monkeypatch.setattr(writer_module.requests, "post", fake_post)
+
+        result = _post_bundle(_sample_bundle())
+
+        assert result["delivery_status"] == "stored_locally"
+        assert result["server_ids"] == {}
+        assert "valid JSON" in result["error"]
+
     def test_stores_locally_when_server_unavailable(self):
         state = {
             "fhir_bundle": _sample_bundle(),
             "patient_reference": "Patient/patient-1",
         }
         result = fhir_server_writer(state)
-        assert result["delivery_status"] in ("stored_locally", "error", "delivered")
+        assert result["delivery_status"] == "draft"
         assert result["careplan_id"] != ""
 
     def test_empty_bundle_skipped(self):
@@ -126,6 +181,21 @@ class TestFHIRServerWriter:
         result = fhir_server_writer(state)
         cp = get_care_plan(result["careplan_id"])
         assert "server_ids" in cp
+
+    def test_business_id_is_stable_in_careplan_identifier_and_upsert_condition(self):
+        stable_id = "workflow-run-123"
+        result = fhir_server_writer({
+            "fhir_bundle": _sample_bundle(),
+            "careplan_id": stable_id,
+            "patient_reference": "Patient/patient-1",
+        })
+        assert result["careplan_id"] == stable_id
+        careplan_entry = next(
+            entry for entry in get_care_plan(stable_id)["bundle"]["entry"]
+            if entry["resource"].get("resourceType") == "CarePlan"
+        )
+        assert careplan_entry["resource"]["identifier"][0]["value"] == stable_id
+        assert careplan_entry["request"]["ifNoneExist"].endswith(f"|{stable_id}")
 
 
 class TestParseServerIds:
@@ -201,6 +271,7 @@ class TestApprovalWorkflow:
 
         cp = get_care_plan(cp_id)
         assert cp["status"] == "active"
+        assert cp["delivery_status"] == "delivered"
 
         bundle = cp["bundle"]
         for entry in bundle["entry"]:
@@ -248,6 +319,90 @@ class TestApprovalWorkflow:
 
     def test_approve_not_found(self):
         assert approve_care_plan("nonexistent") is None
+
+    def test_draft_is_not_written_until_approval_and_approval_is_idempotent(self, monkeypatch):
+        calls = []
+
+        def fake_post(url, *, json, headers, timeout):
+            calls.append((url, json))
+            if url != writer_module.FHIR_SERVER_URL:
+                return SimpleNamespace(status_code=201, content=b"{}", text="", json=lambda: {})
+            response_entries = [
+                {"response": {"location": f"{entry['resource']['resourceType']}/{entry['resource']['id']}/_history/1"}}
+                for entry in json["entry"]
+            ]
+            return SimpleNamespace(
+                status_code=201,
+                content=b"{}",
+                text="",
+                json=lambda: {"entry": response_entries},
+            )
+
+        monkeypatch.setattr(writer_module.requests, "post", fake_post)
+        cp_id = self._store_care_plan()
+        assert calls == []
+        assert get_care_plan(cp_id)["status"] == "draft"
+
+        result = approve_care_plan(cp_id, reviewer=ReviewerContext(display="Dr. Smith"))
+        assert result["delivery_status"] == "delivered"
+        fhir_calls = [bundle for url, bundle in calls if url == writer_module.FHIR_SERVER_URL]
+        assert len(fhir_calls) == 1
+        careplan_entry = next(
+            entry for entry in fhir_calls[0]["entry"]
+            if entry["resource"].get("resourceType") == "CarePlan"
+        )
+        assert careplan_entry["resource"]["status"] == "active"
+
+        approve_care_plan(cp_id, reviewer=ReviewerContext(display="Dr. Smith"))
+        assert len([url for url, _ in calls if url == writer_module.FHIR_SERVER_URL]) == 1
+
+    def test_approval_redrive_after_write_crash_searches_before_reposting(self, monkeypatch):
+        fhir_writes = []
+        automation_writes = []
+        saved_bundle = {}
+
+        def fake_post(url, *, json, headers=None, timeout):
+            if url == writer_module.FHIR_SERVER_URL:
+                fhir_writes.append(json)
+                saved_bundle.update(deepcopy(json))
+
+                def invalid_json():
+                    raise ValueError("server closed after writing")
+
+                return SimpleNamespace(status_code=201, content=b"created", text="created", json=invalid_json)
+            automation_writes.append(json)
+            return SimpleNamespace(
+                status_code=201,
+                content=b"{}",
+                text="",
+                json=lambda: {"status": "accepted"},
+            )
+
+        def fake_get(url, *, params, headers=None, timeout):
+            careplan = next(
+                deepcopy(entry["resource"])
+                for entry in saved_bundle.get("entry", [])
+                if entry["resource"].get("resourceType") == "CarePlan"
+            )
+            careplan["id"] = "careplan-server"
+            careplan["subject"]["reference"] = "Patient/patient-server"
+            return SimpleNamespace(
+                status_code=200,
+                json=lambda: {"entry": [{"resource": careplan}]},
+                raise_for_status=lambda: None,
+            )
+
+        monkeypatch.setattr(writer_module.requests, "post", fake_post)
+        monkeypatch.setattr(writer_module.requests, "get", fake_get)
+        cp_id = self._store_care_plan()
+        first = approve_care_plan(cp_id, reviewer=ReviewerContext(display="Dr. Smith"))
+        assert first["delivery_status"] == "stored_locally"
+
+        second = approve_care_plan(cp_id, reviewer=ReviewerContext(display="Dr. Smith"))
+
+        assert second["delivery_status"] == "delivered"
+        assert len(fhir_writes) == 1, "re-drive reconciles the committed CarePlan instead of posting twice"
+        assert len(automation_writes) == 1
 
     def test_reject_not_found(self):
         assert reject_care_plan("nonexistent", "reason") is None

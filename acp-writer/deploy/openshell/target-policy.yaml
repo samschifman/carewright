@@ -32,11 +32,15 @@ sandbox:
         port: 443
         description: "MLflow tracing"
 
+      - host: automation
+        port: 8080
+        description: "Publish approved care-plan automations"
+
     # acp-writer should NOT reach:
     deny:
       - description: "Public internet — no data exfiltration"
       - description: "Other namespaces — blast radius containment"
-      - description: "Automation service — acp-writer publishes BPMN, does not execute it"
+      - description: "Automation service execution APIs — acp-writer publishes BPMN but never executes it"
 
   filesystem:
     writable:

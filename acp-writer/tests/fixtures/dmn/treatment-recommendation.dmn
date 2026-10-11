@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             id="treatment-recommendation"
+             name="Treatment Recommendation"
+             namespace="https://redhat.com/cpg-to-acp/dmn/treatment-recommendation">
+
+  <inputData id="input_systolic_bp" name="Systolic BP">
+    <variable id="var_systolic_bp" name="Systolic BP" typeRef="number"/>
+  </inputData>
+
+  <inputData id="input_has_diabetes" name="Has Diabetes">
+    <variable id="var_has_diabetes" name="Has Diabetes" typeRef="boolean"/>
+  </inputData>
+
+  <inputData id="input_has_kidney_disease" name="Has Kidney Disease">
+    <variable id="var_has_kidney_disease" name="Has Kidney Disease" typeRef="boolean"/>
+  </inputData>
+
+  <decision id="decision_treatment_recommendation" name="Treatment Recommendation">
+    <variable id="var_decision_treatment" name="Treatment Recommendation" typeRef="Any"/>
+    <informationRequirement id="ir1">
+      <requiredInput href="#input_systolic_bp"/>
+    </informationRequirement>
+    <informationRequirement id="ir2">
+      <requiredInput href="#input_has_diabetes"/>
+    </informationRequirement>
+    <informationRequirement id="ir3">
+      <requiredInput href="#input_has_kidney_disease"/>
+    </informationRequirement>
+    <decisionTable id="dt_treatment_recommendation" hitPolicy="FIRST" preferredOrientation="Rule-as-Row">
+      <input id="input_col_sbp" label="Systolic BP (mmHg)">
+        <inputExpression id="ie_sbp" typeRef="number">
+          <text><![CDATA[Systolic BP]]></text>
+        </inputExpression>
+      </input>
+      <input id="input_col_diabetes" label="Has Diabetes">
+        <inputExpression id="ie_diabetes" typeRef="boolean">
+          <text><![CDATA[Has Diabetes]]></text>
+        </inputExpression>
+      </input>
+      <input id="input_col_kidney" label="Has Kidney Disease">
+        <inputExpression id="ie_kidney" typeRef="boolean">
+          <text><![CDATA[Has Kidney Disease]]></text>
+        </inputExpression>
+      </input>
+      <output id="output_action" name="Action" typeRef="string"/>
+      <output id="output_medication" name="Medication" typeRef="string"/>
+      <output id="output_dose" name="Dose" typeRef="string"/>
+      <output id="output_followup_weeks" name="Follow Up Weeks" typeRef="number"/>
+
+      <!-- Rule 1: SBP >= 140, No Diabetes, No Kidney Disease -->
+      <rule id="rule_1">
+        <description>Stage 2 hypertension without comorbidities</description>
+        <inputEntry id="r1_ie1"><text><![CDATA[>= 140]]></text></inputEntry>
+        <inputEntry id="r1_ie2"><text><![CDATA[false]]></text></inputEntry>
+        <inputEntry id="r1_ie3"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r1_oe1"><text><![CDATA["Start medication"]]></text></outputEntry>
+        <outputEntry id="r1_oe2"><text><![CDATA["Lisinopril"]]></text></outputEntry>
+        <outputEntry id="r1_oe3"><text><![CDATA["10 mg daily"]]></text></outputEntry>
+        <outputEntry id="r1_oe4"><text><![CDATA[4]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 2: SBP >= 130, Diabetes, No Kidney Disease -->
+      <rule id="rule_2">
+        <description>Stage 1+ hypertension with diabetes</description>
+        <inputEntry id="r2_ie1"><text><![CDATA[>= 130]]></text></inputEntry>
+        <inputEntry id="r2_ie2"><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry id="r2_ie3"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r2_oe1"><text><![CDATA["Start medication"]]></text></outputEntry>
+        <outputEntry id="r2_oe2"><text><![CDATA["Lisinopril"]]></text></outputEntry>
+        <outputEntry id="r2_oe3"><text><![CDATA["10 mg daily"]]></text></outputEntry>
+        <outputEntry id="r2_oe4"><text><![CDATA[2]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 3: SBP >= 130, No Diabetes, Kidney Disease -->
+      <rule id="rule_3">
+        <description>Stage 1+ hypertension with kidney disease</description>
+        <inputEntry id="r3_ie1"><text><![CDATA[>= 130]]></text></inputEntry>
+        <inputEntry id="r3_ie2"><text><![CDATA[false]]></text></inputEntry>
+        <inputEntry id="r3_ie3"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="r3_oe1"><text><![CDATA["Start medication"]]></text></outputEntry>
+        <outputEntry id="r3_oe2"><text><![CDATA["Lisinopril"]]></text></outputEntry>
+        <outputEntry id="r3_oe3"><text><![CDATA["10 mg daily"]]></text></outputEntry>
+        <outputEntry id="r3_oe4"><text><![CDATA[2]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 4: SBP >= 130, Diabetes, Kidney Disease -->
+      <rule id="rule_4">
+        <description>Stage 1+ hypertension with both diabetes and kidney disease</description>
+        <inputEntry id="r4_ie1"><text><![CDATA[>= 130]]></text></inputEntry>
+        <inputEntry id="r4_ie2"><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry id="r4_ie3"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="r4_oe1"><text><![CDATA["Start medication"]]></text></outputEntry>
+        <outputEntry id="r4_oe2"><text><![CDATA["Lisinopril"]]></text></outputEntry>
+        <outputEntry id="r4_oe3"><text><![CDATA["10 mg daily"]]></text></outputEntry>
+        <outputEntry id="r4_oe4"><text><![CDATA[2]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 5: SBP 130-139, No Diabetes, No Kidney Disease -->
+      <rule id="rule_5">
+        <description>Stage 1 hypertension without comorbidities - lifestyle only</description>
+        <inputEntry id="r5_ie1"><text><![CDATA[[130..139]]]></text></inputEntry>
+        <inputEntry id="r5_ie2"><text><![CDATA[false]]></text></inputEntry>
+        <inputEntry id="r5_ie3"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r5_oe1"><text><![CDATA["Lifestyle modification only"]]></text></outputEntry>
+        <outputEntry id="r5_oe2"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r5_oe3"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r5_oe4"><text><![CDATA[8]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 6: SBP < 130, No Diabetes, No Kidney Disease -->
+      <rule id="rule_6">
+        <description>Sub-hypertensive BP without comorbidities</description>
+        <inputEntry id="r6_ie1"><text><![CDATA[< 130]]></text></inputEntry>
+        <inputEntry id="r6_ie2"><text><![CDATA[false]]></text></inputEntry>
+        <inputEntry id="r6_ie3"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r6_oe1"><text><![CDATA["Lifestyle modification only"]]></text></outputEntry>
+        <outputEntry id="r6_oe2"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r6_oe3"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r6_oe4"><text><![CDATA[12]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 7: SBP < 130, Diabetes, No Kidney Disease -->
+      <rule id="rule_7">
+        <description>Sub-hypertensive BP with diabetes</description>
+        <inputEntry id="r7_ie1"><text><![CDATA[< 130]]></text></inputEntry>
+        <inputEntry id="r7_ie2"><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry id="r7_ie3"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r7_oe1"><text><![CDATA["Lifestyle modification only"]]></text></outputEntry>
+        <outputEntry id="r7_oe2"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r7_oe3"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r7_oe4"><text><![CDATA[12]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 8: SBP < 130, No Diabetes, Kidney Disease -->
+      <rule id="rule_8">
+        <description>Sub-hypertensive BP with kidney disease</description>
+        <inputEntry id="r8_ie1"><text><![CDATA[< 130]]></text></inputEntry>
+        <inputEntry id="r8_ie2"><text><![CDATA[false]]></text></inputEntry>
+        <inputEntry id="r8_ie3"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="r8_oe1"><text><![CDATA["Lifestyle modification only"]]></text></outputEntry>
+        <outputEntry id="r8_oe2"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r8_oe3"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r8_oe4"><text><![CDATA[12]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 9: SBP < 130, Diabetes, Kidney Disease -->
+      <rule id="rule_9">
+        <description>Sub-hypertensive BP with both diabetes and kidney disease</description>
+        <inputEntry id="r9_ie1"><text><![CDATA[< 130]]></text></inputEntry>
+        <inputEntry id="r9_ie2"><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry id="r9_ie3"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="r9_oe1"><text><![CDATA["Lifestyle modification only"]]></text></outputEntry>
+        <outputEntry id="r9_oe2"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r9_oe3"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r9_oe4"><text><![CDATA[12]]></text></outputEntry>
+      </rule>
+
+    </decisionTable>
+  </decision>
+
+</definitions>

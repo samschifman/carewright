@@ -26,6 +26,8 @@ class ResolvedConcept:
 
 
 _OBSERVATION_MAP: dict[str, tuple[str, str]] = {
+    "blood pressure": (LOINC, "85354-9"),
+    "blood pressure panel": (LOINC, "85354-9"),
     "systolic bp": (LOINC, "8480-6"),
     "systolic blood pressure": (LOINC, "8480-6"),
     "sbp": (LOINC, "8480-6"),

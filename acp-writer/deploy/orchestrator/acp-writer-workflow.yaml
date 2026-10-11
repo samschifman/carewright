@@ -199,6 +199,7 @@ spec:
             arguments:
               callback_url: "http://acpwriter:80/wait-generate"
               process_instance_id: "$WORKFLOW.instanceId"
+              careplan_id: "$WORKFLOW.instanceId"
               planning_brief_ref: "${ .composerData.planning_brief_ref }"
               # Rendered composer/conflict prompts captured by ComposePlan, so the
               # deployed bundle carries AI-InputPrompt DocRefs like the monolith
@@ -346,6 +347,7 @@ spec:
               arguments:
                 fhir_bundle_ref: "${ .fhirGenData.fhir_bundle_ref }"
                 patient_reference: "${ .patientData.patient_reference }"
+                careplan_id: "$WORKFLOW.instanceId"
                 # Approving clinician from the care-plan review gate. Null when
                 # the UI omits it; /api/v1/write then falls back to the config
                 # default reviewer. Threaded so the deployed approval records the

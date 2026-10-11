@@ -24,6 +24,7 @@ export type CodedItem = S["CodedItem"];
 
 export type PlanGoal = S["PlanGoal"];
 export type PlanActivity = S["PlanActivity"];
+export type ActivityAutomationView = S["ActivityAutomationView"];
 export type PlanConflict = S["PlanConflict"];
 export type ConflictSource = S["ConflictSource"];
 export type CarePlanView = S["CarePlanView"];

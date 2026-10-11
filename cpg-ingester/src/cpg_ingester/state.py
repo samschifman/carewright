@@ -31,6 +31,7 @@ class CPGIngesterState(TypedDict, total=False):
     # Phase 2 outputs
     dmn_results: list[dict]
     recommendation_results: list[dict]
+    bpmn_results: list[dict]
     recommendation_escalations: list[dict]
     escalated_items: list[dict]
     assembly_report: dict
@@ -47,6 +48,8 @@ class DMNPipelineState(TypedDict, total=False):
     llm_model: str
     llm_api_key: str
     output_dir: str
+    review_feedback: str
+    review_comment: str
     dmn_xml: str
     cpg_metadata: dict
     syntax_errors: list[str]
@@ -73,10 +76,44 @@ class RecPipelineState(TypedDict, total=False):
     llm_model: str
     llm_api_key: str
     output_dir: str
+    review_feedback: str
+    review_comment: str
     recommendations: list[dict]
     schema_errors: list[str]
     semantic_discrepancies: list[str]
     review_count: int
+    escalated: bool
+    escalation_reason: str
+    escalation_errors: list[str]
+    force_escalate: bool
+
+
+class BPMNPipelineState(TypedDict, total=False):
+    """State for Process IR creation, validation, review, and preflight."""
+
+    item: dict
+    source_pages: str
+    figures: list[dict]
+    abbreviations: dict[str, str]
+    litellm_url: str
+    llm_model: str
+    llm_api_key: str
+    output_dir: str
+    cpg_metadata: dict
+    dmn_summaries: dict[str, dict]
+    linked_recs: list[dict]
+    human_feedback: str
+    process_ir: dict
+    bpmn_xml: str
+    template_summary: dict
+    static_findings: list[dict]
+    static_rungs_passed: list[str]
+    deferred_invariants: list[str]
+    static_retry_count: int
+    semantic_discrepancies: list[str]
+    semantic_retry_count: int
+    engine_errors: list[str]
+    engine_validation_warnings: list[str]
     escalated: bool
     escalation_reason: str
     escalation_errors: list[str]

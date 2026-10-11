@@ -34,6 +34,8 @@ downstream even though they are not recommendations.
 recommendations are "skip".
 - Implementation/quality measure sections that describe how to operationalize \
 guidelines are "recommendation" (type: process).
+- Monitoring and implementation sections may also yield care-process items \
+  for automation when they describe an operational sequence.
 - When in doubt between "skip" and another classification, prefer the \
 non-skip classification — downstream filtering can remove content, but \
 cannot recover content that was skipped here.

@@ -20,6 +20,7 @@ from importlib import metadata
 from typing import TYPE_CHECKING, Any
 
 import mlflow
+from cpg_contracts.automation.expressions import ExpressionError, parse_duration
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids any import ordering risk
     from acp_writer.services.reviewer import ReviewerContext
@@ -72,6 +73,18 @@ PROVENANCE_PARTICIPANT_TYPE = "http://terminology.hl7.org/CodeSystem/provenance-
 # The project's own (non-IG) extension base — §4.6 of the dev plan. Sam may
 # change this value later; it is defined once here.
 ACP_EXT_BASE = "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition"
+ACP_CS_BASE = "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem"
+
+ACTIVITY_AUTOMATION_EXT = f"{ACP_EXT_BASE}/activity-automation"
+AUTOMATION_TEMPLATE_EXT = f"{ACP_EXT_BASE}/automation-template"
+AUTOMATION_PARAMETER_SOURCE_EXT = f"{ACP_EXT_BASE}/automation-parameter-source"
+AUTOMATION_REVISION_SYSTEM = f"{ACP_CS_BASE}/automation-revision"
+AUTOMATION_ID_SYSTEM = f"{ACP_CS_BASE}/automation-id"
+AUTOMATION_DOCUMENT_TYPE_SYSTEM = f"{ACP_CS_BASE}/automation-document-type"
+AUTOMATION_DOCUMENT_CATEGORY_SYSTEM = f"{ACP_CS_BASE}/automation-document-category"
+AUTOMATION_TASK_CODE_SYSTEM = f"{ACP_CS_BASE}/automation-task-code"
+AUTOMATION_INPUT_SYSTEM = f"{ACP_CS_BASE}/automation-input"
+DOCUMENT_FORMAT_SYSTEM = f"{ACP_CS_BASE}/document-format"
 
 
 def _app_version() -> str:
@@ -90,6 +103,227 @@ def aiast_security() -> dict:
 def targetPath_ext(fhirpath: str) -> dict:
     """Stock FHIR ``targetPath`` extension narrowing a target to a FHIRPath."""
     return {"url": TARGET_PATH_EXT, "valueString": fhirpath}
+
+
+def _value(value: Any, name: str, default: Any = None) -> Any:
+    if isinstance(value, dict):
+        return value.get(name, default)
+    return getattr(value, name, default)
+
+
+def _binding_value(parameter: Any, binding: Any) -> tuple[str, Any]:
+    """Return the FHIR value[x] element and its value for one plan binding."""
+    name = str(_value(binding, "name", ""))
+    value = _value(binding, "value")
+    if name.endswith("__code"):
+        if not isinstance(value, str) or "|" not in value:
+            raise ValueError(f"resolved code binding {name!r} must be system|code")
+        system, code = value.split("|", 1)
+        return "valueCodeableConcept", {"coding": [{"system": system, "code": code}]}
+    kind = _value(parameter, "type")
+    if kind == "duration":
+        if not isinstance(value, str):
+            raise ValueError(f"duration binding {name!r} must be an ISO duration")
+        try:
+            duration = parse_duration(value)
+        except ExpressionError as exc:
+            raise ValueError(f"invalid duration binding {name!r}: {exc}") from exc
+        seconds = int(duration.total_seconds())
+        if seconds % 86400 == 0:
+            amount, unit, code = seconds // 86400, "day", "d"
+        elif seconds % 3600 == 0:
+            amount, unit, code = seconds // 3600, "hour", "h"
+        else:
+            raise ValueError(f"duration binding {name!r} must be a whole number of days or hours")
+        return "valueDuration", {
+            "value": amount,
+            "unit": unit,
+            "system": "http://unitsofmeasure.org",
+            "code": code,
+        }
+    if kind == "quantity":
+        unit_code = _value(binding, "unit") or _value(parameter, "unit")
+        if unit_code is None:
+            raise ValueError(f"quantity binding {name!r} has no UCUM unit")
+        unit_display = {"mm[Hg]": "mmHg"}.get(unit_code, unit_code)
+        return "valueQuantity", {
+            "value": value,
+            "unit": unit_display,
+            "system": "http://unitsofmeasure.org",
+            "code": unit_code,
+        }
+    value_key = {
+        "integer": "valueInteger",
+        "decimal": "valueDecimal",
+        "boolean": "valueBoolean",
+        "string": "valueString",
+    }.get(kind)
+    if value_key is None:
+        raise ValueError(f"unsupported bound parameter type {kind!r} for {name!r}")
+    return value_key, value
+
+
+@mlflow.trace(name="fhir.build_automation_document_reference")
+def build_automation_docref(
+    *, docref_id: str, task_id: str, patient_ref: str, careplan_ref: str,
+    revision: str, name: str, template_id: str, bpmn_xml: str, now: str,
+) -> dict:
+    """Build the patient-free BPMN DocumentReference for one instance revision."""
+    data = base64.b64encode(bpmn_xml.encode("utf-8")).decode("ascii")
+    return {
+        "resourceType": "DocumentReference",
+        "id": docref_id,
+        "meta": {"security": [aiast_security()]},
+        "identifier": [{"system": AUTOMATION_REVISION_SYSTEM, "value": revision}],
+        "status": "current",
+        "type": {"coding": [{
+            "system": AUTOMATION_DOCUMENT_TYPE_SYSTEM,
+            "code": "bpmn-process-definition",
+            "display": "BPMN 2.0 process definition",
+        }]},
+        "category": [{"coding": [{
+            "system": AUTOMATION_DOCUMENT_CATEGORY_SYSTEM,
+            "code": "care-plan-automation",
+        }]}],
+        "subject": {"reference": patient_ref},
+        "date": now,
+        "description": name,
+        "content": [{
+            "attachment": {
+                "contentType": "application/xml",
+                "data": data,
+                "title": template_id,
+                "creation": now,
+            },
+            "format": {
+                "system": DOCUMENT_FORMAT_SYSTEM,
+                "code": "bpmn-2.0-xml",
+                "display": "BPMN 2.0 XML (Kogito profile)",
+            },
+        }],
+        "context": {"related": [
+            {"reference": careplan_ref},
+            {"reference": f"urn:uuid:{task_id}"},
+        ]},
+    }
+
+
+@mlflow.trace(name="fhir.build_automation_task")
+def build_automation_task(
+    *, task_id: str, automation: Any, name: str, patient_ref: str,
+    careplan_ref: str, focus_ref: str | None, docref_ref: str, now: str,
+) -> dict:
+    """Build the Task containing all plan-specific automation values."""
+    ir = _value(automation, "ir")
+    acp = _value(_value(ir, "process"), "acp")
+    parameters = {parameter.name: parameter for parameter in _value(acp, "parameters", [])}
+    refs = _value(automation, "template_refs", []) or []
+    template_extensions = []
+    for ref in refs:
+        template_fields = [
+            {"url": "templateId", "valueString": _value(ref, "template_id")},
+            {"url": "version", "valueString": _value(ref, "version")},
+        ]
+        source_cpg = _value(ref, "source_cpg")
+        if source_cpg:
+            template_fields.append({"url": "sourceCpg", "valueString": source_cpg})
+        template_extensions.append({"url": AUTOMATION_TEMPLATE_EXT, "extension": template_fields})
+    inputs = [{
+        "type": {"coding": [{"system": AUTOMATION_INPUT_SYSTEM, "code": "process-definition"}]},
+        "valueReference": {"reference": docref_ref},
+    }]
+    for binding in _value(automation, "bindings", []) or []:
+        binding_name = _value(binding, "name")
+        parameter = parameters.get(binding_name)
+        if parameter is None and not str(binding_name).endswith("__code"):
+            raise ValueError(f"automation binding {binding_name!r} has no matching IR parameter")
+        value_key, value = _binding_value(parameter, binding)
+        inputs.append({
+            "type": {
+                "coding": [{"system": AUTOMATION_INPUT_SYSTEM, "code": "parameter"}],
+                "text": binding_name,
+            },
+            "extension": [{
+                "url": AUTOMATION_PARAMETER_SOURCE_EXT,
+                "valueCode": _value(binding, "source"),
+            }],
+            value_key: value,
+        })
+    task = {
+        "resourceType": "Task",
+        "id": task_id,
+        "meta": {"security": [aiast_security()]},
+        "identifier": [
+            {"system": AUTOMATION_ID_SYSTEM, "value": _value(automation, "id")},
+            {"system": AUTOMATION_REVISION_SYSTEM, "value": _value(automation, "revision")},
+        ],
+        "status": "draft",
+        "intent": "plan",
+        "code": {
+            "coding": [{"system": AUTOMATION_TASK_CODE_SYSTEM, "code": "care-plan-automation"}],
+            "text": name,
+        },
+        "for": {"reference": patient_ref},
+        "basedOn": [{"reference": careplan_ref}],
+        "authoredOn": now,
+        "input": inputs,
+    }
+    if template_extensions:
+        task["extension"] = template_extensions
+    if focus_ref:
+        task["focus"] = {"reference": focus_ref}
+    return task
+
+
+def activity_automation_extension(docref_ref: str, task_ref: str, status: str = "enabled") -> dict:
+    """Return the project extension linking a CarePlan activity to its automation."""
+    return {
+        "url": ACTIVITY_AUTOMATION_EXT,
+        "extension": [
+            {"url": "definition", "valueReference": {"reference": docref_ref}},
+            {"url": "instance", "valueReference": {"reference": task_ref}},
+            {"url": "status", "valueCode": status},
+        ],
+    }
+
+
+@mlflow.trace(name="fhir.build_automation_provenance")
+def build_automation_provenance(
+    *, prov_uid: str, careplan_ref: str, activity_indices: list[int], docref_ref: str,
+    task_ref: str, device_ref: str, recorded: str, source_recommendation_ids: list[str],
+    template_refs: list[Any], input_prompt_refs: list[str] | None = None,
+) -> dict:
+    entities: list[dict] = []
+    for recommendation_id in sorted(set(source_recommendation_ids)):
+        entities.append({
+            "role": "source",
+            "what": {"identifier": {"value": recommendation_id}},
+        })
+    for ref in template_refs:
+        entities.append({
+            "role": "derivation",
+            "what": {"identifier": {
+                "system": AUTOMATION_ID_SYSTEM,
+                "value": f"{_value(ref, 'template_id')}@{_value(ref, 'version')}",
+            }},
+        })
+    for prompt_ref in input_prompt_refs or []:
+        entities.append({"role": "derivation", "what": {"reference": prompt_ref}})
+    activity_targets = [
+        {
+            "reference": careplan_ref,
+            "extension": [targetPath_ext(f"CarePlan.activity[{activity_index}]")],
+        }
+        for activity_index in activity_indices
+    ]
+    return build_ai_provenance(
+        prov_uid=prov_uid,
+        targets=[{"reference": docref_ref}, {"reference": task_ref}, *activity_targets],
+        device_urn=device_ref,
+        recorded=recorded,
+        occurred=recorded,
+        entities=entities or None,
+    )
 
 
 # Map the analyst's free-form confidence ("low"/"medium"/"high") onto the
@@ -362,12 +596,13 @@ def apply_approval_transition(bundle: dict, reviewer: "ReviewerContext") -> list
     path previously only swapped security tags, silently dropping the human
     verifier and conflict acknowledgment (issue #169 F1).
 
-    It performs all four transitions in one pass:
+    It performs the approval transitions in one pass:
 
     1. Swap every ``AIAST`` ``meta.security`` label → ``CLINAST_AIRPT``.
     2. Set the CarePlan ``status`` → ``active``.
     3. Append ``reviewer`` as a ``verifier`` Humanagent on every AI-Provenance.
-    4. Flip every conflict Provenance's ``conflict-status`` → ``acknowledged``.
+    4. Flip automation Tasks from ``draft`` → ``requested``.
+    5. Flip every conflict Provenance's ``conflict-status`` → ``acknowledged``.
 
     Returns the ``fullUrl`` of every entry it modified, so a future server-side
     persistence step (the phase-runner fast-follow, issue #174 F5) can PUT back
@@ -389,6 +624,9 @@ def apply_approval_transition(bundle: dict, reviewer: "ReviewerContext") -> list
 
         if resource.get("resourceType") == "CarePlan":
             resource["status"] = "active"
+            touched = True
+        elif resource.get("resourceType") == "Task" and resource.get("status") == "draft":
+            resource["status"] = "requested"
             touched = True
 
         if resource.get("resourceType") == "Provenance":

@@ -59,3 +59,73 @@ def test_decision_engine_service_does_not_import_langchain():
     assert result.returncode == 0, (
         f"decision_engine service imports langchain_openai:\n{result.stderr}"
     )
+
+
+def test_acp_writer_does_not_import_downstream_components():
+    """The writer owns its registry and consumes only the shared contracts."""
+    src = Path(__file__).parent.parent / "src" / "acp_writer"
+    violations = []
+    for py_file in src.rglob("*.py"):
+        if "__pycache__" in str(py_file):
+            continue
+        for imp in _get_imports(py_file):
+            if imp.startswith(("cpg_ingester", "automation_service")):
+                violations.append(f"{py_file.relative_to(src)}: imports {imp}")
+    assert not violations, "Cross-component imports found:\n" + "\n".join(violations)
+
+
+def test_nodes_and_services_do_not_lazy_import_the_api_module():
+    src = Path(__file__).parent.parent / "src" / "acp_writer"
+    violations = []
+    for directory in (src / "nodes", src / "services"):
+        for py_file in directory.rglob("*.py"):
+            tree = ast.parse(py_file.read_text())
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for child in ast.walk(node):
+                    if isinstance(child, ast.ImportFrom) and child.module == "acp_writer.api":
+                        violations.append(f"{py_file.relative_to(src)}:{child.lineno}")
+                    elif isinstance(child, ast.Import):
+                        if any(alias.name == "acp_writer.api" for alias in child.names):
+                            violations.append(f"{py_file.relative_to(src)}:{child.lineno}")
+    assert not violations, "Lazy API imports in nodes/services:\n" + "\n".join(violations)
+
+
+def test_acp_writer_tests_use_owned_fixtures():
+    tests = Path(__file__).parent
+    references = [
+        f"{path.relative_to(tests)}:{line_number}"
+        for path in tests.rglob("*.py")
+        for line_number, line in enumerate(path.read_text().splitlines(), 1)
+        if "cpg-" + "ingester" in line
+    ]
+    assert not references, "acp-writer tests must not read upstream ingester data:\n" + "\n".join(references)
+
+
+def test_automation_image_copies_only_the_shared_package_inputs():
+    root = Path(__file__).resolve().parents[2]
+    containerfile = (root / "automation" / "deploy" / "Containerfile").read_text()
+    shared_copies = [line for line in containerfile.splitlines() if line.startswith("COPY shared/")]
+    assert shared_copies == [
+        "COPY shared/pyproject.toml /app/shared/pyproject.toml",
+        "COPY shared/src/ /app/shared/src/",
+    ]
+
+
+def test_slice_mounts_live_only_in_the_slice_compose_override():
+    root = Path(__file__).resolve().parents[2]
+    base = (root / "compose.yml").read_text()
+    slice_override = (root / "compose.slice.yml").read_text()
+    for token in ("ACP_RUN_ARTIFACT_DIR", "CPG_INGESTER_MOCK_RUN_DIR", "./working/slice-run"):
+        assert token not in base
+        assert token in slice_override
+
+
+def test_mock_scenario_is_not_a_container_build_argument():
+    root = Path(__file__).resolve().parents[2]
+    for containerfile in (
+        root / "acp-writer" / "ui" / "Containerfile",
+        root / ("cpg-" + "ingester") / "ui" / "Containerfile",
+    ):
+        assert "VITE_MOCK_SCENARIO" not in containerfile.read_text()

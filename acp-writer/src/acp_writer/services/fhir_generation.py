@@ -43,7 +43,7 @@ def _resolve_prompts(data: dict) -> dict:
         return {}
     return {
         k: prompts[k]
-        for k in ("plan_composer_prompt", "conflict_prompt")
+        for k in ("plan_composer_prompt", "conflict_prompt", "automation_prompts")
         if prompts.get(k)
     }
 
@@ -55,6 +55,7 @@ async def generate_bundle(request: Request):
     planning_brief = resolve_ref(data, "planning_brief", _phi_store)
     state = {
         "planning_brief": planning_brief,
+        "careplan_id": data.get("careplan_id") or data.get("process_instance_id"),
         "patient_demographics": data.get("patient_demographics", {}),
         "fhir_review_feedback": data.get("fhir_review_feedback", ""),
         "litellm_url": LITELLM_URL,
@@ -101,6 +102,7 @@ def _run_generate_background(data: dict, callback_url: str, process_instance_id:
         planning_brief = resolve_ref(data, "planning_brief", _phi_store)
         state = {
             "planning_brief": planning_brief,
+            "careplan_id": data.get("careplan_id") or data.get("process_instance_id"),
             "patient_demographics": data.get("patient_demographics", {}),
             "fhir_review_feedback": data.get("fhir_review_feedback", ""),
             "litellm_url": LITELLM_URL,

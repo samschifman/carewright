@@ -7,7 +7,7 @@ DecisionModelSummary.modifies for topological execution order.
 
 import logging
 import os
-from typing import Any
+from typing import Any, Callable
 
 import mlflow
 import requests
@@ -78,11 +78,14 @@ def _build_dependency_graph(
 
 
 @mlflow.trace(name="guideline_resolver")
-def guideline_resolver(state: CarePlanComposerState) -> dict:
+def guideline_resolver(
+    state: CarePlanComposerState,
+    *,
+    guidelines_store: Any,
+    decision_models_provider: Callable[[], list[dict[str, Any]]],
+) -> dict:
     """Match patient conditions to registered CPGs and DMN models."""
     logger.info("── Guideline Resolver ──")
-    from acp_writer.api import _guidelines_store
-
     condition_codes = state.get("condition_codes", [])
     if not condition_codes:
         logger.warning("No condition codes to match — skipping guideline resolution")
@@ -92,7 +95,7 @@ def guideline_resolver(state: CarePlanComposerState) -> dict:
             "dmn_dependency_graph": [],
         }
 
-    all_guidelines = _guidelines_store.list_all()
+    all_guidelines = guidelines_store.list_all()
     applicable_cpgs = []
     applicable_cpg_ids: set[str] = set()
 
@@ -119,8 +122,7 @@ def guideline_resolver(state: CarePlanComposerState) -> dict:
             logger.warning("Failed to query decision engine for models: %s", e)
             all_models = []
     else:
-        from acp_writer.api import _dynamic_models
-        all_models = [entry["summary"].model_dump(mode="json") for entry in _dynamic_models.values()]
+        all_models = decision_models_provider()
 
     applicable_models = []
     for model in all_models:

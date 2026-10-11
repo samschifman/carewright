@@ -61,6 +61,19 @@ def main(
 
     result = compiled.invoke(initial_state, config=config)
 
+    write_artifact(str(output_dir), "analysis-result.json", {
+        "cpg_metadata": result.get("cpg_metadata", {}),
+        "section_map": result.get("section_map", []),
+        "item_manifest": result.get("item_manifest", []),
+    })
+    write_artifact(str(output_dir), "generation-result.json", {
+        "dmn_results": result.get("dmn_results", []),
+        "recommendation_results": result.get("recommendation_results", []),
+        "bpmn_results": result.get("bpmn_results", []),
+        "recommendation_escalations": result.get("recommendation_escalations", []),
+        "escalated_items": result.get("escalated_items", []),
+    })
+
     write_artifact(str(output_dir), "run-summary.json", {
         "run_id": run_id,
         "pdf_path": str(input_pdf),

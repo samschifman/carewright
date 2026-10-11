@@ -12,6 +12,7 @@ import uuid
 import click
 
 from acp_writer.pipeline import build_pipeline
+from acp_writer import api
 
 
 @click.command()
@@ -31,7 +32,16 @@ def main(bundle_file: str, litellm_url: str, model: str, api_key: str, output_di
     if not output_dir:
         output_dir = f"output/{run_id}"
 
-    graph = build_pipeline()
+    graph = build_pipeline(
+        automation_registry=api._automation_registry,
+        automation_validator=api._automation_validation_result,
+        guidelines_store=api._guidelines_store,
+        vector_store=api._vector_store,
+        decision_models_provider=lambda: [
+            entry["summary"].model_dump(mode="json")
+            for entry in api._dynamic_models.values()
+        ],
+    )
     compiled = graph.compile()
 
     result = compiled.invoke({

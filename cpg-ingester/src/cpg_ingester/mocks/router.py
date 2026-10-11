@@ -1,6 +1,7 @@
 """Mock API router for BFF development. Not shipped in production images."""
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -11,6 +12,7 @@ from cpg_ingester.mocks.data import (
     RUNS,
     RUN_DETAILS,
     _make_steps,
+    load_run_directory,
 )
 
 logger = logging.getLogger(__name__)
@@ -18,13 +20,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _configured_run() -> tuple[dict[str, Any], dict[str, Any]] | None:
+    directory = os.getenv("CPG_INGESTER_MOCK_RUN_DIR")
+    if not directory:
+        return None
+    return load_run_directory(directory)
+
+
 @router.get("/api/v1/runs")
 def list_runs():
+    configured = _configured_run()
+    if configured:
+        return [configured[0]]
     return list(RUNS.values())
 
 
 @router.get("/api/v1/runs/{run_id}")
 def get_run(run_id: str):
+    configured = _configured_run()
+    if configured:
+        run, detail = configured
+        if run_id == run["id"]:
+            return detail
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"error": f"Run {run_id} not found"})
     detail = RUN_DETAILS.get(run_id)
     if not detail:
         from fastapi.responses import JSONResponse

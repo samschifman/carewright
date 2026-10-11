@@ -20,7 +20,7 @@ def load_bundle(name: str) -> dict:
 
 
 def load_dmn(name: str) -> str:
-    path = PROJECT_ROOT / "cpg-ingester" / "data" / "golden" / name
+    path = Path(__file__).parent / "fixtures" / "dmn" / name
     return path.read_text()
 
 

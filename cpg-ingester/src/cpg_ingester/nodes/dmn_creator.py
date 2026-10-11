@@ -159,6 +159,13 @@ def dmn_creator(state: dict) -> dict:
 
     feedback = _build_feedback(
         syntax_errors, semantic_discrepancies, previous_dmn_xml, engine_errors)
+    review_feedback = state.get("review_feedback", "") or ""
+    review_comment = state.get("review_comment", "") or ""
+    if review_feedback or review_comment:
+        human_section = "## HUMAN REVIEW FEEDBACK\n" + "\n".join(
+            value for value in (review_feedback, review_comment) if value
+        )
+        feedback = "\n\n".join(value for value in (human_section, feedback) if value)
 
     abbr_str = "\n".join(f"- {k}: {v}" for k, v in abbreviations.items()) if abbreviations else "(none)"
 

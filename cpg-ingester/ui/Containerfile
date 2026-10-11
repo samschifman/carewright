@@ -1,16 +1,21 @@
+# Build from the repository root so the application can use the shared UI package.
 FROM registry.access.redhat.com/ubi9/nodejs-22 AS build
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+USER 0
+WORKDIR /build
+
+COPY shared/ui/package.json shared/ui/package-lock.json shared/ui/
+RUN cd shared/ui && npm ci
+COPY cpg-ingester/ui/package.json cpg-ingester/ui/package-lock.json cpg-ingester/ui/
+RUN cd cpg-ingester/ui && npm ci
+
+COPY shared/ui/ shared/ui/
+RUN cd shared/ui && npm run build
+COPY cpg-ingester/ui/ cpg-ingester/ui/
+RUN cd cpg-ingester/ui && npm run build
 
 FROM registry.access.redhat.com/ubi9/nginx-124
-# Copy built app to UBI nginx static content location
-COPY --from=build /opt/app-root/src/dist /opt/app-root/src
-# Install location blocks as a template in the default server (envsubst processes ${BFF_HOST} at startup)
-COPY nginx.conf /opt/app-root/etc/nginx.default.d/app.conf.template
-# Startup script: envsubst the template then start nginx
-# UBI nginx's run script processes scripts from /opt/app-root/src/nginx-start/
+COPY --from=build /build/cpg-ingester/ui/dist /opt/app-root/src
+COPY cpg-ingester/ui/nginx.conf /opt/app-root/etc/nginx.default.d/app.conf.template
 RUN mkdir -p /opt/app-root/src/nginx-start && \
     printf '#!/bin/bash\nenvsubst "\\$BFF_HOST" < /opt/app-root/etc/nginx.default.d/app.conf.template > /opt/app-root/etc/nginx.default.d/app.conf\n' \
     > /opt/app-root/src/nginx-start/50-envsubst.sh && \

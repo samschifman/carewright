@@ -1,0 +1,838 @@
+{
+  "goals": [],
+  "activities": [
+    {
+      "id": "activity-home-bp",
+      "description": "Monitor home blood pressure readings.",
+      "sourceCpg": "SYN-HTN-2026-002",
+      "sourceRecommendationId": "rec-home-bp",
+      "automations": [
+        {
+          "id": "b372d355-4de4-4b47-9097-a157cc385ff1",
+          "templateRefs": [
+            {
+              "templateId": "home-bp-monitoring",
+              "version": "499a6a2c1b81",
+              "sourceCpg": "SYN-HTN-2026-002"
+            }
+          ],
+          "activityIds": [
+            "activity-home-bp"
+          ],
+          "enabled": true,
+          "revision": "fb560bf1cd2b",
+          "bpmnXml": "<?xml version='1.0' encoding='UTF-8'?>\n<bpmn2:definitions xmlns:bpmn2=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:drools=\"http://www.jboss.org/drools\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:acp=\"https://github.com/samschifman/cpg-to-acp/bpmn\" id=\"instance_home_bp_defs\" targetNamespace=\"https://github.com/samschifman/cpg-to-acp/bpmn/SYN-HTN-2026-002\">\n  <bpmn2:itemDefinition id=\"_strItem\" structureRef=\"String\"/>\n  <bpmn2:itemDefinition id=\"_intItem\" structureRef=\"Integer\"/>\n  <bpmn2:itemDefinition id=\"_dblItem\" structureRef=\"Double\"/>\n  <bpmn2:process id=\"instance_home_bp\" name=\"Home blood pressure monitoring with outreach and escalation\" isExecutable=\"true\" processType=\"Public\" drools:packageName=\"org.carewright.automation\" drools:version=\"d233217872ed\">\n    <bpmn2:extensionElements>\n      <drools:metaData name=\"acp.catalogVersion\">1.0</drools:metaData>\n      <acp:template><![CDATA[{\"catalog_version\":\"1.0\",\"consolidated_boundaries\":[],\"description\":\"\",\"invariants\":[\"max_duration >= reporting_interval * (max_reminder_attempts + 1)\"],\"ir_version\":\"1.0\",\"kind\":\"instance\",\"parameters\":[{\"default\":\"P1W\",\"description\":\"\",\"name\":\"reporting_interval\",\"required\":true,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_location\":{\"page_start\":3},\"source_text\":\"transmit their readings to the care team weekly\"},\"type\":\"duration\"},{\"constraints\":{\"max\":180.0,\"min\":110.0,\"source\":{\"kind\":\"authored\"}},\"default\":135,\"description\":\"\",\"name\":\"notify_systolic_threshold\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_text\":\"weekly home average is 135/85 mmHg or higher\"},\"type\":\"quantity\",\"unit\":\"mm[Hg]\"},{\"constraints\":{\"max\":120.0,\"min\":70.0,\"source\":{\"kind\":\"authored\"}},\"default\":85,\"description\":\"\",\"name\":\"notify_diastolic_threshold\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_text\":\"weekly home average is 135/85 mmHg or higher\"},\"type\":\"quantity\",\"unit\":\"mm[Hg]\"},{\"constraints\":{\"max\":5.0,\"min\":1.0,\"source\":{\"kind\":\"authored\"}},\"default\":3,\"description\":\"\",\"name\":\"max_reminder_attempts\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_text\":\"after three reminder attempts on different days\"},\"type\":\"integer\"},{\"default\":\"Measure twice in the morning before medications and twice in the evening, one minute apart.\",\"description\":\"\",\"name\":\"instructions_text\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"default\":\"Please submit this week's home blood pressure readings.\",\"description\":\"\",\"name\":\"reminder_text\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"default\":\"No home blood pressure readings after reminders.\",\"description\":\"\",\"name\":\"escalation_reason\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"default\":\"Weekly home blood pressure average above threshold.\",\"description\":\"\",\"name\":\"notify_reason\",\"required\":false,\"reserved\":false,\"source\":{\"kind\":\"authored\"},\"type\":\"string\"},{\"description\":\"\",\"name\":\"max_duration\",\"required\":true,\"reserved\":true,\"type\":\"duration\"}],\"produces\":[],\"profile\":\"kogito-10.2\",\"provenance\":{\"section\":\"3.5 Home Blood Pressure Monitoring\",\"source_cpg\":\"SYN-HTN-2026-002\"},\"pruned\":[],\"template_id\":\"instance_home_bp\",\"template_refs\":[{\"source_cpg\":\"SYN-HTN-2026-002\",\"template_id\":\"home-bp-monitoring\",\"version\":\"499a6a2c1b81\"}],\"triggers\":[{\"kind\":\"recommendation\",\"recommendation_id\":\"<rec-guid: Home blood pressure monitoring>\"}],\"unify\":[],\"version\":\"d233217872ed\"}]]></acp:template>\n    </bpmn2:extensionElements>\n    <bpmn2:property id=\"reporting_interval\" itemSubjectRef=\"_strItem\" name=\"reporting_interval\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">duration</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"notify_systolic_threshold\" itemSubjectRef=\"_dblItem\" name=\"notify_systolic_threshold\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">quantity</drools:metaData>\n        <drools:metaData name=\"acp.unit\">mm[Hg]</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"notify_diastolic_threshold\" itemSubjectRef=\"_dblItem\" name=\"notify_diastolic_threshold\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">quantity</drools:metaData>\n        <drools:metaData name=\"acp.unit\">mm[Hg]</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"max_reminder_attempts\" itemSubjectRef=\"_intItem\" name=\"max_reminder_attempts\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">integer</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"instructions_text\" itemSubjectRef=\"_strItem\" name=\"instructions_text\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"reminder_text\" itemSubjectRef=\"_strItem\" name=\"reminder_text\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"escalation_reason\" itemSubjectRef=\"_strItem\" name=\"escalation_reason\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"notify_reason\" itemSubjectRef=\"_strItem\" name=\"notify_reason\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"max_duration\" itemSubjectRef=\"_strItem\" name=\"max_duration\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">duration</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"reading_count\" itemSubjectRef=\"_intItem\" name=\"reading_count\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">integer</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"avg_systolic\" itemSubjectRef=\"_dblItem\" name=\"avg_systolic\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">quantity</drools:metaData>\n        <drools:metaData name=\"acp.unit\">mm[Hg]</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"avg_diastolic\" itemSubjectRef=\"_dblItem\" name=\"avg_diastolic\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">quantity</drools:metaData>\n        <drools:metaData name=\"acp.unit\">mm[Hg]</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"reminder_attempts\" itemSubjectRef=\"_intItem\" name=\"reminder_attempts\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">integer</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"outcome\" itemSubjectRef=\"_strItem\" name=\"outcome\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:startEvent id=\"start\" name=\"Monitoring started\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"start-event\",\"kind\":\"structural\",\"supports\":[\"request_readings\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:outgoing>f_init</bpmn2:outgoing>\n    </bpmn2:startEvent>\n    <bpmn2:scriptTask id=\"init\" name=\"Initialise\" scriptFormat=\"http://www.java.com/java\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_init</bpmn2:incoming>\n      <bpmn2:outgoing>f_main</bpmn2:outgoing>\n      <bpmn2:script>kcontext.setVariable(\"reminder_attempts\", 0); kcontext.setVariable(\"outcome\", \"\");</bpmn2:script>\n    </bpmn2:scriptTask>\n    <bpmn2:subProcess id=\"main\" name=\"Monitoring\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_main</bpmn2:incoming>\n      <bpmn2:outgoing>f_after</bpmn2:outgoing>\n      <bpmn2:startEvent id=\"main_start\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:outgoing>f_start</bpmn2:outgoing>\n      </bpmn2:startEvent>\n      <bpmn2:scriptTask id=\"end_escalated_outcome\" name=\"Outcome: escalated\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_end_escalated</bpmn2:incoming>\n        <bpmn2:outgoing>end_escalated_outcome_out</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"outcome\", \"escalated\");</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:endEvent id=\"main_end_escalated\" name=\"Handed to care team\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"outcome\":\"escalated\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"escalate\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>end_escalated_outcome_out</bpmn2:incoming>\n      </bpmn2:endEvent>\n      <bpmn2:task id=\"escalate\" name=\"Escalate to care team\" drools:taskName=\"care_team.escalate\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"After three reminder attempts on different days without readings, the care team should contact the patient directly\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_escalate</bpmn2:incoming>\n        <bpmn2:outgoing>f_end_escalated</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"escalate_attempts_input\" name=\"attempts\" drools:dtype=\"Integer\" itemSubjectRef=\"_intItem\"/>\n          <bpmn2:dataInput id=\"escalate_reason_input\" name=\"reason\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"escalate_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>escalate_attempts_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>escalate_reason_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>escalate_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reminder_attempts</bpmn2:sourceRef>\n          <bpmn2:targetRef>escalate_attempts_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>escalation_reason</bpmn2:sourceRef>\n          <bpmn2:targetRef>escalate_reason_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>escalate_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">care_team_escalate__escalate</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">escalate_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:task>\n      <bpmn2:exclusiveGateway id=\"gw_attempts\" name=\"Reminder limit reached?\" gatewayDirection=\"Diverging\" default=\"f_retry\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"exclusive-split\",\"kind\":\"structural\",\"supports\":[\"f_escalate\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_attempts</bpmn2:incoming>\n        <bpmn2:outgoing>f_escalate</bpmn2:outgoing>\n        <bpmn2:outgoing>f_retry</bpmn2:outgoing>\n      </bpmn2:exclusiveGateway>\n      <bpmn2:exclusiveGateway id=\"gw_received\" name=\"Readings received?\" gatewayDirection=\"Diverging\" default=\"f_none\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"exclusive-split\",\"kind\":\"structural\",\"supports\":[\"f_some\",\"f_none\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_received</bpmn2:incoming>\n        <bpmn2:outgoing>f_none</bpmn2:outgoing>\n        <bpmn2:outgoing>f_some</bpmn2:outgoing>\n      </bpmn2:exclusiveGateway>\n      <bpmn2:scriptTask id=\"f_some_reset\" name=\"Reset reminder attempts\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_some</bpmn2:incoming>\n        <bpmn2:outgoing>f_some_reset_out</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"reminder_attempts\", 0);</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:exclusiveGateway id=\"gw_threshold\" name=\"Average above threshold?\" gatewayDirection=\"Diverging\" default=\"f_ok\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"exclusive-split\",\"kind\":\"structural\",\"supports\":[\"f_high\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_some_reset_out</bpmn2:incoming>\n        <bpmn2:outgoing>f_high</bpmn2:outgoing>\n        <bpmn2:outgoing>f_ok</bpmn2:outgoing>\n      </bpmn2:exclusiveGateway>\n      <bpmn2:exclusiveGateway id=\"loop_entry\" name=\"Begin monitoring cycle\" gatewayDirection=\"Converging\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"exclusive-join\",\"kind\":\"structural\",\"supports\":[\"request_readings\",\"notify\",\"gw_threshold\",\"gw_attempts\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_notified</bpmn2:incoming>\n        <bpmn2:incoming>f_ok</bpmn2:incoming>\n        <bpmn2:incoming>f_retry</bpmn2:incoming>\n        <bpmn2:incoming>f_start</bpmn2:incoming>\n        <bpmn2:outgoing>f_loop</bpmn2:outgoing>\n      </bpmn2:exclusiveGateway>\n      <bpmn2:task id=\"notify\" name=\"Notify clinician\" drools:taskName=\"clinician.notify\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"The responsible clinician should be notified when the weekly home average is 135/85 mmHg or higher ... routine notification\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_high</bpmn2:incoming>\n        <bpmn2:outgoing>f_notified</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"notify_reason_input\" name=\"reason\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"notify_urgency_input\" name=\"urgency\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"notify_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>notify_reason_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>notify_urgency_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>notify_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>notify_reason</bpmn2:sourceRef>\n          <bpmn2:targetRef>notify_reason_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>notify_urgency_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">routine</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">notify_urgency_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>notify_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">clinician_notify__notify</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">notify_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:task>\n      <bpmn2:task id=\"query_diastolic\" name=\"Check diastolic readings received\" drools:taskName=\"ehr.query_observations\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"The care team reviews the weekly average systolic and diastolic readings\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_query2</bpmn2:incoming>\n        <bpmn2:outgoing>f_received</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"query_diastolic_code_input\" name=\"code\" drools:dtype=\"String\"/>\n          <bpmn2:dataInput id=\"query_diastolic_unit_input\" name=\"unit\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"query_diastolic_window_input\" name=\"window\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"query_diastolic_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:dataOutput id=\"query_diastolic_average_value_output\" name=\"average_value\" drools:dtype=\"Double\" itemSubjectRef=\"_dblItem\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>query_diastolic_code_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_diastolic_unit_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_diastolic_window_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_diastolic_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet>\n            <bpmn2:dataOutputRefs>query_diastolic_average_value_output</bpmn2:dataOutputRefs>\n          </bpmn2:outputSet>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_diastolic_code_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">concept:diastolic blood pressure</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_diastolic_code_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_diastolic_unit_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">mm[Hg]</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_diastolic_unit_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reporting_interval</bpmn2:sourceRef>\n          <bpmn2:targetRef>query_diastolic_window_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_diastolic_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">ehr_query_observations__query_diastolic</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_diastolic_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataOutputAssociation>\n          <bpmn2:sourceRef>query_diastolic_average_value_output</bpmn2:sourceRef>\n          <bpmn2:targetRef>avg_diastolic</bpmn2:targetRef>\n        </bpmn2:dataOutputAssociation>\n      </bpmn2:task>\n      <bpmn2:task id=\"query_systolic\" name=\"Check systolic readings received\" drools:taskName=\"ehr.query_observations\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"The care team reviews the weekly average systolic and diastolic readings\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_query</bpmn2:incoming>\n        <bpmn2:outgoing>f_query2</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"query_systolic_code_input\" name=\"code\" drools:dtype=\"String\"/>\n          <bpmn2:dataInput id=\"query_systolic_unit_input\" name=\"unit\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"query_systolic_window_input\" name=\"window\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"query_systolic_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:dataOutput id=\"query_systolic_average_value_output\" name=\"average_value\" drools:dtype=\"Double\" itemSubjectRef=\"_dblItem\"/>\n          <bpmn2:dataOutput id=\"query_systolic_count_output\" name=\"count\" drools:dtype=\"Integer\" itemSubjectRef=\"_intItem\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>query_systolic_code_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_systolic_unit_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_systolic_window_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>query_systolic_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet>\n            <bpmn2:dataOutputRefs>query_systolic_average_value_output</bpmn2:dataOutputRefs>\n            <bpmn2:dataOutputRefs>query_systolic_count_output</bpmn2:dataOutputRefs>\n          </bpmn2:outputSet>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_systolic_code_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">concept:systolic blood pressure</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_systolic_code_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_systolic_unit_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">mm[Hg]</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_systolic_unit_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reporting_interval</bpmn2:sourceRef>\n          <bpmn2:targetRef>query_systolic_window_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>query_systolic_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">ehr_query_observations__query_systolic</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">query_systolic_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataOutputAssociation>\n          <bpmn2:sourceRef>query_systolic_average_value_output</bpmn2:sourceRef>\n          <bpmn2:targetRef>avg_systolic</bpmn2:targetRef>\n        </bpmn2:dataOutputAssociation>\n        <bpmn2:dataOutputAssociation>\n          <bpmn2:sourceRef>query_systolic_count_output</bpmn2:sourceRef>\n          <bpmn2:targetRef>reading_count</bpmn2:targetRef>\n        </bpmn2:dataOutputAssociation>\n      </bpmn2:task>\n      <bpmn2:task id=\"remind\" name=\"Send reading reminder\" drools:taskName=\"patient.send_message\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"counter\":\"reminder_attempts\",\"provenance\":{\"kind\":\"source\",\"source_text\":\"If a week passes without readings, a reminder should be sent to the patient\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_none</bpmn2:incoming>\n        <bpmn2:outgoing>remind_counter_in</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"remind_kind_input\" name=\"kind\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"remind_message_input\" name=\"message\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"remind_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>remind_kind_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>remind_message_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>remind_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>remind_kind_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">reminder</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">remind_kind_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reminder_text</bpmn2:sourceRef>\n          <bpmn2:targetRef>remind_message_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>remind_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">patient_send_message__remind</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">remind_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:task>\n      <bpmn2:scriptTask id=\"remind_counter\" name=\"Count reminder attempts\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>remind_counter_in</bpmn2:incoming>\n        <bpmn2:outgoing>f_attempts</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"reminder_attempts\", ((Integer) kcontext.getVariable(\"reminder_attempts\")) + 1);</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:task id=\"request_readings\" name=\"Request home BP readings\" drools:taskName=\"patient.request_observation\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"take two readings one minute apart in the morning before medications and two readings one minute apart in the evening ... and transmit their readings to the care team weekly\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_loop</bpmn2:incoming>\n        <bpmn2:outgoing>f_wait</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"request_readings_code_input\" name=\"code\" drools:dtype=\"String\"/>\n          <bpmn2:dataInput id=\"request_readings_due_input\" name=\"due\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"request_readings_instructions_input\" name=\"instructions\" drools:dtype=\"String\" itemSubjectRef=\"_strItem\"/>\n          <bpmn2:dataInput id=\"request_readings_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>request_readings_code_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>request_readings_due_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>request_readings_instructions_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>request_readings_TaskName</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>request_readings_code_input</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">concept:blood pressure</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">request_readings_code_input</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>reporting_interval</bpmn2:sourceRef>\n          <bpmn2:targetRef>request_readings_due_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>instructions_text</bpmn2:sourceRef>\n          <bpmn2:targetRef>request_readings_instructions_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>request_readings_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">patient_request_observation__request_readings</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">request_readings_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:task>\n      <bpmn2:intermediateCatchEvent id=\"wait_interval\" name=\"Reporting interval elapsed\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_text\":\"transmit their readings to the care team weekly\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_wait</bpmn2:incoming>\n        <bpmn2:outgoing>f_query</bpmn2:outgoing>\n        <bpmn2:timerEventDefinition>\n          <bpmn2:timeDuration xsi:type=\"bpmn2:tFormalExpression\">#{reporting_interval}</bpmn2:timeDuration>\n        </bpmn2:timerEventDefinition>\n      </bpmn2:intermediateCatchEvent>\n      <bpmn2:sequenceFlow id=\"remind_counter_in\" sourceRef=\"remind\" targetRef=\"remind_counter\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_attempts\" sourceRef=\"remind_counter\" targetRef=\"gw_attempts\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_end_escalated\" sourceRef=\"escalate\" targetRef=\"end_escalated_outcome\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"end_escalated_outcome_out\" sourceRef=\"end_escalated_outcome\" targetRef=\"main_end_escalated\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_escalate\" sourceRef=\"gw_attempts\" targetRef=\"escalate\" name=\"limit reached\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"conditionExpression\":\"reminder_attempts >= max_reminder_attempts\",\"provenance\":{\"kind\":\"source\",\"source_text\":\"after three reminder attempts on different days\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return reminder_attempts != null && max_reminder_attempts != null && reminder_attempts >= max_reminder_attempts;]]></bpmn2:conditionExpression>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_high\" sourceRef=\"gw_threshold\" targetRef=\"notify\" name=\"above threshold\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"conditionExpression\":\"avg_systolic >= notify_systolic_threshold or avg_diastolic >= notify_diastolic_threshold\",\"provenance\":{\"kind\":\"source\",\"source_text\":\"weekly home average is 135/85 mmHg or higher\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return (avg_systolic != null && notify_systolic_threshold != null && avg_systolic >= notify_systolic_threshold) || (avg_diastolic != null && notify_diastolic_threshold != null && avg_diastolic >= notify_diastolic_threshold);]]></bpmn2:conditionExpression>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_loop\" sourceRef=\"loop_entry\" targetRef=\"request_readings\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_none\" sourceRef=\"gw_received\" targetRef=\"remind\" name=\"no\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_notified\" sourceRef=\"notify\" targetRef=\"loop_entry\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_ok\" sourceRef=\"gw_threshold\" targetRef=\"loop_entry\" name=\"within target\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_query\" sourceRef=\"wait_interval\" targetRef=\"query_systolic\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_query2\" sourceRef=\"query_systolic\" targetRef=\"query_diastolic\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_received\" sourceRef=\"query_diastolic\" targetRef=\"gw_received\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_retry\" sourceRef=\"gw_attempts\" targetRef=\"loop_entry\" name=\"try again\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_some\" sourceRef=\"gw_received\" targetRef=\"f_some_reset\" name=\"yes\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"conditionExpression\":\"defined(reading_count) and reading_count > 0\",\"provenance\":{\"kind\":\"source\",\"source_text\":\"The care team reviews the weekly average systolic and diastolic readings\"},\"resets\":[\"reminder_attempts\"],\"structural_constant\":true}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return reading_count != null && reading_count > 0;]]></bpmn2:conditionExpression>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_some_reset_out\" sourceRef=\"f_some_reset\" targetRef=\"gw_threshold\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_start\" sourceRef=\"main_start\" targetRef=\"loop_entry\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_wait\" sourceRef=\"request_readings\" targetRef=\"wait_interval\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n    </bpmn2:subProcess>\n    <bpmn2:boundaryEvent id=\"period_elapsed\" name=\"Max duration elapsed\" attachedToRef=\"main\" cancelActivity=\"true\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"plan-bound\",\"kind\":\"structural\",\"supports\":[\"request_readings\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:outgoing>f_period</bpmn2:outgoing>\n      <bpmn2:timerEventDefinition>\n        <bpmn2:timeDuration xsi:type=\"bpmn2:tFormalExpression\">#{max_duration}</bpmn2:timeDuration>\n      </bpmn2:timerEventDefinition>\n    </bpmn2:boundaryEvent>\n    <bpmn2:exclusiveGateway id=\"gw_outcome\" name=\"Outcome\" gatewayDirection=\"Diverging\" default=\"f_completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_after</bpmn2:incoming>\n      <bpmn2:outgoing>end_escalated_route</bpmn2:outgoing>\n      <bpmn2:outgoing>f_completed</bpmn2:outgoing>\n    </bpmn2:exclusiveGateway>\n    <bpmn2:endEvent id=\"end_escalated\" name=\"Handed to care team\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>end_escalated_route</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_completed\" name=\"Completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_completed</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_period\" name=\"Monitoring period complete\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"outcome\":\"complete\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"period_elapsed\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_period</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:sequenceFlow id=\"f_init\" sourceRef=\"start\" targetRef=\"init\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_main\" sourceRef=\"init\" targetRef=\"main\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_after\" sourceRef=\"main\" targetRef=\"gw_outcome\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"end_escalated_route\" sourceRef=\"gw_outcome\" targetRef=\"end_escalated\" name=\"escalated\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return \"escalated\".equals(outcome);]]></bpmn2:conditionExpression>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_completed\" sourceRef=\"gw_outcome\" targetRef=\"end_completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_period\" sourceRef=\"period_elapsed\" targetRef=\"end_period\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n  </bpmn2:process>\n</bpmn2:definitions>\n",
+          "capabilitiesUsed": [],
+          "bindings": [
+            {
+              "name": "reporting_interval",
+              "value": "7 d",
+              "source": "cpg-default",
+              "unit": "d"
+            },
+            {
+              "name": "notify_systolic_threshold",
+              "value": 135,
+              "source": "clinician",
+              "unit": "mm[Hg]"
+            },
+            {
+              "name": "max_reminder_attempts",
+              "value": 3,
+              "source": "cpg-default"
+            },
+            {
+              "name": "max_duration",
+              "value": "90 d",
+              "source": "plan-derived",
+              "unit": "d"
+            },
+            {
+              "name": "reminder_text",
+              "value": "Submit home readings.",
+              "source": "authored"
+            },
+            {
+              "name": "request_readings__code",
+              "value": "http://loinc.org|85354-9",
+              "source": "plan-derived"
+            },
+            {
+              "name": "query_systolic__code",
+              "value": "http://loinc.org|8480-6",
+              "source": "plan-derived"
+            }
+          ],
+          "validation": {
+            "status": "valid",
+            "rungsPassed": [],
+            "warnings": [],
+            "errors": []
+          },
+          "reviewNotes": []
+        }
+      ]
+    }
+  ],
+  "conflicts": [],
+  "fhirBundle": {
+    "resourceType": "Bundle",
+    "id": "10b4f346-aac1-481b-add9-06a7b48795c7",
+    "type": "transaction",
+    "timestamp": "2026-10-10T01:57:27.569518+00:00",
+    "entry": [
+      {
+        "fullUrl": "urn:uuid:047f14aa-106e-409c-8aa8-663207b08e07",
+        "resource": {
+          "resourceType": "Patient",
+          "id": "047f14aa-106e-409c-8aa8-663207b08e07",
+          "meta": {
+            "security": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST",
+                "display": "Artificial Intelligence asserted"
+              }
+            ]
+          }
+        },
+        "request": {
+          "method": "POST",
+          "url": "Patient"
+        }
+      },
+      {
+        "fullUrl": "urn:uuid:3b0ec0b6-13c1-400c-ad3e-2f869cf24962",
+        "resource": {
+          "resourceType": "ServiceRequest",
+          "id": "3b0ec0b6-13c1-400c-ad3e-2f869cf24962",
+          "meta": {
+            "security": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST",
+                "display": "Artificial Intelligence asserted"
+              }
+            ]
+          },
+          "status": "draft",
+          "intent": "proposal",
+          "subject": {
+            "reference": "urn:uuid:047f14aa-106e-409c-8aa8-663207b08e07"
+          },
+          "code": {
+            "text": "Monitor home blood pressure readings."
+          }
+        },
+        "request": {
+          "method": "POST",
+          "url": "ServiceRequest"
+        }
+      },
+      {
+        "fullUrl": "urn:uuid:1f4703b2-4cff-497f-857b-da2e38262539",
+        "resource": {
+          "resourceType": "DocumentReference",
+          "id": "1f4703b2-4cff-497f-857b-da2e38262539",
+          "meta": {
+            "security": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST",
+                "display": "Artificial Intelligence asserted"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-revision",
+              "value": "fb560bf1cd2b"
+            }
+          ],
+          "status": "current",
+          "type": {
+            "coding": [
+              {
+                "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-document-type",
+                "code": "bpmn-process-definition",
+                "display": "BPMN 2.0 process definition"
+              }
+            ]
+          },
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-document-category",
+                  "code": "care-plan-automation"
+                }
+              ]
+            }
+          ],
+          "subject": {
+            "reference": "urn:uuid:047f14aa-106e-409c-8aa8-663207b08e07"
+          },
+          "date": "2026-10-10T01:57:27.569518+00:00",
+          "description": "Home blood pressure monitoring with outreach and escalation",
+          "content": [
+            {
+              "attachment": {
+                "contentType": "application/xml",
+                "data": "PD94bWwgdmVyc2lvbj0nMS4wJyBlbmNvZGluZz0nVVRGLTgnPz4KPGJwbW4yOmRlZmluaXRpb25zIHhtbG5zOmJwbW4yPSJodHRwOi8vd3d3Lm9tZy5vcmcvc3BlYy9CUE1OLzIwMTAwNTI0L01PREVMIiB4bWxuczpkcm9vbHM9Imh0dHA6Ly93d3cuamJvc3Mub3JnL2Ryb29scyIgeG1sbnM6eHNpPSJodHRwOi8vd3d3LnczLm9yZy8yMDAxL1hNTFNjaGVtYS1pbnN0YW5jZSIgeG1sbnM6YWNwPSJodHRwczovL2dpdGh1Yi5jb20vc2Ftc2NoaWZtYW4vY3BnLXRvLWFjcC9icG1uIiBpZD0iaW5zdGFuY2VfaG9tZV9icF9kZWZzIiB0YXJnZXROYW1lc3BhY2U9Imh0dHBzOi8vZ2l0aHViLmNvbS9zYW1zY2hpZm1hbi9jcGctdG8tYWNwL2JwbW4vU1lOLUhUTi0yMDI2LTAwMiI+CiAgPGJwbW4yOml0ZW1EZWZpbml0aW9uIGlkPSJfc3RySXRlbSIgc3RydWN0dXJlUmVmPSJTdHJpbmciLz4KICA8YnBtbjI6aXRlbURlZmluaXRpb24gaWQ9Il9pbnRJdGVtIiBzdHJ1Y3R1cmVSZWY9IkludGVnZXIiLz4KICA8YnBtbjI6aXRlbURlZmluaXRpb24gaWQ9Il9kYmxJdGVtIiBzdHJ1Y3R1cmVSZWY9IkRvdWJsZSIvPgogIDxicG1uMjpwcm9jZXNzIGlkPSJpbnN0YW5jZV9ob21lX2JwIiBuYW1lPSJIb21lIGJsb29kIHByZXNzdXJlIG1vbml0b3Jpbmcgd2l0aCBvdXRyZWFjaCBhbmQgZXNjYWxhdGlvbiIgaXNFeGVjdXRhYmxlPSJ0cnVlIiBwcm9jZXNzVHlwZT0iUHVibGljIiBkcm9vbHM6cGFja2FnZU5hbWU9Im9yZy5jYXJld3JpZ2h0LmF1dG9tYXRpb24iIGRyb29sczp2ZXJzaW9uPSJkMjMzMjE3ODcyZWQiPgogICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICA8ZHJvb2xzOm1ldGFEYXRhIG5hbWU9ImFjcC5jYXRhbG9nVmVyc2lvbiI+MS4wPC9kcm9vbHM6bWV0YURhdGE+CiAgICAgIDxhY3A6dGVtcGxhdGU+PCFbQ0RBVEFbeyJjYXRhbG9nX3ZlcnNpb24iOiIxLjAiLCJjb25zb2xpZGF0ZWRfYm91bmRhcmllcyI6W10sImRlc2NyaXB0aW9uIjoiIiwiaW52YXJpYW50cyI6WyJtYXhfZHVyYXRpb24gPj0gcmVwb3J0aW5nX2ludGVydmFsICogKG1heF9yZW1pbmRlcl9hdHRlbXB0cyArIDEpIl0sImlyX3ZlcnNpb24iOiIxLjAiLCJraW5kIjoiaW5zdGFuY2UiLCJwYXJhbWV0ZXJzIjpbeyJkZWZhdWx0IjoiUDFXIiwiZGVzY3JpcHRpb24iOiIiLCJuYW1lIjoicmVwb3J0aW5nX2ludGVydmFsIiwicmVxdWlyZWQiOnRydWUsInJlc2VydmVkIjpmYWxzZSwic291cmNlIjp7ImtpbmQiOiJjcGciLCJzb3VyY2VfbG9jYXRpb24iOnsicGFnZV9zdGFydCI6M30sInNvdXJjZV90ZXh0IjoidHJhbnNtaXQgdGhlaXIgcmVhZGluZ3MgdG8gdGhlIGNhcmUgdGVhbSB3ZWVrbHkifSwidHlwZSI6ImR1cmF0aW9uIn0seyJjb25zdHJhaW50cyI6eyJtYXgiOjE4MC4wLCJtaW4iOjExMC4wLCJzb3VyY2UiOnsia2luZCI6ImF1dGhvcmVkIn19LCJkZWZhdWx0IjoxMzUsImRlc2NyaXB0aW9uIjoiIiwibmFtZSI6Im5vdGlmeV9zeXN0b2xpY190aHJlc2hvbGQiLCJyZXF1aXJlZCI6ZmFsc2UsInJlc2VydmVkIjpmYWxzZSwic291cmNlIjp7ImtpbmQiOiJjcGciLCJzb3VyY2VfdGV4dCI6IndlZWtseSBob21lIGF2ZXJhZ2UgaXMgMTM1Lzg1IG1tSGcgb3IgaGlnaGVyIn0sInR5cGUiOiJxdWFudGl0eSIsInVuaXQiOiJtbVtIZ10ifSx7ImNvbnN0cmFpbnRzIjp7Im1heCI6MTIwLjAsIm1pbiI6NzAuMCwic291cmNlIjp7ImtpbmQiOiJhdXRob3JlZCJ9fSwiZGVmYXVsdCI6ODUsImRlc2NyaXB0aW9uIjoiIiwibmFtZSI6Im5vdGlmeV9kaWFzdG9saWNfdGhyZXNob2xkIiwicmVxdWlyZWQiOmZhbHNlLCJyZXNlcnZlZCI6ZmFsc2UsInNvdXJjZSI6eyJraW5kIjoiY3BnIiwic291cmNlX3RleHQiOiJ3ZWVrbHkgaG9tZSBhdmVyYWdlIGlzIDEzNS84NSBtbUhnIG9yIGhpZ2hlciJ9LCJ0eXBlIjoicXVhbnRpdHkiLCJ1bml0IjoibW1bSGddIn0seyJjb25zdHJhaW50cyI6eyJtYXgiOjUuMCwibWluIjoxLjAsInNvdXJjZSI6eyJraW5kIjoiYXV0aG9yZWQifX0sImRlZmF1bHQiOjMsImRlc2NyaXB0aW9uIjoiIiwibmFtZSI6Im1heF9yZW1pbmRlcl9hdHRlbXB0cyIsInJlcXVpcmVkIjpmYWxzZSwicmVzZXJ2ZWQiOmZhbHNlLCJzb3VyY2UiOnsia2luZCI6ImNwZyIsInNvdXJjZV90ZXh0IjoiYWZ0ZXIgdGhyZWUgcmVtaW5kZXIgYXR0ZW1wdHMgb24gZGlmZmVyZW50IGRheXMifSwidHlwZSI6ImludGVnZXIifSx7ImRlZmF1bHQiOiJNZWFzdXJlIHR3aWNlIGluIHRoZSBtb3JuaW5nIGJlZm9yZSBtZWRpY2F0aW9ucyBhbmQgdHdpY2UgaW4gdGhlIGV2ZW5pbmcsIG9uZSBtaW51dGUgYXBhcnQuIiwiZGVzY3JpcHRpb24iOiIiLCJuYW1lIjoiaW5zdHJ1Y3Rpb25zX3RleHQiLCJyZXF1aXJlZCI6ZmFsc2UsInJlc2VydmVkIjpmYWxzZSwic291cmNlIjp7ImtpbmQiOiJhdXRob3JlZCJ9LCJ0eXBlIjoic3RyaW5nIn0seyJkZWZhdWx0IjoiUGxlYXNlIHN1Ym1pdCB0aGlzIHdlZWsncyBob21lIGJsb29kIHByZXNzdXJlIHJlYWRpbmdzLiIsImRlc2NyaXB0aW9uIjoiIiwibmFtZSI6InJlbWluZGVyX3RleHQiLCJyZXF1aXJlZCI6ZmFsc2UsInJlc2VydmVkIjpmYWxzZSwic291cmNlIjp7ImtpbmQiOiJhdXRob3JlZCJ9LCJ0eXBlIjoic3RyaW5nIn0seyJkZWZhdWx0IjoiTm8gaG9tZSBibG9vZCBwcmVzc3VyZSByZWFkaW5ncyBhZnRlciByZW1pbmRlcnMuIiwiZGVzY3JpcHRpb24iOiIiLCJuYW1lIjoiZXNjYWxhdGlvbl9yZWFzb24iLCJyZXF1aXJlZCI6ZmFsc2UsInJlc2VydmVkIjpmYWxzZSwic291cmNlIjp7ImtpbmQiOiJhdXRob3JlZCJ9LCJ0eXBlIjoic3RyaW5nIn0seyJkZWZhdWx0IjoiV2Vla2x5IGhvbWUgYmxvb2QgcHJlc3N1cmUgYXZlcmFnZSBhYm92ZSB0aHJlc2hvbGQuIiwiZGVzY3JpcHRpb24iOiIiLCJuYW1lIjoibm90aWZ5X3JlYXNvbiIsInJlcXVpcmVkIjpmYWxzZSwicmVzZXJ2ZWQiOmZhbHNlLCJzb3VyY2UiOnsia2luZCI6ImF1dGhvcmVkIn0sInR5cGUiOiJzdHJpbmcifSx7ImRlc2NyaXB0aW9uIjoiIiwibmFtZSI6Im1heF9kdXJhdGlvbiIsInJlcXVpcmVkIjp0cnVlLCJyZXNlcnZlZCI6dHJ1ZSwidHlwZSI6ImR1cmF0aW9uIn1dLCJwcm9kdWNlcyI6W10sInByb2ZpbGUiOiJrb2dpdG8tMTAuMiIsInByb3ZlbmFuY2UiOnsic2VjdGlvbiI6IjMuNSBIb21lIEJsb29kIFByZXNzdXJlIE1vbml0b3JpbmciLCJzb3VyY2VfY3BnIjoiU1lOLUhUTi0yMDI2LTAwMiJ9LCJwcnVuZWQiOltdLCJ0ZW1wbGF0ZV9pZCI6Imluc3RhbmNlX2hvbWVfYnAiLCJ0ZW1wbGF0ZV9yZWZzIjpbeyJzb3VyY2VfY3BnIjoiU1lOLUhUTi0yMDI2LTAwMiIsInRlbXBsYXRlX2lkIjoiaG9tZS1icC1tb25pdG9yaW5nIiwidmVyc2lvbiI6IjQ5OWE2YTJjMWI4MSJ9XSwidHJpZ2dlcnMiOlt7ImtpbmQiOiJyZWNvbW1lbmRhdGlvbiIsInJlY29tbWVuZGF0aW9uX2lkIjoiPHJlYy1ndWlkOiBIb21lIGJsb29kIHByZXNzdXJlIG1vbml0b3Jpbmc+In1dLCJ1bmlmeSI6W10sInZlcnNpb24iOiJkMjMzMjE3ODcyZWQifV1dPjwvYWNwOnRlbXBsYXRlPgogICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgIDxicG1uMjpwcm9wZXJ0eSBpZD0icmVwb3J0aW5nX2ludGVydmFsIiBpdGVtU3ViamVjdFJlZj0iX3N0ckl0ZW0iIG5hbWU9InJlcG9ydGluZ19pbnRlcnZhbCI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8ZHJvb2xzOm1ldGFEYXRhIG5hbWU9ImFjcC50eXBlIj5kdXJhdGlvbjwvZHJvb2xzOm1ldGFEYXRhPgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgPC9icG1uMjpwcm9wZXJ0eT4KICAgIDxicG1uMjpwcm9wZXJ0eSBpZD0ibm90aWZ5X3N5c3RvbGljX3RocmVzaG9sZCIgaXRlbVN1YmplY3RSZWY9Il9kYmxJdGVtIiBuYW1lPSJub3RpZnlfc3lzdG9saWNfdGhyZXNob2xkIj4KICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxkcm9vbHM6bWV0YURhdGEgbmFtZT0iYWNwLnR5cGUiPnF1YW50aXR5PC9kcm9vbHM6bWV0YURhdGE+CiAgICAgICAgPGRyb29sczptZXRhRGF0YSBuYW1lPSJhY3AudW5pdCI+bW1bSGddPC9kcm9vbHM6bWV0YURhdGE+CiAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICA8L2JwbW4yOnByb3BlcnR5PgogICAgPGJwbW4yOnByb3BlcnR5IGlkPSJub3RpZnlfZGlhc3RvbGljX3RocmVzaG9sZCIgaXRlbVN1YmplY3RSZWY9Il9kYmxJdGVtIiBuYW1lPSJub3RpZnlfZGlhc3RvbGljX3RocmVzaG9sZCI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8ZHJvb2xzOm1ldGFEYXRhIG5hbWU9ImFjcC50eXBlIj5xdWFudGl0eTwvZHJvb2xzOm1ldGFEYXRhPgogICAgICAgIDxkcm9vbHM6bWV0YURhdGEgbmFtZT0iYWNwLnVuaXQiPm1tW0hnXTwvZHJvb2xzOm1ldGFEYXRhPgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgPC9icG1uMjpwcm9wZXJ0eT4KICAgIDxicG1uMjpwcm9wZXJ0eSBpZD0ibWF4X3JlbWluZGVyX2F0dGVtcHRzIiBpdGVtU3ViamVjdFJlZj0iX2ludEl0ZW0iIG5hbWU9Im1heF9yZW1pbmRlcl9hdHRlbXB0cyI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8ZHJvb2xzOm1ldGFEYXRhIG5hbWU9ImFjcC50eXBlIj5pbnRlZ2VyPC9kcm9vbHM6bWV0YURhdGE+CiAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICA8L2JwbW4yOnByb3BlcnR5PgogICAgPGJwbW4yOnByb3BlcnR5IGlkPSJpbnN0cnVjdGlvbnNfdGV4dCIgaXRlbVN1YmplY3RSZWY9Il9zdHJJdGVtIiBuYW1lPSJpbnN0cnVjdGlvbnNfdGV4dCI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8ZHJvb2xzOm1ldGFEYXRhIG5hbWU9ImFjcC50eXBlIj5zdHJpbmc8L2Ryb29sczptZXRhRGF0YT4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgIDwvYnBtbjI6cHJvcGVydHk+CiAgICA8YnBtbjI6cHJvcGVydHkgaWQ9InJlbWluZGVyX3RleHQiIGl0ZW1TdWJqZWN0UmVmPSJfc3RySXRlbSIgbmFtZT0icmVtaW5kZXJfdGV4dCI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8ZHJvb2xzOm1ldGFEYXRhIG5hbWU9ImFjcC50eXBlIj5zdHJpbmc8L2Ryb29sczptZXRhRGF0YT4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgIDwvYnBtbjI6cHJvcGVydHk+CiAgICA8YnBtbjI6cHJvcGVydHkgaWQ9ImVzY2FsYXRpb25fcmVhc29uIiBpdGVtU3ViamVjdFJlZj0iX3N0ckl0ZW0iIG5hbWU9ImVzY2FsYXRpb25fcmVhc29uIj4KICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxkcm9vbHM6bWV0YURhdGEgbmFtZT0iYWNwLnR5cGUiPnN0cmluZzwvZHJvb2xzOm1ldGFEYXRhPgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgPC9icG1uMjpwcm9wZXJ0eT4KICAgIDxicG1uMjpwcm9wZXJ0eSBpZD0ibm90aWZ5X3JlYXNvbiIgaXRlbVN1YmplY3RSZWY9Il9zdHJJdGVtIiBuYW1lPSJub3RpZnlfcmVhc29uIj4KICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxkcm9vbHM6bWV0YURhdGEgbmFtZT0iYWNwLnR5cGUiPnN0cmluZzwvZHJvb2xzOm1ldGFEYXRhPgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgPC9icG1uMjpwcm9wZXJ0eT4KICAgIDxicG1uMjpwcm9wZXJ0eSBpZD0ibWF4X2R1cmF0aW9uIiBpdGVtU3ViamVjdFJlZj0iX3N0ckl0ZW0iIG5hbWU9Im1heF9kdXJhdGlvbiI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8ZHJvb2xzOm1ldGFEYXRhIG5hbWU9ImFjcC50eXBlIj5kdXJhdGlvbjwvZHJvb2xzOm1ldGFEYXRhPgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgPC9icG1uMjpwcm9wZXJ0eT4KICAgIDxicG1uMjpwcm9wZXJ0eSBpZD0icmVhZGluZ19jb3VudCIgaXRlbVN1YmplY3RSZWY9Il9pbnRJdGVtIiBuYW1lPSJyZWFkaW5nX2NvdW50Ij4KICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxkcm9vbHM6bWV0YURhdGEgbmFtZT0iYWNwLnR5cGUiPmludGVnZXI8L2Ryb29sczptZXRhRGF0YT4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgIDwvYnBtbjI6cHJvcGVydHk+CiAgICA8YnBtbjI6cHJvcGVydHkgaWQ9ImF2Z19zeXN0b2xpYyIgaXRlbVN1YmplY3RSZWY9Il9kYmxJdGVtIiBuYW1lPSJhdmdfc3lzdG9saWMiPgogICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGRyb29sczptZXRhRGF0YSBuYW1lPSJhY3AudHlwZSI+cXVhbnRpdHk8L2Ryb29sczptZXRhRGF0YT4KICAgICAgICA8ZHJvb2xzOm1ldGFEYXRhIG5hbWU9ImFjcC51bml0Ij5tbVtIZ108L2Ryb29sczptZXRhRGF0YT4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgIDwvYnBtbjI6cHJvcGVydHk+CiAgICA8YnBtbjI6cHJvcGVydHkgaWQ9ImF2Z19kaWFzdG9saWMiIGl0ZW1TdWJqZWN0UmVmPSJfZGJsSXRlbSIgbmFtZT0iYXZnX2RpYXN0b2xpYyI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8ZHJvb2xzOm1ldGFEYXRhIG5hbWU9ImFjcC50eXBlIj5xdWFudGl0eTwvZHJvb2xzOm1ldGFEYXRhPgogICAgICAgIDxkcm9vbHM6bWV0YURhdGEgbmFtZT0iYWNwLnVuaXQiPm1tW0hnXTwvZHJvb2xzOm1ldGFEYXRhPgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgPC9icG1uMjpwcm9wZXJ0eT4KICAgIDxicG1uMjpwcm9wZXJ0eSBpZD0icmVtaW5kZXJfYXR0ZW1wdHMiIGl0ZW1TdWJqZWN0UmVmPSJfaW50SXRlbSIgbmFtZT0icmVtaW5kZXJfYXR0ZW1wdHMiPgogICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGRyb29sczptZXRhRGF0YSBuYW1lPSJhY3AudHlwZSI+aW50ZWdlcjwvZHJvb2xzOm1ldGFEYXRhPgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgPC9icG1uMjpwcm9wZXJ0eT4KICAgIDxicG1uMjpwcm9wZXJ0eSBpZD0ib3V0Y29tZSIgaXRlbVN1YmplY3RSZWY9Il9zdHJJdGVtIiBuYW1lPSJvdXRjb21lIj4KICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxkcm9vbHM6bWV0YURhdGEgbmFtZT0iYWNwLnR5cGUiPnN0cmluZzwvZHJvb2xzOm1ldGFEYXRhPgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgPC9icG1uMjpwcm9wZXJ0eT4KICAgIDxicG1uMjpzdGFydEV2ZW50IGlkPSJzdGFydCIgbmFtZT0iTW9uaXRvcmluZyBzdGFydGVkIj4KICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7InByb3ZlbmFuY2UiOnsiZGVyaXZhdGlvbl9ydWxlIjoic3RhcnQtZXZlbnQiLCJraW5kIjoic3RydWN0dXJhbCIsInN1cHBvcnRzIjpbInJlcXVlc3RfcmVhZGluZ3MiXX19XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgPGJwbW4yOm91dGdvaW5nPmZfaW5pdDwvYnBtbjI6b3V0Z29pbmc+CiAgICA8L2JwbW4yOnN0YXJ0RXZlbnQ+CiAgICA8YnBtbjI6c2NyaXB0VGFzayBpZD0iaW5pdCIgbmFtZT0iSW5pdGlhbGlzZSIgc2NyaXB0Rm9ybWF0PSJodHRwOi8vd3d3LmphdmEuY29tL2phdmEiPgogICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3t9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgPGJwbW4yOmluY29taW5nPmZfaW5pdDwvYnBtbjI6aW5jb21pbmc+CiAgICAgIDxicG1uMjpvdXRnb2luZz5mX21haW48L2JwbW4yOm91dGdvaW5nPgogICAgICA8YnBtbjI6c2NyaXB0Pmtjb250ZXh0LnNldFZhcmlhYmxlKCJyZW1pbmRlcl9hdHRlbXB0cyIsIDApOyBrY29udGV4dC5zZXRWYXJpYWJsZSgib3V0Y29tZSIsICIiKTs8L2JwbW4yOnNjcmlwdD4KICAgIDwvYnBtbjI6c2NyaXB0VGFzaz4KICAgIDxicG1uMjpzdWJQcm9jZXNzIGlkPSJtYWluIiBuYW1lPSJNb25pdG9yaW5nIj4KICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgIDxicG1uMjppbmNvbWluZz5mX21haW48L2JwbW4yOmluY29taW5nPgogICAgICA8YnBtbjI6b3V0Z29pbmc+Zl9hZnRlcjwvYnBtbjI6b3V0Z29pbmc+CiAgICAgIDxicG1uMjpzdGFydEV2ZW50IGlkPSJtYWluX3N0YXJ0Ij4KICAgICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGJwbW4yOm91dGdvaW5nPmZfc3RhcnQ8L2JwbW4yOm91dGdvaW5nPgogICAgICA8L2JwbW4yOnN0YXJ0RXZlbnQ+CiAgICAgIDxicG1uMjpzY3JpcHRUYXNrIGlkPSJlbmRfZXNjYWxhdGVkX291dGNvbWUiIG5hbWU9Ik91dGNvbWU6IGVzY2FsYXRlZCIgc2NyaXB0Rm9ybWF0PSJodHRwOi8vd3d3LmphdmEuY29tL2phdmEiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YnBtbjI6aW5jb21pbmc+Zl9lbmRfZXNjYWxhdGVkPC9icG1uMjppbmNvbWluZz4KICAgICAgICA8YnBtbjI6b3V0Z29pbmc+ZW5kX2VzY2FsYXRlZF9vdXRjb21lX291dDwvYnBtbjI6b3V0Z29pbmc+CiAgICAgICAgPGJwbW4yOnNjcmlwdD5rY29udGV4dC5zZXRWYXJpYWJsZSgib3V0Y29tZSIsICJlc2NhbGF0ZWQiKTs8L2JwbW4yOnNjcmlwdD4KICAgICAgPC9icG1uMjpzY3JpcHRUYXNrPgogICAgICA8YnBtbjI6ZW5kRXZlbnQgaWQ9Im1haW5fZW5kX2VzY2FsYXRlZCIgbmFtZT0iSGFuZGVkIHRvIGNhcmUgdGVhbSI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3sib3V0Y29tZSI6ImVzY2FsYXRlZCIsInByb3ZlbmFuY2UiOnsiZGVyaXZhdGlvbl9ydWxlIjoiZW5kLWV2ZW50Iiwia2luZCI6InN0cnVjdHVyYWwiLCJzdXBwb3J0cyI6WyJlc2NhbGF0ZSJdfX1dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGJwbW4yOmluY29taW5nPmVuZF9lc2NhbGF0ZWRfb3V0Y29tZV9vdXQ8L2JwbW4yOmluY29taW5nPgogICAgICA8L2JwbW4yOmVuZEV2ZW50PgogICAgICA8YnBtbjI6dGFzayBpZD0iZXNjYWxhdGUiIG5hbWU9IkVzY2FsYXRlIHRvIGNhcmUgdGVhbSIgZHJvb2xzOnRhc2tOYW1lPSJjYXJlX3RlYW0uZXNjYWxhdGUiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7InByb3ZlbmFuY2UiOnsia2luZCI6InNvdXJjZSIsInNvdXJjZV90ZXh0IjoiQWZ0ZXIgdGhyZWUgcmVtaW5kZXIgYXR0ZW1wdHMgb24gZGlmZmVyZW50IGRheXMgd2l0aG91dCByZWFkaW5ncywgdGhlIGNhcmUgdGVhbSBzaG91bGQgY29udGFjdCB0aGUgcGF0aWVudCBkaXJlY3RseSJ9fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YnBtbjI6aW5jb21pbmc+Zl9lc2NhbGF0ZTwvYnBtbjI6aW5jb21pbmc+CiAgICAgICAgPGJwbW4yOm91dGdvaW5nPmZfZW5kX2VzY2FsYXRlZDwvYnBtbjI6b3V0Z29pbmc+CiAgICAgICAgPGJwbW4yOmlvU3BlY2lmaWNhdGlvbj4KICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXQgaWQ9ImVzY2FsYXRlX2F0dGVtcHRzX2lucHV0IiBuYW1lPSJhdHRlbXB0cyIgZHJvb2xzOmR0eXBlPSJJbnRlZ2VyIiBpdGVtU3ViamVjdFJlZj0iX2ludEl0ZW0iLz4KICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXQgaWQ9ImVzY2FsYXRlX3JlYXNvbl9pbnB1dCIgbmFtZT0icmVhc29uIiBkcm9vbHM6ZHR5cGU9IlN0cmluZyIgaXRlbVN1YmplY3RSZWY9Il9zdHJJdGVtIi8+CiAgICAgICAgICA8YnBtbjI6ZGF0YUlucHV0IGlkPSJlc2NhbGF0ZV9UYXNrTmFtZSIgbmFtZT0iVGFza05hbWUiIGRyb29sczpkdHlwZT0iT2JqZWN0Ii8+CiAgICAgICAgICA8YnBtbjI6aW5wdXRTZXQ+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPmVzY2FsYXRlX2F0dGVtcHRzX2lucHV0PC9icG1uMjpkYXRhSW5wdXRSZWZzPgogICAgICAgICAgICA8YnBtbjI6ZGF0YUlucHV0UmVmcz5lc2NhbGF0ZV9yZWFzb25faW5wdXQ8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPmVzY2FsYXRlX1Rhc2tOYW1lPC9icG1uMjpkYXRhSW5wdXRSZWZzPgogICAgICAgICAgPC9icG1uMjppbnB1dFNldD4KICAgICAgICAgIDxicG1uMjpvdXRwdXRTZXQvPgogICAgICAgIDwvYnBtbjI6aW9TcGVjaWZpY2F0aW9uPgogICAgICAgIDxicG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjpzb3VyY2VSZWY+cmVtaW5kZXJfYXR0ZW1wdHM8L2JwbW4yOnNvdXJjZVJlZj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+ZXNjYWxhdGVfYXR0ZW1wdHNfaW5wdXQ8L2JwbW4yOnRhcmdldFJlZj4KICAgICAgICA8L2JwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgIDxicG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjpzb3VyY2VSZWY+ZXNjYWxhdGlvbl9yZWFzb248L2JwbW4yOnNvdXJjZVJlZj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+ZXNjYWxhdGVfcmVhc29uX2lucHV0PC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgPC9icG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICA8YnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgICA8YnBtbjI6dGFyZ2V0UmVmPmVzY2FsYXRlX1Rhc2tOYW1lPC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgICA8YnBtbjI6YXNzaWdubWVudD4KICAgICAgICAgICAgPGJwbW4yOmZyb20geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5jYXJlX3RlYW1fZXNjYWxhdGVfX2VzY2FsYXRlPC9icG1uMjpmcm9tPgogICAgICAgICAgICA8YnBtbjI6dG8geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5lc2NhbGF0ZV9UYXNrTmFtZTwvYnBtbjI6dG8+CiAgICAgICAgICA8L2JwbW4yOmFzc2lnbm1lbnQ+CiAgICAgICAgPC9icG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgPC9icG1uMjp0YXNrPgogICAgICA8YnBtbjI6ZXhjbHVzaXZlR2F0ZXdheSBpZD0iZ3dfYXR0ZW1wdHMiIG5hbWU9IlJlbWluZGVyIGxpbWl0IHJlYWNoZWQ/IiBnYXRld2F5RGlyZWN0aW9uPSJEaXZlcmdpbmciIGRlZmF1bHQ9ImZfcmV0cnkiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7InByb3ZlbmFuY2UiOnsiZGVyaXZhdGlvbl9ydWxlIjoiZXhjbHVzaXZlLXNwbGl0Iiwia2luZCI6InN0cnVjdHVyYWwiLCJzdXBwb3J0cyI6WyJmX2VzY2FsYXRlIl19fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YnBtbjI6aW5jb21pbmc+Zl9hdHRlbXB0czwvYnBtbjI6aW5jb21pbmc+CiAgICAgICAgPGJwbW4yOm91dGdvaW5nPmZfZXNjYWxhdGU8L2JwbW4yOm91dGdvaW5nPgogICAgICAgIDxicG1uMjpvdXRnb2luZz5mX3JldHJ5PC9icG1uMjpvdXRnb2luZz4KICAgICAgPC9icG1uMjpleGNsdXNpdmVHYXRld2F5PgogICAgICA8YnBtbjI6ZXhjbHVzaXZlR2F0ZXdheSBpZD0iZ3dfcmVjZWl2ZWQiIG5hbWU9IlJlYWRpbmdzIHJlY2VpdmVkPyIgZ2F0ZXdheURpcmVjdGlvbj0iRGl2ZXJnaW5nIiBkZWZhdWx0PSJmX25vbmUiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7InByb3ZlbmFuY2UiOnsiZGVyaXZhdGlvbl9ydWxlIjoiZXhjbHVzaXZlLXNwbGl0Iiwia2luZCI6InN0cnVjdHVyYWwiLCJzdXBwb3J0cyI6WyJmX3NvbWUiLCJmX25vbmUiXX19XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxicG1uMjppbmNvbWluZz5mX3JlY2VpdmVkPC9icG1uMjppbmNvbWluZz4KICAgICAgICA8YnBtbjI6b3V0Z29pbmc+Zl9ub25lPC9icG1uMjpvdXRnb2luZz4KICAgICAgICA8YnBtbjI6b3V0Z29pbmc+Zl9zb21lPC9icG1uMjpvdXRnb2luZz4KICAgICAgPC9icG1uMjpleGNsdXNpdmVHYXRld2F5PgogICAgICA8YnBtbjI6c2NyaXB0VGFzayBpZD0iZl9zb21lX3Jlc2V0IiBuYW1lPSJSZXNldCByZW1pbmRlciBhdHRlbXB0cyIgc2NyaXB0Rm9ybWF0PSJodHRwOi8vd3d3LmphdmEuY29tL2phdmEiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YnBtbjI6aW5jb21pbmc+Zl9zb21lPC9icG1uMjppbmNvbWluZz4KICAgICAgICA8YnBtbjI6b3V0Z29pbmc+Zl9zb21lX3Jlc2V0X291dDwvYnBtbjI6b3V0Z29pbmc+CiAgICAgICAgPGJwbW4yOnNjcmlwdD5rY29udGV4dC5zZXRWYXJpYWJsZSgicmVtaW5kZXJfYXR0ZW1wdHMiLCAwKTs8L2JwbW4yOnNjcmlwdD4KICAgICAgPC9icG1uMjpzY3JpcHRUYXNrPgogICAgICA8YnBtbjI6ZXhjbHVzaXZlR2F0ZXdheSBpZD0iZ3dfdGhyZXNob2xkIiBuYW1lPSJBdmVyYWdlIGFib3ZlIHRocmVzaG9sZD8iIGdhdGV3YXlEaXJlY3Rpb249IkRpdmVyZ2luZyIgZGVmYXVsdD0iZl9vayI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3sicHJvdmVuYW5jZSI6eyJkZXJpdmF0aW9uX3J1bGUiOiJleGNsdXNpdmUtc3BsaXQiLCJraW5kIjoic3RydWN0dXJhbCIsInN1cHBvcnRzIjpbImZfaGlnaCJdfX1dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGJwbW4yOmluY29taW5nPmZfc29tZV9yZXNldF9vdXQ8L2JwbW4yOmluY29taW5nPgogICAgICAgIDxicG1uMjpvdXRnb2luZz5mX2hpZ2g8L2JwbW4yOm91dGdvaW5nPgogICAgICAgIDxicG1uMjpvdXRnb2luZz5mX29rPC9icG1uMjpvdXRnb2luZz4KICAgICAgPC9icG1uMjpleGNsdXNpdmVHYXRld2F5PgogICAgICA8YnBtbjI6ZXhjbHVzaXZlR2F0ZXdheSBpZD0ibG9vcF9lbnRyeSIgbmFtZT0iQmVnaW4gbW9uaXRvcmluZyBjeWNsZSIgZ2F0ZXdheURpcmVjdGlvbj0iQ29udmVyZ2luZyI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3sicHJvdmVuYW5jZSI6eyJkZXJpdmF0aW9uX3J1bGUiOiJleGNsdXNpdmUtam9pbiIsImtpbmQiOiJzdHJ1Y3R1cmFsIiwic3VwcG9ydHMiOlsicmVxdWVzdF9yZWFkaW5ncyIsIm5vdGlmeSIsImd3X3RocmVzaG9sZCIsImd3X2F0dGVtcHRzIl19fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YnBtbjI6aW5jb21pbmc+Zl9ub3RpZmllZDwvYnBtbjI6aW5jb21pbmc+CiAgICAgICAgPGJwbW4yOmluY29taW5nPmZfb2s8L2JwbW4yOmluY29taW5nPgogICAgICAgIDxicG1uMjppbmNvbWluZz5mX3JldHJ5PC9icG1uMjppbmNvbWluZz4KICAgICAgICA8YnBtbjI6aW5jb21pbmc+Zl9zdGFydDwvYnBtbjI6aW5jb21pbmc+CiAgICAgICAgPGJwbW4yOm91dGdvaW5nPmZfbG9vcDwvYnBtbjI6b3V0Z29pbmc+CiAgICAgIDwvYnBtbjI6ZXhjbHVzaXZlR2F0ZXdheT4KICAgICAgPGJwbW4yOnRhc2sgaWQ9Im5vdGlmeSIgbmFtZT0iTm90aWZ5IGNsaW5pY2lhbiIgZHJvb2xzOnRhc2tOYW1lPSJjbGluaWNpYW4ubm90aWZ5Ij4KICAgICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbeyJwcm92ZW5hbmNlIjp7ImtpbmQiOiJzb3VyY2UiLCJzb3VyY2VfdGV4dCI6IlRoZSByZXNwb25zaWJsZSBjbGluaWNpYW4gc2hvdWxkIGJlIG5vdGlmaWVkIHdoZW4gdGhlIHdlZWtseSBob21lIGF2ZXJhZ2UgaXMgMTM1Lzg1IG1tSGcgb3IgaGlnaGVyIC4uLiByb3V0aW5lIG5vdGlmaWNhdGlvbiJ9fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YnBtbjI6aW5jb21pbmc+Zl9oaWdoPC9icG1uMjppbmNvbWluZz4KICAgICAgICA8YnBtbjI6b3V0Z29pbmc+Zl9ub3RpZmllZDwvYnBtbjI6b3V0Z29pbmc+CiAgICAgICAgPGJwbW4yOmlvU3BlY2lmaWNhdGlvbj4KICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXQgaWQ9Im5vdGlmeV9yZWFzb25faW5wdXQiIG5hbWU9InJlYXNvbiIgZHJvb2xzOmR0eXBlPSJTdHJpbmciIGl0ZW1TdWJqZWN0UmVmPSJfc3RySXRlbSIvPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0ibm90aWZ5X3VyZ2VuY3lfaW5wdXQiIG5hbWU9InVyZ2VuY3kiIGRyb29sczpkdHlwZT0iU3RyaW5nIiBpdGVtU3ViamVjdFJlZj0iX3N0ckl0ZW0iLz4KICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXQgaWQ9Im5vdGlmeV9UYXNrTmFtZSIgbmFtZT0iVGFza05hbWUiIGRyb29sczpkdHlwZT0iT2JqZWN0Ii8+CiAgICAgICAgICA8YnBtbjI6aW5wdXRTZXQ+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPm5vdGlmeV9yZWFzb25faW5wdXQ8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPm5vdGlmeV91cmdlbmN5X2lucHV0PC9icG1uMjpkYXRhSW5wdXRSZWZzPgogICAgICAgICAgICA8YnBtbjI6ZGF0YUlucHV0UmVmcz5ub3RpZnlfVGFza05hbWU8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICA8L2JwbW4yOmlucHV0U2V0PgogICAgICAgICAgPGJwbW4yOm91dHB1dFNldC8+CiAgICAgICAgPC9icG1uMjppb1NwZWNpZmljYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgICAgPGJwbW4yOnNvdXJjZVJlZj5ub3RpZnlfcmVhc29uPC9icG1uMjpzb3VyY2VSZWY+CiAgICAgICAgICA8YnBtbjI6dGFyZ2V0UmVmPm5vdGlmeV9yZWFzb25faW5wdXQ8L2JwbW4yOnRhcmdldFJlZj4KICAgICAgICA8L2JwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgIDxicG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+bm90aWZ5X3VyZ2VuY3lfaW5wdXQ8L2JwbW4yOnRhcmdldFJlZj4KICAgICAgICAgIDxicG1uMjphc3NpZ25tZW50PgogICAgICAgICAgICA8YnBtbjI6ZnJvbSB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPnJvdXRpbmU8L2JwbW4yOmZyb20+CiAgICAgICAgICAgIDxicG1uMjp0byB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPm5vdGlmeV91cmdlbmN5X2lucHV0PC9icG1uMjp0bz4KICAgICAgICAgIDwvYnBtbjI6YXNzaWdubWVudD4KICAgICAgICA8L2JwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgIDxicG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+bm90aWZ5X1Rhc2tOYW1lPC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgICA8YnBtbjI6YXNzaWdubWVudD4KICAgICAgICAgICAgPGJwbW4yOmZyb20geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5jbGluaWNpYW5fbm90aWZ5X19ub3RpZnk8L2JwbW4yOmZyb20+CiAgICAgICAgICAgIDxicG1uMjp0byB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPm5vdGlmeV9UYXNrTmFtZTwvYnBtbjI6dG8+CiAgICAgICAgICA8L2JwbW4yOmFzc2lnbm1lbnQ+CiAgICAgICAgPC9icG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgPC9icG1uMjp0YXNrPgogICAgICA8YnBtbjI6dGFzayBpZD0icXVlcnlfZGlhc3RvbGljIiBuYW1lPSJDaGVjayBkaWFzdG9saWMgcmVhZGluZ3MgcmVjZWl2ZWQiIGRyb29sczp0YXNrTmFtZT0iZWhyLnF1ZXJ5X29ic2VydmF0aW9ucyI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3sicHJvdmVuYW5jZSI6eyJraW5kIjoic291cmNlIiwic291cmNlX3RleHQiOiJUaGUgY2FyZSB0ZWFtIHJldmlld3MgdGhlIHdlZWtseSBhdmVyYWdlIHN5c3RvbGljIGFuZCBkaWFzdG9saWMgcmVhZGluZ3MifX1dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGJwbW4yOmluY29taW5nPmZfcXVlcnkyPC9icG1uMjppbmNvbWluZz4KICAgICAgICA8YnBtbjI6b3V0Z29pbmc+Zl9yZWNlaXZlZDwvYnBtbjI6b3V0Z29pbmc+CiAgICAgICAgPGJwbW4yOmlvU3BlY2lmaWNhdGlvbj4KICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXQgaWQ9InF1ZXJ5X2RpYXN0b2xpY19jb2RlX2lucHV0IiBuYW1lPSJjb2RlIiBkcm9vbHM6ZHR5cGU9IlN0cmluZyIvPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0icXVlcnlfZGlhc3RvbGljX3VuaXRfaW5wdXQiIG5hbWU9InVuaXQiIGRyb29sczpkdHlwZT0iU3RyaW5nIiBpdGVtU3ViamVjdFJlZj0iX3N0ckl0ZW0iLz4KICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXQgaWQ9InF1ZXJ5X2RpYXN0b2xpY193aW5kb3dfaW5wdXQiIG5hbWU9IndpbmRvdyIgZHJvb2xzOmR0eXBlPSJTdHJpbmciIGl0ZW1TdWJqZWN0UmVmPSJfc3RySXRlbSIvPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0icXVlcnlfZGlhc3RvbGljX1Rhc2tOYW1lIiBuYW1lPSJUYXNrTmFtZSIgZHJvb2xzOmR0eXBlPSJPYmplY3QiLz4KICAgICAgICAgIDxicG1uMjpkYXRhT3V0cHV0IGlkPSJxdWVyeV9kaWFzdG9saWNfYXZlcmFnZV92YWx1ZV9vdXRwdXQiIG5hbWU9ImF2ZXJhZ2VfdmFsdWUiIGRyb29sczpkdHlwZT0iRG91YmxlIiBpdGVtU3ViamVjdFJlZj0iX2RibEl0ZW0iLz4KICAgICAgICAgIDxicG1uMjppbnB1dFNldD4KICAgICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dFJlZnM+cXVlcnlfZGlhc3RvbGljX2NvZGVfaW5wdXQ8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPnF1ZXJ5X2RpYXN0b2xpY191bml0X2lucHV0PC9icG1uMjpkYXRhSW5wdXRSZWZzPgogICAgICAgICAgICA8YnBtbjI6ZGF0YUlucHV0UmVmcz5xdWVyeV9kaWFzdG9saWNfd2luZG93X2lucHV0PC9icG1uMjpkYXRhSW5wdXRSZWZzPgogICAgICAgICAgICA8YnBtbjI6ZGF0YUlucHV0UmVmcz5xdWVyeV9kaWFzdG9saWNfVGFza05hbWU8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICA8L2JwbW4yOmlucHV0U2V0PgogICAgICAgICAgPGJwbW4yOm91dHB1dFNldD4KICAgICAgICAgICAgPGJwbW4yOmRhdGFPdXRwdXRSZWZzPnF1ZXJ5X2RpYXN0b2xpY19hdmVyYWdlX3ZhbHVlX291dHB1dDwvYnBtbjI6ZGF0YU91dHB1dFJlZnM+CiAgICAgICAgICA8L2JwbW4yOm91dHB1dFNldD4KICAgICAgICA8L2JwbW4yOmlvU3BlY2lmaWNhdGlvbj4KICAgICAgICA8YnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgICA8YnBtbjI6dGFyZ2V0UmVmPnF1ZXJ5X2RpYXN0b2xpY19jb2RlX2lucHV0PC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgICA8YnBtbjI6YXNzaWdubWVudD4KICAgICAgICAgICAgPGJwbW4yOmZyb20geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5jb25jZXB0OmRpYXN0b2xpYyBibG9vZCBwcmVzc3VyZTwvYnBtbjI6ZnJvbT4KICAgICAgICAgICAgPGJwbW4yOnRvIHhzaTp0eXBlPSJicG1uMjp0Rm9ybWFsRXhwcmVzc2lvbiI+cXVlcnlfZGlhc3RvbGljX2NvZGVfaW5wdXQ8L2JwbW4yOnRvPgogICAgICAgICAgPC9icG1uMjphc3NpZ25tZW50PgogICAgICAgIDwvYnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgICAgPGJwbW4yOnRhcmdldFJlZj5xdWVyeV9kaWFzdG9saWNfdW5pdF9pbnB1dDwvYnBtbjI6dGFyZ2V0UmVmPgogICAgICAgICAgPGJwbW4yOmFzc2lnbm1lbnQ+CiAgICAgICAgICAgIDxicG1uMjpmcm9tIHhzaTp0eXBlPSJicG1uMjp0Rm9ybWFsRXhwcmVzc2lvbiI+bW1bSGddPC9icG1uMjpmcm9tPgogICAgICAgICAgICA8YnBtbjI6dG8geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5xdWVyeV9kaWFzdG9saWNfdW5pdF9pbnB1dDwvYnBtbjI6dG8+CiAgICAgICAgICA8L2JwbW4yOmFzc2lnbm1lbnQ+CiAgICAgICAgPC9icG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICA8YnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgICA8YnBtbjI6c291cmNlUmVmPnJlcG9ydGluZ19pbnRlcnZhbDwvYnBtbjI6c291cmNlUmVmPgogICAgICAgICAgPGJwbW4yOnRhcmdldFJlZj5xdWVyeV9kaWFzdG9saWNfd2luZG93X2lucHV0PC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgPC9icG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICA8YnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgICA8YnBtbjI6dGFyZ2V0UmVmPnF1ZXJ5X2RpYXN0b2xpY19UYXNrTmFtZTwvYnBtbjI6dGFyZ2V0UmVmPgogICAgICAgICAgPGJwbW4yOmFzc2lnbm1lbnQ+CiAgICAgICAgICAgIDxicG1uMjpmcm9tIHhzaTp0eXBlPSJicG1uMjp0Rm9ybWFsRXhwcmVzc2lvbiI+ZWhyX3F1ZXJ5X29ic2VydmF0aW9uc19fcXVlcnlfZGlhc3RvbGljPC9icG1uMjpmcm9tPgogICAgICAgICAgICA8YnBtbjI6dG8geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5xdWVyeV9kaWFzdG9saWNfVGFza05hbWU8L2JwbW4yOnRvPgogICAgICAgICAgPC9icG1uMjphc3NpZ25tZW50PgogICAgICAgIDwvYnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFPdXRwdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjpzb3VyY2VSZWY+cXVlcnlfZGlhc3RvbGljX2F2ZXJhZ2VfdmFsdWVfb3V0cHV0PC9icG1uMjpzb3VyY2VSZWY+CiAgICAgICAgICA8YnBtbjI6dGFyZ2V0UmVmPmF2Z19kaWFzdG9saWM8L2JwbW4yOnRhcmdldFJlZj4KICAgICAgICA8L2JwbW4yOmRhdGFPdXRwdXRBc3NvY2lhdGlvbj4KICAgICAgPC9icG1uMjp0YXNrPgogICAgICA8YnBtbjI6dGFzayBpZD0icXVlcnlfc3lzdG9saWMiIG5hbWU9IkNoZWNrIHN5c3RvbGljIHJlYWRpbmdzIHJlY2VpdmVkIiBkcm9vbHM6dGFza05hbWU9ImVoci5xdWVyeV9vYnNlcnZhdGlvbnMiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7InByb3ZlbmFuY2UiOnsia2luZCI6InNvdXJjZSIsInNvdXJjZV90ZXh0IjoiVGhlIGNhcmUgdGVhbSByZXZpZXdzIHRoZSB3ZWVrbHkgYXZlcmFnZSBzeXN0b2xpYyBhbmQgZGlhc3RvbGljIHJlYWRpbmdzIn19XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxicG1uMjppbmNvbWluZz5mX3F1ZXJ5PC9icG1uMjppbmNvbWluZz4KICAgICAgICA8YnBtbjI6b3V0Z29pbmc+Zl9xdWVyeTI8L2JwbW4yOm91dGdvaW5nPgogICAgICAgIDxicG1uMjppb1NwZWNpZmljYXRpb24+CiAgICAgICAgICA8YnBtbjI6ZGF0YUlucHV0IGlkPSJxdWVyeV9zeXN0b2xpY19jb2RlX2lucHV0IiBuYW1lPSJjb2RlIiBkcm9vbHM6ZHR5cGU9IlN0cmluZyIvPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0icXVlcnlfc3lzdG9saWNfdW5pdF9pbnB1dCIgbmFtZT0idW5pdCIgZHJvb2xzOmR0eXBlPSJTdHJpbmciIGl0ZW1TdWJqZWN0UmVmPSJfc3RySXRlbSIvPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0icXVlcnlfc3lzdG9saWNfd2luZG93X2lucHV0IiBuYW1lPSJ3aW5kb3ciIGRyb29sczpkdHlwZT0iU3RyaW5nIiBpdGVtU3ViamVjdFJlZj0iX3N0ckl0ZW0iLz4KICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXQgaWQ9InF1ZXJ5X3N5c3RvbGljX1Rhc2tOYW1lIiBuYW1lPSJUYXNrTmFtZSIgZHJvb2xzOmR0eXBlPSJPYmplY3QiLz4KICAgICAgICAgIDxicG1uMjpkYXRhT3V0cHV0IGlkPSJxdWVyeV9zeXN0b2xpY19hdmVyYWdlX3ZhbHVlX291dHB1dCIgbmFtZT0iYXZlcmFnZV92YWx1ZSIgZHJvb2xzOmR0eXBlPSJEb3VibGUiIGl0ZW1TdWJqZWN0UmVmPSJfZGJsSXRlbSIvPgogICAgICAgICAgPGJwbW4yOmRhdGFPdXRwdXQgaWQ9InF1ZXJ5X3N5c3RvbGljX2NvdW50X291dHB1dCIgbmFtZT0iY291bnQiIGRyb29sczpkdHlwZT0iSW50ZWdlciIgaXRlbVN1YmplY3RSZWY9Il9pbnRJdGVtIi8+CiAgICAgICAgICA8YnBtbjI6aW5wdXRTZXQ+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPnF1ZXJ5X3N5c3RvbGljX2NvZGVfaW5wdXQ8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPnF1ZXJ5X3N5c3RvbGljX3VuaXRfaW5wdXQ8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPnF1ZXJ5X3N5c3RvbGljX3dpbmRvd19pbnB1dDwvYnBtbjI6ZGF0YUlucHV0UmVmcz4KICAgICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dFJlZnM+cXVlcnlfc3lzdG9saWNfVGFza05hbWU8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICA8L2JwbW4yOmlucHV0U2V0PgogICAgICAgICAgPGJwbW4yOm91dHB1dFNldD4KICAgICAgICAgICAgPGJwbW4yOmRhdGFPdXRwdXRSZWZzPnF1ZXJ5X3N5c3RvbGljX2F2ZXJhZ2VfdmFsdWVfb3V0cHV0PC9icG1uMjpkYXRhT3V0cHV0UmVmcz4KICAgICAgICAgICAgPGJwbW4yOmRhdGFPdXRwdXRSZWZzPnF1ZXJ5X3N5c3RvbGljX2NvdW50X291dHB1dDwvYnBtbjI6ZGF0YU91dHB1dFJlZnM+CiAgICAgICAgICA8L2JwbW4yOm91dHB1dFNldD4KICAgICAgICA8L2JwbW4yOmlvU3BlY2lmaWNhdGlvbj4KICAgICAgICA8YnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgICA8YnBtbjI6dGFyZ2V0UmVmPnF1ZXJ5X3N5c3RvbGljX2NvZGVfaW5wdXQ8L2JwbW4yOnRhcmdldFJlZj4KICAgICAgICAgIDxicG1uMjphc3NpZ25tZW50PgogICAgICAgICAgICA8YnBtbjI6ZnJvbSB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPmNvbmNlcHQ6c3lzdG9saWMgYmxvb2QgcHJlc3N1cmU8L2JwbW4yOmZyb20+CiAgICAgICAgICAgIDxicG1uMjp0byB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPnF1ZXJ5X3N5c3RvbGljX2NvZGVfaW5wdXQ8L2JwbW4yOnRvPgogICAgICAgICAgPC9icG1uMjphc3NpZ25tZW50PgogICAgICAgIDwvYnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgICAgPGJwbW4yOnRhcmdldFJlZj5xdWVyeV9zeXN0b2xpY191bml0X2lucHV0PC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgICA8YnBtbjI6YXNzaWdubWVudD4KICAgICAgICAgICAgPGJwbW4yOmZyb20geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5tbVtIZ108L2JwbW4yOmZyb20+CiAgICAgICAgICAgIDxicG1uMjp0byB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPnF1ZXJ5X3N5c3RvbGljX3VuaXRfaW5wdXQ8L2JwbW4yOnRvPgogICAgICAgICAgPC9icG1uMjphc3NpZ25tZW50PgogICAgICAgIDwvYnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgICAgPGJwbW4yOnNvdXJjZVJlZj5yZXBvcnRpbmdfaW50ZXJ2YWw8L2JwbW4yOnNvdXJjZVJlZj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+cXVlcnlfc3lzdG9saWNfd2luZG93X2lucHV0PC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgPC9icG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICA8YnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgICA8YnBtbjI6dGFyZ2V0UmVmPnF1ZXJ5X3N5c3RvbGljX1Rhc2tOYW1lPC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgICA8YnBtbjI6YXNzaWdubWVudD4KICAgICAgICAgICAgPGJwbW4yOmZyb20geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5laHJfcXVlcnlfb2JzZXJ2YXRpb25zX19xdWVyeV9zeXN0b2xpYzwvYnBtbjI6ZnJvbT4KICAgICAgICAgICAgPGJwbW4yOnRvIHhzaTp0eXBlPSJicG1uMjp0Rm9ybWFsRXhwcmVzc2lvbiI+cXVlcnlfc3lzdG9saWNfVGFza05hbWU8L2JwbW4yOnRvPgogICAgICAgICAgPC9icG1uMjphc3NpZ25tZW50PgogICAgICAgIDwvYnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFPdXRwdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjpzb3VyY2VSZWY+cXVlcnlfc3lzdG9saWNfYXZlcmFnZV92YWx1ZV9vdXRwdXQ8L2JwbW4yOnNvdXJjZVJlZj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+YXZnX3N5c3RvbGljPC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgPC9icG1uMjpkYXRhT3V0cHV0QXNzb2NpYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFPdXRwdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjpzb3VyY2VSZWY+cXVlcnlfc3lzdG9saWNfY291bnRfb3V0cHV0PC9icG1uMjpzb3VyY2VSZWY+CiAgICAgICAgICA8YnBtbjI6dGFyZ2V0UmVmPnJlYWRpbmdfY291bnQ8L2JwbW4yOnRhcmdldFJlZj4KICAgICAgICA8L2JwbW4yOmRhdGFPdXRwdXRBc3NvY2lhdGlvbj4KICAgICAgPC9icG1uMjp0YXNrPgogICAgICA8YnBtbjI6dGFzayBpZD0icmVtaW5kIiBuYW1lPSJTZW5kIHJlYWRpbmcgcmVtaW5kZXIiIGRyb29sczp0YXNrTmFtZT0icGF0aWVudC5zZW5kX21lc3NhZ2UiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7ImNvdW50ZXIiOiJyZW1pbmRlcl9hdHRlbXB0cyIsInByb3ZlbmFuY2UiOnsia2luZCI6InNvdXJjZSIsInNvdXJjZV90ZXh0IjoiSWYgYSB3ZWVrIHBhc3NlcyB3aXRob3V0IHJlYWRpbmdzLCBhIHJlbWluZGVyIHNob3VsZCBiZSBzZW50IHRvIHRoZSBwYXRpZW50In19XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxicG1uMjppbmNvbWluZz5mX25vbmU8L2JwbW4yOmluY29taW5nPgogICAgICAgIDxicG1uMjpvdXRnb2luZz5yZW1pbmRfY291bnRlcl9pbjwvYnBtbjI6b3V0Z29pbmc+CiAgICAgICAgPGJwbW4yOmlvU3BlY2lmaWNhdGlvbj4KICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXQgaWQ9InJlbWluZF9raW5kX2lucHV0IiBuYW1lPSJraW5kIiBkcm9vbHM6ZHR5cGU9IlN0cmluZyIgaXRlbVN1YmplY3RSZWY9Il9zdHJJdGVtIi8+CiAgICAgICAgICA8YnBtbjI6ZGF0YUlucHV0IGlkPSJyZW1pbmRfbWVzc2FnZV9pbnB1dCIgbmFtZT0ibWVzc2FnZSIgZHJvb2xzOmR0eXBlPSJTdHJpbmciIGl0ZW1TdWJqZWN0UmVmPSJfc3RySXRlbSIvPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0icmVtaW5kX1Rhc2tOYW1lIiBuYW1lPSJUYXNrTmFtZSIgZHJvb2xzOmR0eXBlPSJPYmplY3QiLz4KICAgICAgICAgIDxicG1uMjppbnB1dFNldD4KICAgICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dFJlZnM+cmVtaW5kX2tpbmRfaW5wdXQ8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPnJlbWluZF9tZXNzYWdlX2lucHV0PC9icG1uMjpkYXRhSW5wdXRSZWZzPgogICAgICAgICAgICA8YnBtbjI6ZGF0YUlucHV0UmVmcz5yZW1pbmRfVGFza05hbWU8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICA8L2JwbW4yOmlucHV0U2V0PgogICAgICAgICAgPGJwbW4yOm91dHB1dFNldC8+CiAgICAgICAgPC9icG1uMjppb1NwZWNpZmljYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgICAgPGJwbW4yOnRhcmdldFJlZj5yZW1pbmRfa2luZF9pbnB1dDwvYnBtbjI6dGFyZ2V0UmVmPgogICAgICAgICAgPGJwbW4yOmFzc2lnbm1lbnQ+CiAgICAgICAgICAgIDxicG1uMjpmcm9tIHhzaTp0eXBlPSJicG1uMjp0Rm9ybWFsRXhwcmVzc2lvbiI+cmVtaW5kZXI8L2JwbW4yOmZyb20+CiAgICAgICAgICAgIDxicG1uMjp0byB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPnJlbWluZF9raW5kX2lucHV0PC9icG1uMjp0bz4KICAgICAgICAgIDwvYnBtbjI6YXNzaWdubWVudD4KICAgICAgICA8L2JwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgIDxicG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjpzb3VyY2VSZWY+cmVtaW5kZXJfdGV4dDwvYnBtbjI6c291cmNlUmVmPgogICAgICAgICAgPGJwbW4yOnRhcmdldFJlZj5yZW1pbmRfbWVzc2FnZV9pbnB1dDwvYnBtbjI6dGFyZ2V0UmVmPgogICAgICAgIDwvYnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgICAgPGJwbW4yOnRhcmdldFJlZj5yZW1pbmRfVGFza05hbWU8L2JwbW4yOnRhcmdldFJlZj4KICAgICAgICAgIDxicG1uMjphc3NpZ25tZW50PgogICAgICAgICAgICA8YnBtbjI6ZnJvbSB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPnBhdGllbnRfc2VuZF9tZXNzYWdlX19yZW1pbmQ8L2JwbW4yOmZyb20+CiAgICAgICAgICAgIDxicG1uMjp0byB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPnJlbWluZF9UYXNrTmFtZTwvYnBtbjI6dG8+CiAgICAgICAgICA8L2JwbW4yOmFzc2lnbm1lbnQ+CiAgICAgICAgPC9icG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgPC9icG1uMjp0YXNrPgogICAgICA8YnBtbjI6c2NyaXB0VGFzayBpZD0icmVtaW5kX2NvdW50ZXIiIG5hbWU9IkNvdW50IHJlbWluZGVyIGF0dGVtcHRzIiBzY3JpcHRGb3JtYXQ9Imh0dHA6Ly93d3cuamF2YS5jb20vamF2YSI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3t9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxicG1uMjppbmNvbWluZz5yZW1pbmRfY291bnRlcl9pbjwvYnBtbjI6aW5jb21pbmc+CiAgICAgICAgPGJwbW4yOm91dGdvaW5nPmZfYXR0ZW1wdHM8L2JwbW4yOm91dGdvaW5nPgogICAgICAgIDxicG1uMjpzY3JpcHQ+a2NvbnRleHQuc2V0VmFyaWFibGUoInJlbWluZGVyX2F0dGVtcHRzIiwgKChJbnRlZ2VyKSBrY29udGV4dC5nZXRWYXJpYWJsZSgicmVtaW5kZXJfYXR0ZW1wdHMiKSkgKyAxKTs8L2JwbW4yOnNjcmlwdD4KICAgICAgPC9icG1uMjpzY3JpcHRUYXNrPgogICAgICA8YnBtbjI6dGFzayBpZD0icmVxdWVzdF9yZWFkaW5ncyIgbmFtZT0iUmVxdWVzdCBob21lIEJQIHJlYWRpbmdzIiBkcm9vbHM6dGFza05hbWU9InBhdGllbnQucmVxdWVzdF9vYnNlcnZhdGlvbiI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3sicHJvdmVuYW5jZSI6eyJraW5kIjoic291cmNlIiwic291cmNlX3RleHQiOiJ0YWtlIHR3byByZWFkaW5ncyBvbmUgbWludXRlIGFwYXJ0IGluIHRoZSBtb3JuaW5nIGJlZm9yZSBtZWRpY2F0aW9ucyBhbmQgdHdvIHJlYWRpbmdzIG9uZSBtaW51dGUgYXBhcnQgaW4gdGhlIGV2ZW5pbmcgLi4uIGFuZCB0cmFuc21pdCB0aGVpciByZWFkaW5ncyB0byB0aGUgY2FyZSB0ZWFtIHdlZWtseSJ9fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YnBtbjI6aW5jb21pbmc+Zl9sb29wPC9icG1uMjppbmNvbWluZz4KICAgICAgICA8YnBtbjI6b3V0Z29pbmc+Zl93YWl0PC9icG1uMjpvdXRnb2luZz4KICAgICAgICA8YnBtbjI6aW9TcGVjaWZpY2F0aW9uPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0icmVxdWVzdF9yZWFkaW5nc19jb2RlX2lucHV0IiBuYW1lPSJjb2RlIiBkcm9vbHM6ZHR5cGU9IlN0cmluZyIvPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0icmVxdWVzdF9yZWFkaW5nc19kdWVfaW5wdXQiIG5hbWU9ImR1ZSIgZHJvb2xzOmR0eXBlPSJTdHJpbmciIGl0ZW1TdWJqZWN0UmVmPSJfc3RySXRlbSIvPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0icmVxdWVzdF9yZWFkaW5nc19pbnN0cnVjdGlvbnNfaW5wdXQiIG5hbWU9Imluc3RydWN0aW9ucyIgZHJvb2xzOmR0eXBlPSJTdHJpbmciIGl0ZW1TdWJqZWN0UmVmPSJfc3RySXRlbSIvPgogICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dCBpZD0icmVxdWVzdF9yZWFkaW5nc19UYXNrTmFtZSIgbmFtZT0iVGFza05hbWUiIGRyb29sczpkdHlwZT0iT2JqZWN0Ii8+CiAgICAgICAgICA8YnBtbjI6aW5wdXRTZXQ+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPnJlcXVlc3RfcmVhZGluZ3NfY29kZV9pbnB1dDwvYnBtbjI6ZGF0YUlucHV0UmVmcz4KICAgICAgICAgICAgPGJwbW4yOmRhdGFJbnB1dFJlZnM+cmVxdWVzdF9yZWFkaW5nc19kdWVfaW5wdXQ8L2JwbW4yOmRhdGFJbnB1dFJlZnM+CiAgICAgICAgICAgIDxicG1uMjpkYXRhSW5wdXRSZWZzPnJlcXVlc3RfcmVhZGluZ3NfaW5zdHJ1Y3Rpb25zX2lucHV0PC9icG1uMjpkYXRhSW5wdXRSZWZzPgogICAgICAgICAgICA8YnBtbjI6ZGF0YUlucHV0UmVmcz5yZXF1ZXN0X3JlYWRpbmdzX1Rhc2tOYW1lPC9icG1uMjpkYXRhSW5wdXRSZWZzPgogICAgICAgICAgPC9icG1uMjppbnB1dFNldD4KICAgICAgICAgIDxicG1uMjpvdXRwdXRTZXQvPgogICAgICAgIDwvYnBtbjI6aW9TcGVjaWZpY2F0aW9uPgogICAgICAgIDxicG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+cmVxdWVzdF9yZWFkaW5nc19jb2RlX2lucHV0PC9icG1uMjp0YXJnZXRSZWY+CiAgICAgICAgICA8YnBtbjI6YXNzaWdubWVudD4KICAgICAgICAgICAgPGJwbW4yOmZyb20geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5jb25jZXB0OmJsb29kIHByZXNzdXJlPC9icG1uMjpmcm9tPgogICAgICAgICAgICA8YnBtbjI6dG8geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5yZXF1ZXN0X3JlYWRpbmdzX2NvZGVfaW5wdXQ8L2JwbW4yOnRvPgogICAgICAgICAgPC9icG1uMjphc3NpZ25tZW50PgogICAgICAgIDwvYnBtbjI6ZGF0YUlucHV0QXNzb2NpYXRpb24+CiAgICAgICAgPGJwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgICAgPGJwbW4yOnNvdXJjZVJlZj5yZXBvcnRpbmdfaW50ZXJ2YWw8L2JwbW4yOnNvdXJjZVJlZj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+cmVxdWVzdF9yZWFkaW5nc19kdWVfaW5wdXQ8L2JwbW4yOnRhcmdldFJlZj4KICAgICAgICA8L2JwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgIDxicG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjpzb3VyY2VSZWY+aW5zdHJ1Y3Rpb25zX3RleHQ8L2JwbW4yOnNvdXJjZVJlZj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+cmVxdWVzdF9yZWFkaW5nc19pbnN0cnVjdGlvbnNfaW5wdXQ8L2JwbW4yOnRhcmdldFJlZj4KICAgICAgICA8L2JwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICAgIDxicG1uMjpkYXRhSW5wdXRBc3NvY2lhdGlvbj4KICAgICAgICAgIDxicG1uMjp0YXJnZXRSZWY+cmVxdWVzdF9yZWFkaW5nc19UYXNrTmFtZTwvYnBtbjI6dGFyZ2V0UmVmPgogICAgICAgICAgPGJwbW4yOmFzc2lnbm1lbnQ+CiAgICAgICAgICAgIDxicG1uMjpmcm9tIHhzaTp0eXBlPSJicG1uMjp0Rm9ybWFsRXhwcmVzc2lvbiI+cGF0aWVudF9yZXF1ZXN0X29ic2VydmF0aW9uX19yZXF1ZXN0X3JlYWRpbmdzPC9icG1uMjpmcm9tPgogICAgICAgICAgICA8YnBtbjI6dG8geHNpOnR5cGU9ImJwbW4yOnRGb3JtYWxFeHByZXNzaW9uIj5yZXF1ZXN0X3JlYWRpbmdzX1Rhc2tOYW1lPC9icG1uMjp0bz4KICAgICAgICAgIDwvYnBtbjI6YXNzaWdubWVudD4KICAgICAgICA8L2JwbW4yOmRhdGFJbnB1dEFzc29jaWF0aW9uPgogICAgICA8L2JwbW4yOnRhc2s+CiAgICAgIDxicG1uMjppbnRlcm1lZGlhdGVDYXRjaEV2ZW50IGlkPSJ3YWl0X2ludGVydmFsIiBuYW1lPSJSZXBvcnRpbmcgaW50ZXJ2YWwgZWxhcHNlZCI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3sicHJvdmVuYW5jZSI6eyJraW5kIjoic291cmNlIiwic291cmNlX3RleHQiOiJ0cmFuc21pdCB0aGVpciByZWFkaW5ncyB0byB0aGUgY2FyZSB0ZWFtIHdlZWtseSJ9fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YnBtbjI6aW5jb21pbmc+Zl93YWl0PC9icG1uMjppbmNvbWluZz4KICAgICAgICA8YnBtbjI6b3V0Z29pbmc+Zl9xdWVyeTwvYnBtbjI6b3V0Z29pbmc+CiAgICAgICAgPGJwbW4yOnRpbWVyRXZlbnREZWZpbml0aW9uPgogICAgICAgICAgPGJwbW4yOnRpbWVEdXJhdGlvbiB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iPiN7cmVwb3J0aW5nX2ludGVydmFsfTwvYnBtbjI6dGltZUR1cmF0aW9uPgogICAgICAgIDwvYnBtbjI6dGltZXJFdmVudERlZmluaXRpb24+CiAgICAgIDwvYnBtbjI6aW50ZXJtZWRpYXRlQ2F0Y2hFdmVudD4KICAgICAgPGJwbW4yOnNlcXVlbmNlRmxvdyBpZD0icmVtaW5kX2NvdW50ZXJfaW4iIHNvdXJjZVJlZj0icmVtaW5kIiB0YXJnZXRSZWY9InJlbWluZF9jb3VudGVyIj4KICAgICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgICA8YnBtbjI6c2VxdWVuY2VGbG93IGlkPSJmX2F0dGVtcHRzIiBzb3VyY2VSZWY9InJlbWluZF9jb3VudGVyIiB0YXJnZXRSZWY9Imd3X2F0dGVtcHRzIj4KICAgICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgICA8YnBtbjI6c2VxdWVuY2VGbG93IGlkPSJmX2VuZF9lc2NhbGF0ZWQiIHNvdXJjZVJlZj0iZXNjYWxhdGUiIHRhcmdldFJlZj0iZW5kX2VzY2FsYXRlZF9vdXRjb21lIj4KICAgICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgICA8YnBtbjI6c2VxdWVuY2VGbG93IGlkPSJlbmRfZXNjYWxhdGVkX291dGNvbWVfb3V0IiBzb3VyY2VSZWY9ImVuZF9lc2NhbGF0ZWRfb3V0Y29tZSIgdGFyZ2V0UmVmPSJtYWluX2VuZF9lc2NhbGF0ZWQiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgPC9icG1uMjpzZXF1ZW5jZUZsb3c+CiAgICAgIDxicG1uMjpzZXF1ZW5jZUZsb3cgaWQ9ImZfZXNjYWxhdGUiIHNvdXJjZVJlZj0iZ3dfYXR0ZW1wdHMiIHRhcmdldFJlZj0iZXNjYWxhdGUiIG5hbWU9ImxpbWl0IHJlYWNoZWQiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7ImNvbmRpdGlvbkV4cHJlc3Npb24iOiJyZW1pbmRlcl9hdHRlbXB0cyA+PSBtYXhfcmVtaW5kZXJfYXR0ZW1wdHMiLCJwcm92ZW5hbmNlIjp7ImtpbmQiOiJzb3VyY2UiLCJzb3VyY2VfdGV4dCI6ImFmdGVyIHRocmVlIHJlbWluZGVyIGF0dGVtcHRzIG9uIGRpZmZlcmVudCBkYXlzIn19XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxicG1uMjpjb25kaXRpb25FeHByZXNzaW9uIHhzaTp0eXBlPSJicG1uMjp0Rm9ybWFsRXhwcmVzc2lvbiIgbGFuZ3VhZ2U9Imh0dHA6Ly93d3cuamF2YS5jb20vamF2YSI+PCFbQ0RBVEFbcmV0dXJuIHJlbWluZGVyX2F0dGVtcHRzICE9IG51bGwgJiYgbWF4X3JlbWluZGVyX2F0dGVtcHRzICE9IG51bGwgJiYgcmVtaW5kZXJfYXR0ZW1wdHMgPj0gbWF4X3JlbWluZGVyX2F0dGVtcHRzO11dPjwvYnBtbjI6Y29uZGl0aW9uRXhwcmVzc2lvbj4KICAgICAgPC9icG1uMjpzZXF1ZW5jZUZsb3c+CiAgICAgIDxicG1uMjpzZXF1ZW5jZUZsb3cgaWQ9ImZfaGlnaCIgc291cmNlUmVmPSJnd190aHJlc2hvbGQiIHRhcmdldFJlZj0ibm90aWZ5IiBuYW1lPSJhYm92ZSB0aHJlc2hvbGQiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7ImNvbmRpdGlvbkV4cHJlc3Npb24iOiJhdmdfc3lzdG9saWMgPj0gbm90aWZ5X3N5c3RvbGljX3RocmVzaG9sZCBvciBhdmdfZGlhc3RvbGljID49IG5vdGlmeV9kaWFzdG9saWNfdGhyZXNob2xkIiwicHJvdmVuYW5jZSI6eyJraW5kIjoic291cmNlIiwic291cmNlX3RleHQiOiJ3ZWVrbHkgaG9tZSBhdmVyYWdlIGlzIDEzNS84NSBtbUhnIG9yIGhpZ2hlciJ9fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YnBtbjI6Y29uZGl0aW9uRXhwcmVzc2lvbiB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iIGxhbmd1YWdlPSJodHRwOi8vd3d3LmphdmEuY29tL2phdmEiPjwhW0NEQVRBW3JldHVybiAoYXZnX3N5c3RvbGljICE9IG51bGwgJiYgbm90aWZ5X3N5c3RvbGljX3RocmVzaG9sZCAhPSBudWxsICYmIGF2Z19zeXN0b2xpYyA+PSBub3RpZnlfc3lzdG9saWNfdGhyZXNob2xkKSB8fCAoYXZnX2RpYXN0b2xpYyAhPSBudWxsICYmIG5vdGlmeV9kaWFzdG9saWNfdGhyZXNob2xkICE9IG51bGwgJiYgYXZnX2RpYXN0b2xpYyA+PSBub3RpZnlfZGlhc3RvbGljX3RocmVzaG9sZCk7XV0+PC9icG1uMjpjb25kaXRpb25FeHByZXNzaW9uPgogICAgICA8L2JwbW4yOnNlcXVlbmNlRmxvdz4KICAgICAgPGJwbW4yOnNlcXVlbmNlRmxvdyBpZD0iZl9sb29wIiBzb3VyY2VSZWY9Imxvb3BfZW50cnkiIHRhcmdldFJlZj0icmVxdWVzdF9yZWFkaW5ncyI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3t9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICA8L2JwbW4yOnNlcXVlbmNlRmxvdz4KICAgICAgPGJwbW4yOnNlcXVlbmNlRmxvdyBpZD0iZl9ub25lIiBzb3VyY2VSZWY9Imd3X3JlY2VpdmVkIiB0YXJnZXRSZWY9InJlbWluZCIgbmFtZT0ibm8iPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgPC9icG1uMjpzZXF1ZW5jZUZsb3c+CiAgICAgIDxicG1uMjpzZXF1ZW5jZUZsb3cgaWQ9ImZfbm90aWZpZWQiIHNvdXJjZVJlZj0ibm90aWZ5IiB0YXJnZXRSZWY9Imxvb3BfZW50cnkiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgPC9icG1uMjpzZXF1ZW5jZUZsb3c+CiAgICAgIDxicG1uMjpzZXF1ZW5jZUZsb3cgaWQ9ImZfb2siIHNvdXJjZVJlZj0iZ3dfdGhyZXNob2xkIiB0YXJnZXRSZWY9Imxvb3BfZW50cnkiIG5hbWU9IndpdGhpbiB0YXJnZXQiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgPC9icG1uMjpzZXF1ZW5jZUZsb3c+CiAgICAgIDxicG1uMjpzZXF1ZW5jZUZsb3cgaWQ9ImZfcXVlcnkiIHNvdXJjZVJlZj0id2FpdF9pbnRlcnZhbCIgdGFyZ2V0UmVmPSJxdWVyeV9zeXN0b2xpYyI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3t9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICA8L2JwbW4yOnNlcXVlbmNlRmxvdz4KICAgICAgPGJwbW4yOnNlcXVlbmNlRmxvdyBpZD0iZl9xdWVyeTIiIHNvdXJjZVJlZj0icXVlcnlfc3lzdG9saWMiIHRhcmdldFJlZj0icXVlcnlfZGlhc3RvbGljIj4KICAgICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgICA8YnBtbjI6c2VxdWVuY2VGbG93IGlkPSJmX3JlY2VpdmVkIiBzb3VyY2VSZWY9InF1ZXJ5X2RpYXN0b2xpYyIgdGFyZ2V0UmVmPSJnd19yZWNlaXZlZCI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3t9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICA8L2JwbW4yOnNlcXVlbmNlRmxvdz4KICAgICAgPGJwbW4yOnNlcXVlbmNlRmxvdyBpZD0iZl9yZXRyeSIgc291cmNlUmVmPSJnd19hdHRlbXB0cyIgdGFyZ2V0UmVmPSJsb29wX2VudHJ5IiBuYW1lPSJ0cnkgYWdhaW4iPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgPC9icG1uMjpzZXF1ZW5jZUZsb3c+CiAgICAgIDxicG1uMjpzZXF1ZW5jZUZsb3cgaWQ9ImZfc29tZSIgc291cmNlUmVmPSJnd19yZWNlaXZlZCIgdGFyZ2V0UmVmPSJmX3NvbWVfcmVzZXQiIG5hbWU9InllcyI+CiAgICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3siY29uZGl0aW9uRXhwcmVzc2lvbiI6ImRlZmluZWQocmVhZGluZ19jb3VudCkgYW5kIHJlYWRpbmdfY291bnQgPiAwIiwicHJvdmVuYW5jZSI6eyJraW5kIjoic291cmNlIiwic291cmNlX3RleHQiOiJUaGUgY2FyZSB0ZWFtIHJldmlld3MgdGhlIHdlZWtseSBhdmVyYWdlIHN5c3RvbGljIGFuZCBkaWFzdG9saWMgcmVhZGluZ3MifSwicmVzZXRzIjpbInJlbWluZGVyX2F0dGVtcHRzIl0sInN0cnVjdHVyYWxfY29uc3RhbnQiOnRydWV9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxicG1uMjpjb25kaXRpb25FeHByZXNzaW9uIHhzaTp0eXBlPSJicG1uMjp0Rm9ybWFsRXhwcmVzc2lvbiIgbGFuZ3VhZ2U9Imh0dHA6Ly93d3cuamF2YS5jb20vamF2YSI+PCFbQ0RBVEFbcmV0dXJuIHJlYWRpbmdfY291bnQgIT0gbnVsbCAmJiByZWFkaW5nX2NvdW50ID4gMDtdXT48L2JwbW4yOmNvbmRpdGlvbkV4cHJlc3Npb24+CiAgICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgICA8YnBtbjI6c2VxdWVuY2VGbG93IGlkPSJmX3NvbWVfcmVzZXRfb3V0IiBzb3VyY2VSZWY9ImZfc29tZV9yZXNldCIgdGFyZ2V0UmVmPSJnd190aHJlc2hvbGQiPgogICAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgPC9icG1uMjpzZXF1ZW5jZUZsb3c+CiAgICAgIDxicG1uMjpzZXF1ZW5jZUZsb3cgaWQ9ImZfc3RhcnQiIHNvdXJjZVJlZj0ibWFpbl9zdGFydCIgdGFyZ2V0UmVmPSJsb29wX2VudHJ5Ij4KICAgICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgICA8YnBtbjI6c2VxdWVuY2VGbG93IGlkPSJmX3dhaXQiIHNvdXJjZVJlZj0icmVxdWVzdF9yZWFkaW5ncyIgdGFyZ2V0UmVmPSJ3YWl0X2ludGVydmFsIj4KICAgICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgPC9icG1uMjpzdWJQcm9jZXNzPgogICAgPGJwbW4yOmJvdW5kYXJ5RXZlbnQgaWQ9InBlcmlvZF9lbGFwc2VkIiBuYW1lPSJNYXggZHVyYXRpb24gZWxhcHNlZCIgYXR0YWNoZWRUb1JlZj0ibWFpbiIgY2FuY2VsQWN0aXZpdHk9InRydWUiPgogICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3sicHJvdmVuYW5jZSI6eyJkZXJpdmF0aW9uX3J1bGUiOiJwbGFuLWJvdW5kIiwia2luZCI6InN0cnVjdHVyYWwiLCJzdXBwb3J0cyI6WyJyZXF1ZXN0X3JlYWRpbmdzIl19fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgIDxicG1uMjpvdXRnb2luZz5mX3BlcmlvZDwvYnBtbjI6b3V0Z29pbmc+CiAgICAgIDxicG1uMjp0aW1lckV2ZW50RGVmaW5pdGlvbj4KICAgICAgICA8YnBtbjI6dGltZUR1cmF0aW9uIHhzaTp0eXBlPSJicG1uMjp0Rm9ybWFsRXhwcmVzc2lvbiI+I3ttYXhfZHVyYXRpb259PC9icG1uMjp0aW1lRHVyYXRpb24+CiAgICAgIDwvYnBtbjI6dGltZXJFdmVudERlZmluaXRpb24+CiAgICA8L2JwbW4yOmJvdW5kYXJ5RXZlbnQ+CiAgICA8YnBtbjI6ZXhjbHVzaXZlR2F0ZXdheSBpZD0iZ3dfb3V0Y29tZSIgbmFtZT0iT3V0Y29tZSIgZ2F0ZXdheURpcmVjdGlvbj0iRGl2ZXJnaW5nIiBkZWZhdWx0PSJmX2NvbXBsZXRlZCI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICA8YnBtbjI6aW5jb21pbmc+Zl9hZnRlcjwvYnBtbjI6aW5jb21pbmc+CiAgICAgIDxicG1uMjpvdXRnb2luZz5lbmRfZXNjYWxhdGVkX3JvdXRlPC9icG1uMjpvdXRnb2luZz4KICAgICAgPGJwbW4yOm91dGdvaW5nPmZfY29tcGxldGVkPC9icG1uMjpvdXRnb2luZz4KICAgIDwvYnBtbjI6ZXhjbHVzaXZlR2F0ZXdheT4KICAgIDxicG1uMjplbmRFdmVudCBpZD0iZW5kX2VzY2FsYXRlZCIgbmFtZT0iSGFuZGVkIHRvIGNhcmUgdGVhbSI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICA8YnBtbjI6aW5jb21pbmc+ZW5kX2VzY2FsYXRlZF9yb3V0ZTwvYnBtbjI6aW5jb21pbmc+CiAgICA8L2JwbW4yOmVuZEV2ZW50PgogICAgPGJwbW4yOmVuZEV2ZW50IGlkPSJlbmRfY29tcGxldGVkIiBuYW1lPSJDb21wbGV0ZWQiPgogICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3t9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgPGJwbW4yOmluY29taW5nPmZfY29tcGxldGVkPC9icG1uMjppbmNvbWluZz4KICAgIDwvYnBtbjI6ZW5kRXZlbnQ+CiAgICA8YnBtbjI6ZW5kRXZlbnQgaWQ9ImVuZF9wZXJpb2QiIG5hbWU9Ik1vbml0b3JpbmcgcGVyaW9kIGNvbXBsZXRlIj4KICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7Im91dGNvbWUiOiJjb21wbGV0ZSIsInByb3ZlbmFuY2UiOnsiZGVyaXZhdGlvbl9ydWxlIjoiZW5kLWV2ZW50Iiwia2luZCI6InN0cnVjdHVyYWwiLCJzdXBwb3J0cyI6WyJwZXJpb2RfZWxhcHNlZCJdfX1dXT48L2FjcDplbGVtZW50PgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICA8YnBtbjI6aW5jb21pbmc+Zl9wZXJpb2Q8L2JwbW4yOmluY29taW5nPgogICAgPC9icG1uMjplbmRFdmVudD4KICAgIDxicG1uMjpzZXF1ZW5jZUZsb3cgaWQ9ImZfaW5pdCIgc291cmNlUmVmPSJzdGFydCIgdGFyZ2V0UmVmPSJpbml0Ij4KICAgICAgPGJwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICAgIDxhY3A6ZWxlbWVudD48IVtDREFUQVt7fV1dPjwvYWNwOmVsZW1lbnQ+CiAgICAgIDwvYnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICA8L2JwbW4yOnNlcXVlbmNlRmxvdz4KICAgIDxicG1uMjpzZXF1ZW5jZUZsb3cgaWQ9ImZfbWFpbiIgc291cmNlUmVmPSJpbml0IiB0YXJnZXRSZWY9Im1haW4iPgogICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3t9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgPGJwbW4yOnNlcXVlbmNlRmxvdyBpZD0iZl9hZnRlciIgc291cmNlUmVmPSJtYWluIiB0YXJnZXRSZWY9Imd3X291dGNvbWUiPgogICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3t9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgPGJwbW4yOnNlcXVlbmNlRmxvdyBpZD0iZW5kX2VzY2FsYXRlZF9yb3V0ZSIgc291cmNlUmVmPSJnd19vdXRjb21lIiB0YXJnZXRSZWY9ImVuZF9lc2NhbGF0ZWQiIG5hbWU9ImVzY2FsYXRlZCI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgICA8YnBtbjI6Y29uZGl0aW9uRXhwcmVzc2lvbiB4c2k6dHlwZT0iYnBtbjI6dEZvcm1hbEV4cHJlc3Npb24iIGxhbmd1YWdlPSJodHRwOi8vd3d3LmphdmEuY29tL2phdmEiPjwhW0NEQVRBW3JldHVybiAiZXNjYWxhdGVkIi5lcXVhbHMob3V0Y29tZSk7XV0+PC9icG1uMjpjb25kaXRpb25FeHByZXNzaW9uPgogICAgPC9icG1uMjpzZXF1ZW5jZUZsb3c+CiAgICA8YnBtbjI6c2VxdWVuY2VGbG93IGlkPSJmX2NvbXBsZXRlZCIgc291cmNlUmVmPSJnd19vdXRjb21lIiB0YXJnZXRSZWY9ImVuZF9jb21wbGV0ZWQiPgogICAgICA8YnBtbjI6ZXh0ZW5zaW9uRWxlbWVudHM+CiAgICAgICAgPGFjcDplbGVtZW50PjwhW0NEQVRBW3t9XV0+PC9hY3A6ZWxlbWVudD4KICAgICAgPC9icG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgIDwvYnBtbjI6c2VxdWVuY2VGbG93PgogICAgPGJwbW4yOnNlcXVlbmNlRmxvdyBpZD0iZl9wZXJpb2QiIHNvdXJjZVJlZj0icGVyaW9kX2VsYXBzZWQiIHRhcmdldFJlZj0iZW5kX3BlcmlvZCI+CiAgICAgIDxicG1uMjpleHRlbnNpb25FbGVtZW50cz4KICAgICAgICA8YWNwOmVsZW1lbnQ+PCFbQ0RBVEFbe31dXT48L2FjcDplbGVtZW50PgogICAgICA8L2JwbW4yOmV4dGVuc2lvbkVsZW1lbnRzPgogICAgPC9icG1uMjpzZXF1ZW5jZUZsb3c+CiAgPC9icG1uMjpwcm9jZXNzPgo8L2JwbW4yOmRlZmluaXRpb25zPgo=",
+                "title": "home-bp-monitoring",
+                "creation": "2026-10-10T01:57:27.569518+00:00"
+              },
+              "format": {
+                "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/document-format",
+                "code": "bpmn-2.0-xml",
+                "display": "BPMN 2.0 XML (Kogito profile)"
+              }
+            }
+          ],
+          "context": {
+            "related": [
+              {
+                "reference": "urn:uuid:2bc62c5e-5955-4605-9df4-14020a13a449"
+              },
+              {
+                "reference": "urn:uuid:7c0a66ae-8121-4365-b3a5-7bf64fbd6375"
+              }
+            ]
+          }
+        },
+        "request": {
+          "method": "POST",
+          "url": "DocumentReference"
+        }
+      },
+      {
+        "fullUrl": "urn:uuid:7c0a66ae-8121-4365-b3a5-7bf64fbd6375",
+        "resource": {
+          "resourceType": "Task",
+          "id": "7c0a66ae-8121-4365-b3a5-7bf64fbd6375",
+          "meta": {
+            "security": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST",
+                "display": "Artificial Intelligence asserted"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-id",
+              "value": "b372d355-4de4-4b47-9097-a157cc385ff1"
+            },
+            {
+              "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-revision",
+              "value": "fb560bf1cd2b"
+            }
+          ],
+          "status": "draft",
+          "intent": "plan",
+          "code": {
+            "coding": [
+              {
+                "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-task-code",
+                "code": "care-plan-automation"
+              }
+            ],
+            "text": "Home blood pressure monitoring with outreach and escalation"
+          },
+          "for": {
+            "reference": "urn:uuid:047f14aa-106e-409c-8aa8-663207b08e07"
+          },
+          "basedOn": [
+            {
+              "reference": "urn:uuid:2bc62c5e-5955-4605-9df4-14020a13a449"
+            }
+          ],
+          "authoredOn": "2026-10-10T01:57:27.569518+00:00",
+          "input": [
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-input",
+                    "code": "process-definition"
+                  }
+                ]
+              },
+              "valueReference": {
+                "reference": "urn:uuid:1f4703b2-4cff-497f-857b-da2e38262539"
+              }
+            },
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-input",
+                    "code": "parameter"
+                  }
+                ],
+                "text": "reporting_interval"
+              },
+              "extension": [
+                {
+                  "url": "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/automation-parameter-source",
+                  "valueCode": "cpg-default"
+                }
+              ],
+              "valueDuration": {
+                "value": 7,
+                "unit": "day",
+                "system": "http://unitsofmeasure.org",
+                "code": "d"
+              }
+            },
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-input",
+                    "code": "parameter"
+                  }
+                ],
+                "text": "notify_systolic_threshold"
+              },
+              "extension": [
+                {
+                  "url": "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/automation-parameter-source",
+                  "valueCode": "clinician"
+                }
+              ],
+              "valueQuantity": {
+                "value": 135,
+                "unit": "mmHg",
+                "system": "http://unitsofmeasure.org",
+                "code": "mm[Hg]"
+              }
+            },
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-input",
+                    "code": "parameter"
+                  }
+                ],
+                "text": "max_reminder_attempts"
+              },
+              "extension": [
+                {
+                  "url": "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/automation-parameter-source",
+                  "valueCode": "cpg-default"
+                }
+              ],
+              "valueInteger": 3
+            },
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-input",
+                    "code": "parameter"
+                  }
+                ],
+                "text": "max_duration"
+              },
+              "extension": [
+                {
+                  "url": "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/automation-parameter-source",
+                  "valueCode": "plan-derived"
+                }
+              ],
+              "valueDuration": {
+                "value": 90,
+                "unit": "day",
+                "system": "http://unitsofmeasure.org",
+                "code": "d"
+              }
+            },
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-input",
+                    "code": "parameter"
+                  }
+                ],
+                "text": "reminder_text"
+              },
+              "extension": [
+                {
+                  "url": "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/automation-parameter-source",
+                  "valueCode": "authored"
+                }
+              ],
+              "valueString": "Submit home readings."
+            },
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-input",
+                    "code": "parameter"
+                  }
+                ],
+                "text": "request_readings__code"
+              },
+              "extension": [
+                {
+                  "url": "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/automation-parameter-source",
+                  "valueCode": "plan-derived"
+                }
+              ],
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://loinc.org",
+                    "code": "85354-9"
+                  }
+                ]
+              }
+            },
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-input",
+                    "code": "parameter"
+                  }
+                ],
+                "text": "query_systolic__code"
+              },
+              "extension": [
+                {
+                  "url": "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/automation-parameter-source",
+                  "valueCode": "plan-derived"
+                }
+              ],
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://loinc.org",
+                    "code": "8480-6"
+                  }
+                ]
+              }
+            }
+          ],
+          "extension": [
+            {
+              "url": "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/automation-template",
+              "extension": [
+                {
+                  "url": "templateId",
+                  "valueString": "home-bp-monitoring"
+                },
+                {
+                  "url": "version",
+                  "valueString": "499a6a2c1b81"
+                },
+                {
+                  "url": "sourceCpg",
+                  "valueString": "SYN-HTN-2026-002"
+                }
+              ]
+            }
+          ],
+          "focus": {
+            "reference": "urn:uuid:3b0ec0b6-13c1-400c-ad3e-2f869cf24962"
+          }
+        },
+        "request": {
+          "method": "POST",
+          "url": "Task"
+        }
+      },
+      {
+        "fullUrl": "urn:uuid:2bc62c5e-5955-4605-9df4-14020a13a449",
+        "resource": {
+          "resourceType": "CarePlan",
+          "id": "2bc62c5e-5955-4605-9df4-14020a13a449",
+          "meta": {
+            "security": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST",
+                "display": "Artificial Intelligence asserted"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/careplan-id",
+              "value": "slice-careplan-example"
+            }
+          ],
+          "status": "draft",
+          "intent": "proposal",
+          "title": "Care Plan",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                  "code": "assess-plan"
+                }
+              ]
+            }
+          ],
+          "subject": {
+            "reference": "urn:uuid:047f14aa-106e-409c-8aa8-663207b08e07"
+          },
+          "created": "2026-10-10T01:57:27.569518+00:00",
+          "goal": [],
+          "activity": [
+            {
+              "id": "activity-home-bp",
+              "reference": {
+                "reference": "urn:uuid:3b0ec0b6-13c1-400c-ad3e-2f869cf24962"
+              },
+              "extension": [
+                {
+                  "url": "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/activity-automation",
+                  "extension": [
+                    {
+                      "url": "definition",
+                      "valueReference": {
+                        "reference": "urn:uuid:1f4703b2-4cff-497f-857b-da2e38262539"
+                      }
+                    },
+                    {
+                      "url": "instance",
+                      "valueReference": {
+                        "reference": "urn:uuid:7c0a66ae-8121-4365-b3a5-7bf64fbd6375"
+                      }
+                    },
+                    {
+                      "url": "status",
+                      "valueCode": "enabled"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "request": {
+          "method": "POST",
+          "url": "CarePlan",
+          "ifNoneExist": "identifier=https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/careplan-id|slice-careplan-example"
+        }
+      },
+      {
+        "fullUrl": "urn:uuid:c5f7c38c-645f-45d2-8a4d-bdb025535a58",
+        "resource": {
+          "resourceType": "Device",
+          "id": "c5f7c38c-645f-45d2-8a4d-bdb025535a58",
+          "meta": {
+            "profile": [
+              "http://hl7.org/fhir/uv/aitransparency/StructureDefinition/AI-Device"
+            ],
+            "security": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST",
+                "display": "Artificial Intelligence asserted"
+              }
+            ]
+          },
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/uv/aitransparency/StructureDefinition/aitransparency.AIKind",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://hl7.org/fhir/uv/aitransparency/CodeSystem/AIdeviceTypeCS",
+                    "code": "Large-Language-Models"
+                  }
+                ]
+              }
+            }
+          ],
+          "manufacturer": "cpg-to-acp acp-writer",
+          "type": {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/uv/aitransparency/CodeSystem/AIdeviceTypeCS",
+                "code": "Artificial-Intelligence"
+              }
+            ]
+          },
+          "deviceName": [
+            {
+              "name": "acp-writer",
+              "type": "user-friendly-name"
+            }
+          ],
+          "version": [
+            {
+              "value": "0.2.0"
+            },
+            {
+              "value": "unknown"
+            }
+          ]
+        },
+        "request": {
+          "method": "POST",
+          "url": "Device"
+        }
+      },
+      {
+        "fullUrl": "urn:uuid:83498399-126d-4471-800b-76b4aaf79025",
+        "resource": {
+          "resourceType": "Provenance",
+          "id": "83498399-126d-4471-800b-76b4aaf79025",
+          "meta": {
+            "profile": [
+              "http://hl7.org/fhir/uv/aitransparency/StructureDefinition/AI-Provenance"
+            ],
+            "security": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST",
+                "display": "Artificial Intelligence asserted"
+              }
+            ]
+          },
+          "target": [
+            {
+              "reference": "urn:uuid:1f4703b2-4cff-497f-857b-da2e38262539"
+            },
+            {
+              "reference": "urn:uuid:7c0a66ae-8121-4365-b3a5-7bf64fbd6375"
+            },
+            {
+              "reference": "urn:uuid:2bc62c5e-5955-4605-9df4-14020a13a449",
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/targetPath",
+                  "valueString": "CarePlan.activity[0]"
+                }
+              ]
+            }
+          ],
+          "occurredDateTime": "2026-10-10T01:57:27.569518+00:00",
+          "recorded": "2026-10-10T01:57:27.569518+00:00",
+          "reason": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                  "code": "AIAST"
+                }
+              ]
+            }
+          ],
+          "agent": [
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                    "code": "author",
+                    "display": "Author"
+                  }
+                ]
+              },
+              "role": [
+                {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/uv/aitransparency/CodeSystem/AIdeviceTypeCS",
+                      "code": "Artificial-Intelligence"
+                    }
+                  ]
+                }
+              ],
+              "who": {
+                "reference": "urn:uuid:c5f7c38c-645f-45d2-8a4d-bdb025535a58"
+              }
+            }
+          ],
+          "entity": [
+            {
+              "role": "source",
+              "what": {
+                "identifier": {
+                  "value": "rec-home-bp"
+                }
+              }
+            },
+            {
+              "role": "derivation",
+              "what": {
+                "identifier": {
+                  "system": "https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/automation-id",
+                  "value": "home-bp-monitoring@499a6a2c1b81"
+                }
+              }
+            }
+          ]
+        },
+        "request": {
+          "method": "POST",
+          "url": "Provenance"
+        }
+      },
+      {
+        "fullUrl": "urn:uuid:08aef048-fd84-4d13-9ad0-2691696b0ae8",
+        "resource": {
+          "resourceType": "Provenance",
+          "id": "08aef048-fd84-4d13-9ad0-2691696b0ae8",
+          "meta": {
+            "profile": [
+              "http://hl7.org/fhir/uv/aitransparency/StructureDefinition/AI-Provenance"
+            ],
+            "security": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST",
+                "display": "Artificial Intelligence asserted"
+              }
+            ]
+          },
+          "target": [
+            {
+              "reference": "urn:uuid:2bc62c5e-5955-4605-9df4-14020a13a449"
+            },
+            {
+              "reference": "urn:uuid:3b0ec0b6-13c1-400c-ad3e-2f869cf24962"
+            }
+          ],
+          "occurredDateTime": "2026-10-10T01:57:27.569518+00:00",
+          "recorded": "2026-10-10T01:57:27.569518+00:00",
+          "reason": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                  "code": "AIAST"
+                }
+              ]
+            }
+          ],
+          "agent": [
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                    "code": "author",
+                    "display": "Author"
+                  }
+                ]
+              },
+              "role": [
+                {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/uv/aitransparency/CodeSystem/AIdeviceTypeCS",
+                      "code": "Artificial-Intelligence"
+                    }
+                  ]
+                }
+              ],
+              "who": {
+                "reference": "urn:uuid:c5f7c38c-645f-45d2-8a4d-bdb025535a58"
+              }
+            }
+          ],
+          "entity": [
+            {
+              "role": "derivation",
+              "what": {
+                "display": "CPG: SYN-HTN-2026-002"
+              }
+            }
+          ]
+        },
+        "request": {
+          "method": "POST",
+          "url": "Provenance"
+        }
+      },
+      {
+        "fullUrl": "urn:uuid:22b99df4-d0c3-4496-b010-1a789ee9ac8e",
+        "resource": {
+          "resourceType": "Provenance",
+          "id": "22b99df4-d0c3-4496-b010-1a789ee9ac8e",
+          "meta": {
+            "profile": [
+              "http://hl7.org/fhir/uv/aitransparency/StructureDefinition/AI-Provenance"
+            ],
+            "security": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST",
+                "display": "Artificial Intelligence asserted"
+              }
+            ]
+          },
+          "target": [
+            {
+              "reference": "urn:uuid:3b0ec0b6-13c1-400c-ad3e-2f869cf24962"
+            }
+          ],
+          "occurredDateTime": "2026-10-10T01:57:27.569518+00:00",
+          "recorded": "2026-10-10T01:57:27.569518+00:00",
+          "reason": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                  "code": "AIAST"
+                }
+              ]
+            }
+          ],
+          "agent": [
+            {
+              "type": {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                    "code": "author",
+                    "display": "Author"
+                  }
+                ]
+              },
+              "role": [
+                {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/uv/aitransparency/CodeSystem/AIdeviceTypeCS",
+                      "code": "Artificial-Intelligence"
+                    }
+                  ]
+                }
+              ],
+              "who": {
+                "reference": "urn:uuid:c5f7c38c-645f-45d2-8a4d-bdb025535a58"
+              }
+            }
+          ],
+          "entity": [
+            {
+              "role": "source",
+              "what": {
+                "display": "Recommendation: rec-home-bp",
+                "identifier": {
+                  "value": "rec-home-bp"
+                }
+              }
+            }
+          ]
+        },
+        "request": {
+          "method": "POST",
+          "url": "Provenance"
+        }
+      }
+    ]
+  }
+}

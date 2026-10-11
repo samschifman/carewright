@@ -19,7 +19,7 @@ from cpg_contracts import CPGMetadata, DecisionModelSummary, DecisionVariable
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 FIXTURES = PROJECT_ROOT / "shared" / "tests" / "fixtures"
 DATA_DIR = PROJECT_ROOT / "mock-EHR" / "data"
-DMN_DIR = PROJECT_ROOT / "cpg-ingester" / "data" / "golden"
+DMN_DIR = Path(__file__).parent / "fixtures" / "dmn"
 
 
 def _load_sample_metadata() -> CPGMetadata:
@@ -32,6 +32,17 @@ def _deploy_dmn(name: str):
     dmn_xml = (DMN_DIR / name).read_text()
     summary = _parse_dmn_metadata(dmn_xml)
     return summary.model_dump(mode="json")
+
+
+def _resolve(state):
+    return guideline_resolver(
+        state,
+        guidelines_store=api_module._guidelines_store,
+        decision_models_provider=lambda: [
+            entry["summary"].model_dump(mode="json")
+            for entry in api_module._dynamic_models.values()
+        ],
+    )
 
 
 def _mock_decision_engine_response(*dmn_names):
@@ -120,7 +131,7 @@ class TestGuidelineResolver:
                 {"system": "http://snomed.info/sct", "code": "59621000", "display": "Essential hypertension"},
             ],
         }
-        result = guideline_resolver(state)
+        result = _resolve(state)
 
         assert len(result["applicable_cpgs"]) == 1
         assert result["applicable_cpgs"][0]["cpg_id"] == "SYN-HTN-2026-001"
@@ -136,7 +147,7 @@ class TestGuidelineResolver:
                 {"system": "http://snomed.info/sct", "code": "73211009", "display": "Diabetes mellitus"},
             ],
         }
-        result = guideline_resolver(state)
+        result = _resolve(state)
         assert result["applicable_cpgs"] == []
         assert result["applicable_dmn_models"] == []
 
@@ -152,7 +163,7 @@ class TestGuidelineResolver:
                 {"system": "http://snomed.info/sct", "code": "59621000", "display": "Essential hypertension"},
             ],
         }
-        result = guideline_resolver(state)
+        result = _resolve(state)
         assert len(result["applicable_cpgs"]) == 1
         assert result["applicable_dmn_models"] == []
 
@@ -162,11 +173,11 @@ class TestGuidelineResolver:
                 {"system": "http://snomed.info/sct", "code": "59621000", "display": "Essential hypertension"},
             ],
         }
-        result = guideline_resolver(state)
+        result = _resolve(state)
         assert result["applicable_cpgs"] == []
 
     def test_no_condition_codes(self):
-        result = guideline_resolver({})
+        result = _resolve({})
         assert result["applicable_cpgs"] == []
 
     @patch("acp_writer.nodes.guideline_resolver.DECISION_ENGINE_URL", "http://decision-engine:8080")
@@ -191,7 +202,7 @@ class TestGuidelineResolver:
                 m.invoke.return_value = resp
                 mock_llm.return_value = m
 
-            from acp_writer.pipeline import build_pipeline
+            from .pipeline_helpers import build_pipeline
             graph = build_pipeline()
             compiled = graph.compile()
             result = compiled.invoke({"ips_bundle": bundle})

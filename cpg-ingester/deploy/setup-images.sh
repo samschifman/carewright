@@ -103,6 +103,6 @@ create_bc "cpg-ingester-llm"       "cpg-ingester/deploy/pods/Containerfile.llm-a
 create_bc "cpg-ingester-assembly"  "cpg-ingester/deploy/pods/Containerfile.assembly"
 create_bc "cpg-ingester-delivery"  "cpg-ingester/deploy/pods/Containerfile.delivery"
 create_bc "cpg-ingester-bff"       "cpg-ingester/deploy/pods/Containerfile.bff"
-create_bc "cpg-ingester-ui"        "Containerfile" "1" "2Gi" "cpg-ingester/ui"
+create_bc "cpg-ingester-ui"        "cpg-ingester/ui/Containerfile" "1" "2Gi"
 
 log_step "cpg-ingester image setup complete"

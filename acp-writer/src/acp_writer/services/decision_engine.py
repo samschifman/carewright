@@ -9,16 +9,23 @@ Security profile: Kogito runtime + MinIO only (no LLM, no MaaS).
 
 import logging
 
+import mlflow
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from acp_writer.api import (
     _dynamic_models,
+    _automation_registry,
+    _automation_dmn_namespaces,
+    _automation_dmn_summaries,
+    _automation_validation_result,
     _parse_dmn_metadata,
     _evaluate_jit,
     _validate_dmn_with_engine,
+    validate_bpmn,
     _validation_failure_response,
 )
+from acp_writer.services.automation_registry import router as automation_registry_router
 from acp_writer.tools.dmn_evaluation import DmnEngineError
 
 logger = logging.getLogger(__name__)
@@ -29,6 +36,14 @@ app = FastAPI(title="acp-writer-decision-engine", version="0.2.0")
 @app.get("/health")
 def health():
     return {"status": "UP", "service": "decision-engine"}
+
+
+app.state.automation_registry = _automation_registry
+app.state.bpmn_validator = validate_bpmn
+app.state.dmn_namespaces = _automation_dmn_namespaces
+app.state.dmn_summaries = _automation_dmn_summaries
+app.state.automation_validation_result = _automation_validation_result
+app.include_router(automation_registry_router)
 
 
 # --- DMN model management ---

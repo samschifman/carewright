@@ -21,6 +21,7 @@ from acp_writer.planning_brief import (
     normalize_review_history,
     render_clinician_directives,
     render_feedback_history,
+    stamp_activity_ids,
 )
 from acp_writer.prompts.plan_composer import (
     PLAN_COMPOSER_USER,
@@ -246,6 +247,7 @@ def plan_composer(state: CarePlanComposerState) -> dict:
             brief_data["revision_history"] = normalize_review_history(review_history)
         _sanitize_provenance(brief_data, cpg_ids[0] if cpg_ids else "unspecified")
         brief = PlanningBrief.model_validate(brief_data)
+        brief = stamp_activity_ids(brief, base_brief)
         brief_dict = brief.model_dump(mode="json")
 
         if output_dir:

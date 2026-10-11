@@ -18,11 +18,13 @@ _ANALYSIS_FIELDS = {
     "cpg_metadata": "metadata",
     "metadata": "metadata",
     "section_map": "sectionMap",
+    "item_manifest": "manifest",
 }
 
 _GENERATE_FIELDS = {
     "dmn_results": "decisions",
     "recommendation_results": "recommendations",
+    "bpmn_results": "automations",
     "recommendation_escalations": "recommendationEscalations",
     "escalated_items": "escalatedItems",
 }
@@ -97,6 +99,17 @@ def enrich_run_detail(
                     r.get("title", ""),
                     r.get("section", ""),
                 )
+        for automation in detail.get("automations", []):
+            if not isinstance(automation, dict) or automation.get("artifact_id"):
+                continue
+            summary = automation.get("template_summary", {})
+            item = automation.get("item", {})
+            automation["artifact_id"] = make_artifact_id(
+                cpg_id,
+                "bpmn",
+                summary.get("name") or item.get("name", ""),
+                summary.get("section") or item.get("section", ""),
+            )
 
     # --- Assembly ---
     assembly_raw = wd.get("assemblyResult") or {}

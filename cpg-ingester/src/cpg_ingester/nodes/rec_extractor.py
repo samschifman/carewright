@@ -34,11 +34,26 @@ def rec_extractor(state: dict) -> dict:
     item_specs = json.dumps(items, indent=2, default=str)
     abbr_str = "\n".join(f"- {k}: {v}" for k, v in abbreviations.items()) if abbreviations else "(none)"
 
-    feedback = ""
+    feedback_sections = []
     if schema_errors:
-        feedback = "PREVIOUS ATTEMPT HAD SCHEMA ERRORS — fix these:\n" + "\n".join(f"- {e}" for e in schema_errors)
-    elif semantic_discrepancies:
-        feedback = "PREVIOUS ATTEMPT HAD SEMANTIC ISSUES — fix these:\n" + "\n".join(f"- {d}" for d in semantic_discrepancies)
+        feedback_sections.append(
+            "PREVIOUS ATTEMPT HAD SCHEMA ERRORS — fix these:\n"
+            + "\n".join(f"- {e}" for e in schema_errors)
+        )
+    if semantic_discrepancies:
+        feedback_sections.append(
+            "PREVIOUS ATTEMPT HAD SEMANTIC ISSUES — fix these:\n"
+            + "\n".join(f"- {d}" for d in semantic_discrepancies)
+        )
+    review_feedback = state.get("review_feedback", "") or ""
+    review_comment = state.get("review_comment", "") or ""
+    if review_feedback or review_comment:
+        feedback_sections.append(
+            "HUMAN REVIEW FEEDBACK:\n" + "\n".join(
+                value for value in (review_feedback, review_comment) if value
+            )
+        )
+    feedback = "\n\n".join(feedback_sections)
 
     llm = get_llm(state)
 

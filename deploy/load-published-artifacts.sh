@@ -133,7 +133,8 @@ if [ "$REPLACE" = true ]; then
     dmn_url="${dmn_url}&replace=true"
 fi
 dmn_list=$(mktemp)
-trap 'rm -f "$dmn_list"' EXIT
+bpmn_latest_list=$(mktemp)
+trap 'rm -f "$dmn_list" "$bpmn_latest_list"' EXIT
 oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c "
 import os, boto3, sys, json
 s3 = boto3.client('s3',
@@ -192,4 +193,71 @@ if not d.get("error") and not d.get("messages"):
     dmn_count=$((dmn_count + 1))
 done < "$dmn_list"
 
-log_step "Published artifacts loaded: 1 guideline, 1 recommendations bundle, $dmn_count DMN models"
+# Step 4: Register the latest version of each BPMN automation template
+log "Registering BPMN automation templates..."
+bpmn_count=0
+automation_url="http://localhost:8080/api/v1/automation/templates?source_cpg=$encoded_cpg"
+if [ "$REPLACE" = true ]; then
+    automation_url="$automation_url&replace=true"
+fi
+oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c '
+import json, os, sys, boto3
+s3 = boto3.client("s3",
+    endpoint_url=os.getenv("MINIO_ENDPOINT"),
+    aws_access_key_id=os.getenv("ARTIFACT_STORE_ACCESS_KEY"),
+    aws_secret_access_key=os.getenv("ARTIFACT_STORE_SECRET_KEY"))
+prefix = "published/" + sys.argv[1] + "/bpmn/"
+objects = s3.list_objects_v2(Bucket="cpg-artifacts", Prefix=prefix).get("Contents", [])
+for obj in objects:
+    latest_key = obj["Key"]
+    if not latest_key.endswith("/latest.json"):
+        continue
+    latest = json.loads(s3.get_object(Bucket="cpg-artifacts", Key=latest_key)["Body"].read())
+    ref = latest.get("template_ref")
+    if not isinstance(ref, str) or not ref:
+        raise ValueError("latest pointer is missing template_ref: " + latest_key)
+    bucket, key = ref.split(":", 1) if ":" in ref else ("cpg-artifacts", ref)
+    if bucket != "cpg-artifacts" or not key.startswith(prefix) or not key.endswith(".template.json"):
+        raise ValueError("latest pointer contains an invalid template_ref: " + ref)
+    print(json.dumps({"latest_key": latest_key, "template_ref": ref,
+                      "template_id": latest.get("template_id", "")}))
+' "$CPG_ID" 2>/dev/null > "$bpmn_latest_list"
+
+while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    template_ref=$(printf '%s' "$line" | python3 -c 'import json,sys; print(json.load(sys.stdin)["template_ref"])')
+    template_id=$(printf '%s' "$line" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("template_id", "unknown"))')
+    oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c '
+import os, sys, boto3
+ref = sys.argv[1]
+bucket, key = ref.split(":", 1) if ":" in ref else ("cpg-artifacts", ref)
+if bucket != "cpg-artifacts":
+    raise ValueError("ref is outside the non-PHI artifact bucket")
+s3 = boto3.client("s3",
+    endpoint_url=os.getenv("MINIO_ENDPOINT"),
+    aws_access_key_id=os.getenv("ARTIFACT_STORE_ACCESS_KEY"),
+    aws_secret_access_key=os.getenv("ARTIFACT_STORE_SECRET_KEY"))
+sys.stdout.buffer.write(s3.get_object(Bucket=bucket, Key=key)["Body"].read())
+' "$template_ref" 2>/dev/null > /tmp/bpmn-template.json
+
+    oc cp /tmp/bpmn-template.json "$ROUTER_POD:/tmp/bpmn-template.json" -n "$NAMESPACE"
+    response=$(oc exec "$ROUTER_POD" -n "$NAMESPACE" -- \
+        curl -sS -w '\n__HTTP_STATUS__:%{http_code}' --max-time 30 \
+        -X POST -H "Host: acp-decision-engine" \
+        -H "Content-Type: application/json" \
+        --data-binary @/tmp/bpmn-template.json \
+        "$automation_url" 2>/dev/null)
+    code=$(printf '%s' "$response" | sed -n 's/.*__HTTP_STATUS__:\([0-9][0-9][0-9]\)$/\1/p')
+    body=$(printf '%s' "$response" | sed 's/__HTTP_STATUS__:[0-9][0-9][0-9]$//')
+    log "  $template_id: HTTP $code"
+    if [[ ! "$code" =~ ^2[0-9][0-9]$ ]]; then
+        echo "ERROR: Failed to register BPMN template '$template_id' for CPG '$CPG_ID' (HTTP $code)" >&2
+        if [ -n "$body" ]; then
+            printf '    response: %s\n' "$body" >&2
+        fi
+        exit 1
+    fi
+    bpmn_count=$((bpmn_count + 1))
+done < "$bpmn_latest_list"
+
+log_step "Published artifacts loaded: 1 guideline, 1 recommendations bundle, $dmn_count DMN models, $bpmn_count automation templates"

@@ -12,6 +12,7 @@ returned planning brief carries analyst-detected conflicts.
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+import pytest
 
 from acp_writer.services import fhir_generation, llm_reasoning
 
@@ -20,6 +21,19 @@ from ._conflict_fixtures import mock_llm as _mock_llm
 
 
 client = TestClient(llm_reasoning.app)
+
+
+class _EmptyTemplateClient:
+    def list(self, **_kwargs):
+        return []
+
+    def validate(self, _payload):
+        return {"valid": True}
+
+
+@pytest.fixture(autouse=True)
+def _disable_registry_network(monkeypatch):
+    monkeypatch.setattr(llm_reasoning, "TemplateClient", _EmptyTemplateClient)
 
 
 def _ai_input_prompts(bundle: dict) -> list[dict]:

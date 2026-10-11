@@ -1,0 +1,7 @@
+# Minimal Process IR extraction benchmark configuration.
+corpus_manifest: corpus.yaml
+mlflow_experiment: bpmn-generation-quality
+report_dir: ../working/benchmarks/bpmn/reports
+local_tracking_dir: ../working/benchmarks/bpmn/mlruns
+corpora:
+  - hypertension-v2

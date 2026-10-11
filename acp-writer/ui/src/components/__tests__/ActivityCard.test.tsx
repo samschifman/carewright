@@ -39,6 +39,30 @@ describe("ActivityCard", () => {
     expect(screen.queryByRole("button", { name: /provenance/i })).not.toBeInTheDocument();
   });
 
+  it("keeps legacy detail visible when automation exists without provenance", () => {
+    render(
+      <ActivityCard
+        activity={{
+          id: "a4",
+          description: "Home readings",
+          detail: "Review weekly",
+          automations: [{
+            id: "automation-1",
+            templateRefs: [{ templateId: "home-bp-monitoring", version: "a".repeat(12) }],
+            activityIds: ["a4"],
+            enabled: true,
+            revision: "b".repeat(12),
+            bpmnXml: "<bpmn:definitions />",
+            capabilitiesUsed: [],
+            bindings: [],
+            validation: { status: "valid", rungsPassed: [] },
+          }],
+        }}
+      />,
+    );
+    expect(screen.getByText("Review weekly")).toBeInTheDocument();
+  });
+
   it("renders without any optional fields", () => {
     render(<ActivityCard activity={{ id: "a3", description: "Bare activity" }} />);
     expect(screen.getByText("Bare activity")).toBeInTheDocument();

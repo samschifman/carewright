@@ -106,7 +106,58 @@ def plan_activity_from_entry(entry: dict, idx: int) -> dict:
         val = entry.get(src_key)
         if val:
             pa[dst_key] = val
+    automations = [
+        _automation_view_from_entry(item)
+        for item in entry.get("automations", []) or []
+        if isinstance(item, dict) or hasattr(item, "model_dump")
+    ]
+    if automations:
+        pa["automations"] = automations
     return pa
+
+
+@mlflow.trace(name="plan_activity_automation_view")
+def _automation_view_from_entry(entry: dict) -> dict:
+    """Map a planning-brief automation instance into its UI view model."""
+    if hasattr(entry, "model_dump"):
+        entry = entry.model_dump(mode="json", exclude_none=True)
+    validation = entry.get("validation") or {}
+    status = validation.get("status", "escalated")
+    refs = []
+    for ref in entry.get("template_refs", []) or []:
+        refs.append({
+            "templateId": ref.get("template_id", ""),
+            "version": ref.get("version", ""),
+            **({"sourceCpg": ref["source_cpg"]} if ref.get("source_cpg") else {}),
+        })
+    bindings = []
+    for binding in entry.get("bindings", []) or []:
+        item = {
+            "name": binding.get("name", ""),
+            "value": binding.get("value"),
+            "source": binding.get("source", "authored"),
+        }
+        for key in ("unit", "note"):
+            if binding.get(key) is not None:
+                item[key] = binding[key]
+        bindings.append(item)
+    return {
+        "id": entry.get("id", ""),
+        "templateRefs": refs,
+        "activityIds": entry.get("activity_ids", []),
+        "enabled": entry.get("enabled") is True,
+        "revision": entry.get("revision", ""),
+        "bpmnXml": entry.get("bpmn_xml", ""),
+        "capabilitiesUsed": entry.get("capabilities_used", []),
+        "bindings": bindings,
+        "validation": {
+            "status": status,
+            "rungsPassed": validation.get("rungs_passed", []),
+            "warnings": validation.get("warnings", []),
+            "errors": validation.get("errors", []),
+        },
+        "reviewNotes": entry.get("review_notes", []),
+    }
 
 
 @mlflow.trace(name="plan_conflict_from_entry")
@@ -162,6 +213,7 @@ def _to_coded_items(codes: list | None) -> list[dict]:
     return items
 
 
+@mlflow.trace(name="enrich_run_detail")
 def enrich_run_detail(
     detail: dict[str, Any],
     phi_store: ArtifactStore | None,
@@ -248,6 +300,13 @@ def enrich_run_detail(
                 for i, a in enumerate(planning_brief.get("activities", []))
                 if isinstance(a, dict)
             ]
+            shared_activity_ids: dict[str, list[str]] = {}
+            for activity in care_plan_view["activities"]:
+                for automation in activity.get("automations", []):
+                    shared_activity_ids.setdefault(automation["id"], []).append(activity["id"])
+            for activity in care_plan_view["activities"]:
+                for automation in activity.get("automations", []):
+                    automation["activityIds"] = shared_activity_ids[automation["id"]]
             care_plan_view["conflicts"] = [
                 plan_conflict_from_entry(c)
                 for c in planning_brief.get("conflicts", [])

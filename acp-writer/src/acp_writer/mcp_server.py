@@ -14,6 +14,8 @@ from cpg_contracts import (
 )
 
 from acp_writer.api import (
+    _automation_registry,
+    _automation_validation_result,
     _dynamic_models,
     _evaluate_jit,
     _guidelines_store,
@@ -63,7 +65,18 @@ def generate_careplan(ips_bundle: dict) -> str:
     """
     from acp_writer.pipeline import build_pipeline
 
-    graph = build_pipeline()
+    from acp_writer import api
+
+    graph = build_pipeline(
+        automation_registry=_automation_registry,
+        automation_validator=_automation_validation_result,
+        guidelines_store=_guidelines_store,
+        vector_store=_vector_store,
+        decision_models_provider=lambda: [
+            entry["summary"].model_dump(mode="json")
+            for entry in api._dynamic_models.values()
+        ],
+    )
     compiled = graph.compile()
 
     result = compiled.invoke({

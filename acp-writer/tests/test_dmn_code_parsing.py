@@ -129,8 +129,7 @@ def test_temporal_extraction_is_parsed_into_contract():
 def test_temporal_golden_carries_observation_count_metadata():
     from pathlib import Path
 
-    golden = (Path(__file__).parent.parent.parent / "cpg-ingester" / "data" / "golden"
-              / "glycemic-escalation-monitoring.dmn").read_text()
+    golden = (Path(__file__).parent / "fixtures" / "dmn" / "glycemic-escalation-monitoring.dmn").read_text()
     summary = _parse_dmn_metadata(golden)
     extraction = summary.inputs[0].extraction
     assert extraction.function == "observation_count"
@@ -143,6 +142,10 @@ def test_temporal_golden_carries_observation_count_metadata():
 
 
 class TestNamespaceTolerance:
+    def test_definitions_namespace_is_recorded_for_bpmn_compilation(self):
+        summary = _parse_dmn_metadata(DMN_WITHOUT_CODES)
+        assert summary.namespace == "test"
+
     def test_legacy_1_3_namespace_still_parses(self):
         """Metadata parsing is namespace-tolerant: a 1.3-namespace document still
         parses so mixed-vintage models keep working after the 1.4 migration."""
@@ -160,7 +163,7 @@ class TestExistingBehaviorPreserved:
         """Verify the existing golden DMN files still parse correctly."""
         from pathlib import Path
 
-        golden_dir = Path(__file__).parent.parent.parent / "cpg-ingester" / "data" / "golden"
+        golden_dir = Path(__file__).parent / "fixtures" / "dmn"
         for dmn_file in golden_dir.glob("*.dmn"):
             dmn_xml = dmn_file.read_text()
             summary = _parse_dmn_metadata(dmn_xml)

@@ -2,11 +2,20 @@
 
 import json
 import logging
+from collections import Counter
+from copy import deepcopy
 from pathlib import Path
 
 import mlflow
 
 from cpg_contracts import CONTRACT_VERSION
+from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.compiler import compile
+from cpg_contracts.automation.ir import ProcessIR, Task, ir_version
+from cpg_contracts.automation.templates import AutomationTemplate
+from cpg_contracts.automation.validators.ladder import run_static_ladder
+from cpg_contracts.decisions import DecisionModelSummary
+from cpg_ingester.artifact_id import make_artifact_id
 from cpg_ingester.output import write_artifact
 
 logger = logging.getLogger(__name__)
@@ -47,6 +56,7 @@ def _collect_escalations(
     dmn_results: list[dict],
     recommendations: list[dict],
     recommendation_escalations: list[dict] | None = None,
+    bpmn_results: list[dict] | None = None,
 ) -> list[dict]:
     """Gather every result flagged for human review, with its reason and errors."""
     escalated = []
@@ -67,8 +77,329 @@ def _collect_escalations(
                 "escalation_reason": rec.get("escalation_reason", ""),
                 "escalation_errors": rec.get("escalation_errors", []),
             })
+    for template in bpmn_results or []:
+        if template.get("escalated"):
+            item = template.get("item", {})
+            escalated.append({
+                "type": "automation",
+                "id": item.get("id") or template.get("template_summary", {}).get("id", "?"),
+                "name": item.get("name") or template.get("template_summary", {}).get("name", "?"),
+                "section": item.get("section", ""),
+                "escalation_reason": template.get("escalation_reason", ""),
+                "escalation_errors": template.get("escalation_errors", []),
+            })
     escalated.extend(recommendation_escalations or [])
     return escalated
+
+
+def _alias_map(items: list[dict], *, id_field: str, aliases: tuple[str, ...]) -> dict[str, str]:
+    """Map display names and source identifiers to canonical registry ids."""
+    result = {}
+    ambiguous = set()
+    for item in items:
+        canonical = item.get(id_field)
+        if not canonical:
+            continue
+        for field in aliases:
+            value = item.get(field)
+            if isinstance(value, str) and value.strip():
+                key = value.casefold().strip()
+                if key in result and result[key] != canonical:
+                    ambiguous.add(key)
+                else:
+                    result[key] = canonical
+    for key in ambiguous:
+        result.pop(key, None)
+    return result
+
+
+def _template_escalation(result: dict, reason: str, errors: list[str]) -> dict:
+    result["escalated"] = True
+    result["escalation_reason"] = reason
+    result["escalation_errors"] = errors
+    summary = result.get("template_summary")
+    if isinstance(summary, dict):
+        validation = summary.setdefault("validation", {})
+        validation["status"] = "escalated"
+        validation["errors"] = errors
+    return result
+
+
+def _resolve_template_links(
+    bpmn_results: list[dict],
+    recommendations: list[dict],
+    dmn_results: list[dict],
+    manifest: list[dict],
+    cpg_id: str,
+) -> list[dict]:
+    """Resolve template links, normalize IR, and compile publishable versions."""
+    for recommendation in recommendations:
+        recommendation["automation_template_ids"] = []
+    rec_aliases = _alias_map(
+        recommendations, id_field="id", aliases=("id", "title", "name")
+    )
+    for item in manifest:
+        if item.get("type") == "recommendation" and item.get("id"):
+            name = item.get("name") or item.get("title")
+            if isinstance(name, str) and name.casefold().strip() in rec_aliases:
+                rec_aliases[item["id"].casefold()] = rec_aliases[name.casefold().strip()]
+    rec_by_id = {
+        item["id"]: item for item in recommendations if isinstance(item.get("id"), str)
+    }
+
+    dmn_models = []
+    for result in dmn_results:
+        summary = result.get("decision_model_summary") or {}
+        if summary.get("id"):
+            dmn_models.append({
+                "id": summary["id"],
+                "name": summary.get("name", ""),
+                "model_id": summary["id"],
+            })
+    for item in manifest:
+        if item.get("type") == "decision" and item.get("model_id"):
+            dmn_models.append({
+                "id": item["model_id"],
+                "model_id": item["model_id"],
+                "name": item.get("name", ""),
+                "item_id": item.get("id", ""),
+            })
+    dmn_aliases = _alias_map(
+        dmn_models, id_field="model_id",
+        aliases=("id", "model_id", "name", "item_id"),
+    )
+    dmn_summary_values = {
+        item["id"]: item for item in (
+            result.get("decision_model_summary") or {} for result in dmn_results
+        )
+        if item.get("id")
+    }
+
+    id_counts = Counter(
+        result.get("template_summary", {}).get("id")
+        or result.get("item", {}).get("template_id")
+        for result in bpmn_results
+        if (
+            result.get("template_summary", {}).get("id")
+            or result.get("item", {}).get("template_id")
+        )
+    )
+    resolved_results = []
+    catalog = load_catalog()
+    for original in bpmn_results:
+        result = deepcopy(original)
+        item = result.get("item", {})
+        summary = result.get("template_summary", {})
+        template_id = summary.get("id") or item.get("template_id")
+        if result.get("escalated"):
+            resolved_results.append(result)
+            continue
+        if not template_id or id_counts[template_id] > 1:
+            resolved_results.append(_template_escalation(
+                result,
+                "duplicate-template-id" if template_id else "invalid-template",
+                [f"Template id {template_id!r} is missing or duplicated in this run."],
+            ))
+            continue
+        if not isinstance(result.get("process_ir"), dict) or not summary:
+            resolved_results.append(_template_escalation(
+                result,
+                "invalid-template",
+                ["Generated template is missing its ProcessIR or summary."],
+            ))
+            continue
+
+        requested_recommendations = item.get("linked_recommendations", []) or []
+        if not requested_recommendations:
+            resolved_results.append(_template_escalation(
+                result,
+                "no-recommendation-link",
+                ["Automation templates must link to at least one recommendation."],
+            ))
+            continue
+        linked_rec_ids = []
+        unresolved_recommendations = []
+        for value in requested_recommendations:
+            key = str(value).casefold().strip()
+            resolved_id = rec_aliases.get(key)
+            if resolved_id:
+                linked_rec_ids.append(resolved_id)
+            else:
+                unresolved_recommendations.append(str(value))
+        if unresolved_recommendations:
+            resolved_results.append(_template_escalation(
+                result,
+                "unresolved-recommendation-link",
+                ["Could not resolve linked recommendation(s): "
+                 + ", ".join(unresolved_recommendations)],
+            ))
+            continue
+
+        requested_decisions = item.get("linked_decisions", []) or []
+        linked_dmn_ids = []
+        unresolved_decisions = []
+        for value in requested_decisions:
+            key = str(value).casefold().strip()
+            model_id = dmn_aliases.get(key)
+            if model_id:
+                linked_dmn_ids.append(model_id)
+            else:
+                unresolved_decisions.append(str(value))
+        if unresolved_decisions:
+            resolved_results.append(_template_escalation(
+                result,
+                "unresolved-decision-link",
+                ["Could not resolve linked decision model(s): "
+                 + ", ".join(unresolved_decisions)],
+            ))
+            continue
+
+        raw_ir = deepcopy(result["process_ir"])
+        process = raw_ir.get("process")
+        if not isinstance(process, dict) or not isinstance(process.get("acp"), dict):
+            resolved_results.append(_template_escalation(
+                result, "invalid-template", ["Generated ProcessIR has no process/acp object."]
+            ))
+            continue
+        acp = process["acp"]
+        if not isinstance(acp.get("triggers"), list):
+            resolved_results.append(_template_escalation(
+                result, "invalid-template", ["Generated ProcessIR has no trigger list."]
+            ))
+            continue
+        link_errors = []
+        for trigger in acp.get("triggers", []):
+            if trigger.get("kind") == "recommendation":
+                value = str(trigger.get("recommendation_id", ""))
+                candidates = [value]
+                if value.startswith("<rec-guid:") and value.endswith(">"):
+                    candidates.insert(0, value[len("<rec-guid:"):-1].strip())
+                resolved_id = next(
+                    (rec_aliases[key.casefold().strip()] for key in candidates
+                     if key.casefold().strip() in rec_aliases),
+                    None,
+                )
+                if resolved_id is None and len(set(linked_rec_ids)) == 1:
+                    resolved_id = linked_rec_ids[0]
+                if resolved_id is None:
+                    link_errors.append(f"Could not resolve recommendation trigger {value!r}.")
+                else:
+                    trigger["recommendation_id"] = resolved_id
+                    if resolved_id not in linked_rec_ids:
+                        linked_rec_ids.append(resolved_id)
+            elif trigger.get("kind") == "dmn-output":
+                value = str(trigger.get("model_id", ""))
+                model_id = dmn_aliases.get(value.casefold().strip())
+                if model_id is None:
+                    link_errors.append(f"Could not resolve DMN trigger model {value!r}.")
+                else:
+                    trigger["model_id"] = model_id
+                    linked_dmn_ids.append(model_id)
+
+        for element in process.get("flowElements", []):
+            if not isinstance(element, dict):
+                continue
+            if element.get("type") == "businessRuleTask":
+                value = str(element.get("dmnModel", ""))
+                model_id = dmn_aliases.get(value.casefold().strip())
+                if model_id is None:
+                    link_errors.append(
+                        f"Could not resolve businessRuleTask {element.get('id')!r} model {value!r}."
+                    )
+                else:
+                    element["dmnModel"] = model_id
+                    linked_dmn_ids.append(model_id)
+        if link_errors:
+            resolved_results.append(_template_escalation(
+                result, "unresolved-template-link", link_errors
+            ))
+            continue
+
+        try:
+            ir = ProcessIR.model_validate(raw_ir)
+            summaries = {
+                model_id: DecisionModelSummary.model_validate(summary_value)
+                for model_id, summary_value in dmn_summary_values.items()
+            }
+            ladder = run_static_ladder(
+                ir, catalog=catalog, stage="template", dmn_summaries=summaries,
+            )
+            if not ladder.ok:
+                raise ValueError("; ".join(finding.message for finding in ladder.findings))
+            namespaces = {
+                model_id: value.namespace
+                for model_id, value in summaries.items()
+                if value.namespace
+            }
+            bpmn_xml = compile(ir, catalog=catalog, dmn_namespaces=namespaces)
+            version = ir_version(ir)
+            summary["id"] = ir.process.id
+            summary["version"] = version
+            summary["name"] = ir.process.name
+            summary["description"] = ir.process.description
+            summary["triggers"] = [trigger.model_dump(mode="json", exclude_none=True)
+                                   for trigger in ir.process.acp.triggers]
+            summary["parameters"] = [
+                parameter.model_dump(mode="json", exclude_none=True)
+                for parameter in ir.process.acp.parameters
+            ]
+            summary["linked_recommendation_ids"] = sorted(set(linked_rec_ids))
+            summary["linked_decision_model_ids"] = sorted(set(linked_dmn_ids))
+            summary["capabilities_used"] = sorted({
+                element.taskName for element in ir.process.flowElements
+                if isinstance(element, Task)
+            })
+            summary["ir_version"] = ir.ir_version
+            summary["artifact_id"] = make_artifact_id(
+                cpg_id, "bpmn", ir.process.name, summary.get("section", "")
+            )
+            validation = summary.setdefault("validation", {})
+            rung_order = ["L0", "L1", "L2", "L3", "L4", "L5a", "L5b"]
+            passed = set(validation.get("rungs_passed", []) or [])
+            passed.update(ladder.rungs_passed)
+            validation["rungs_passed"] = [
+                rung for rung in rung_order if rung in passed
+            ]
+            if ladder.findings:
+                validation["warnings"] = list(dict.fromkeys([
+                    *(validation.get("warnings", []) or []),
+                    *[
+                        finding.message for finding in ladder.findings
+                        if finding.severity == "WARNING"
+                    ],
+                ]))
+            template = AutomationTemplate.model_validate({
+                "summary": summary,
+                "ir": ir,
+                "bpmn_xml": bpmn_xml,
+            })
+        except Exception as exc:
+            resolved_results.append(_template_escalation(
+                result, "invalid-template", [str(exc)]
+            ))
+            continue
+
+        normalized = template.model_dump(mode="json", exclude_none=True)
+        result["process_ir"] = ir.model_dump(mode="json", exclude_none=True)
+        result["template_summary"] = normalized["summary"]
+        result["bpmn_xml"] = bpmn_xml
+        result["automation_template"] = normalized
+        resolved_results.append(result)
+        for rec_id in linked_rec_ids:
+            if rec_id in rec_by_id:
+                rec_templates = rec_by_id[rec_id].get("automation_template_ids") or []
+                if template_id not in rec_templates:
+                    rec_templates.append(template_id)
+                rec_by_id[rec_id]["automation_template_ids"] = rec_templates
+
+    for recommendation in recommendations:
+        if recommendation.get("automation_template_ids"):
+            recommendation["automation_template_ids"] = sorted(
+                set(recommendation["automation_template_ids"])
+            )
+        else:
+            recommendation["automation_template_ids"] = None
+    return resolved_results
 
 
 def _check_integrity(recommendations: list[dict], dmn_results: list[dict], cpg_metadata: dict) -> list[str]:
@@ -128,6 +459,7 @@ def assembly(state: dict) -> dict:
 
     dmn_results = state.get("dmn_results") or []
     all_recs = state.get("recommendation_results") or []
+    bpmn_results = state.get("bpmn_results") or []
     recommendation_escalations = state.get("recommendation_escalations") or []
     if not dmn_results and not all_recs:
         dmn_results, all_recs = _collect_from_output_dir(output_dir)
@@ -138,12 +470,19 @@ def assembly(state: dict) -> dict:
             rec["source_cpg"] = cpg_id
 
     all_recs = _resolve_cross_references(all_recs, dmn_results)
+    bpmn_results = _resolve_template_links(
+        bpmn_results,
+        all_recs,
+        dmn_results,
+        state.get("item_manifest", []) or [],
+        cpg_id,
+    )
 
     # Per-recommendation escalations travel on recommendation objects. Empty or
     # crashed sections use the separate section-level list so the bundle stays
     # a valid list of recommendations.
     escalated = _collect_escalations(
-        dmn_results, all_recs, recommendation_escalations,
+        dmn_results, all_recs, recommendation_escalations, bpmn_results,
     )
 
     integrity_errors = _check_integrity(all_recs, dmn_results, cpg_metadata)
@@ -161,12 +500,23 @@ def assembly(state: dict) -> dict:
         "cpg_id": cpg_id,
         "recommendations_count": len(all_recs),
         "dmn_models_count": len(dmn_results),
+        "automation_templates_count": sum(
+            bool(item.get("automation_template")) and not item.get("escalated")
+            for item in bpmn_results
+        ),
         "escalated_count": len(escalated),
         "integrity_errors": integrity_errors,
     }
 
     write_artifact(output_dir, "recommendation-bundle.json", recommendation_bundle)
     write_artifact(output_dir, "assembly-report.json", assembly_report)
+    for result in bpmn_results:
+        if result.get("escalated") or not result.get("automation_template"):
+            continue
+        template = result["automation_template"]
+        template_id = template["summary"]["id"]
+        write_artifact(output_dir, f"bpmn/{template_id}.template.json", template)
+        write_artifact(output_dir, f"bpmn/{template_id}.bpmn", template["bpmn_xml"])
     if escalated:
         write_artifact(output_dir, "escalated-items.json", escalated)
 
@@ -178,6 +528,7 @@ def assembly(state: dict) -> dict:
     return {
         "dmn_results": dmn_results,
         "recommendation_results": all_recs,
+        "bpmn_results": bpmn_results,
         "escalated_items": escalated,
         "assembly_report": assembly_report,
     }

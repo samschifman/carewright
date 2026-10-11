@@ -18,7 +18,7 @@ from acp_writer.store.embedding import FakeEmbeddingProvider
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "mock-EHR" / "data"
-DMN_DIR = PROJECT_ROOT / "cpg-ingester" / "data" / "golden"
+DMN_DIR = Path(__file__).parent / "fixtures" / "dmn"
 FIXTURES = PROJECT_ROOT / "shared" / "tests" / "fixtures"
 
 LOINC = "http://loinc.org"

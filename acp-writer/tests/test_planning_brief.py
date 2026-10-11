@@ -26,6 +26,7 @@ from acp_writer.planning_brief import (
     normalize_review_history,
     render_clinician_directives,
     render_feedback_history,
+    stamp_activity_ids,
 )
 
 
@@ -106,6 +107,33 @@ def _sample_brief() -> PlanningBrief:
         ],
         review_status=ReviewStatus.APPROVED,
     )
+
+
+def test_plan_activity_has_uuid_hex_id_and_empty_automations_by_default():
+    activity = _sample_brief().activities[0]
+
+    assert len(activity.id) == 32
+    assert all(char in "0123456789abcdef" for char in activity.id)
+    assert activity.automations == []
+
+
+def test_stamp_activity_ids_preserves_matching_prior_ids_and_assigns_new_ids():
+    prior = _sample_brief().model_dump(mode="json")
+    prior["activities"][0]["id"] = "prior-medication"
+    prior["activities"][1]["id"] = "prior-lab"
+    current = _sample_brief()
+    current.activities[0].id = "generated-medication"
+    current.activities[1].id = "generated-lab"
+    current.activities.append(PlanActivity(
+        type=ActivityType.PROCESS,
+        description="Schedule care-team review",
+        source_cpg="SYN-HTN-2026-001",
+    ))
+
+    result = stamp_activity_ids(current, prior)
+
+    assert [item.id for item in result.activities[:2]] == ["prior-medication", "prior-lab"]
+    assert result.activities[2].id not in {"prior-medication", "prior-lab"}
 
 
 class TestFHIRCode:

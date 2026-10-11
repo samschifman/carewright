@@ -55,7 +55,6 @@ services:
         condition: service_healthy
       medplum-redis:
         condition: service_healthy
-    command: ["env"]
     environment:
       MEDPLUM_PORT: "8103"
       MEDPLUM_BASE_URL: "http://localhost:8103/"
@@ -85,6 +84,8 @@ services:
       MEDPLUM_ALLOWED_ORIGINS: "*"
       MEDPLUM_INTROSPECTION_ENABLED: "true"
       MEDPLUM_SHUTDOWN_TIMEOUT_MILLISECONDS: "30000"
+    volumes:
+      - ./mock-EHR/deploy/medplum.config.json:/usr/src/medplum/medplum.config.json:ro
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:8103/healthcheck').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))\""]
       interval: 30s

@@ -10,6 +10,13 @@
 # Only exclude things no root-context build needs.
 **/node_modules
 **/dist
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+working/
 .git
 .claude
 **/*.log

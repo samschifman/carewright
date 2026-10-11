@@ -70,6 +70,49 @@ export interface DecisionResult {
   };
 }
 
+export interface AutomationResult {
+  artifact_id?: string;
+  bpmn_xml: string;
+  process_ir: Record<string, unknown>;
+  template_summary: {
+    id: string;
+    version: string;
+    name: string;
+    description?: string;
+    source_cpg?: string;
+    section?: string;
+    triggers: Array<Record<string, unknown>>;
+    linked_recommendation_ids: string[];
+    linked_decision_model_ids: string[];
+    capabilities_used: string[];
+    pattern_family: string;
+    automatability?: {
+      tier: 'A' | 'B';
+      rationale: string;
+    };
+    validation?: {
+      status: 'valid' | 'incomplete' | 'escalated';
+      rungs_passed?: string[];
+      deferred_invariants?: string[];
+      kogito_checked?: boolean;
+      warnings?: string[];
+      errors?: string[];
+    };
+    [key: string]: unknown;
+  };
+  item: {
+    id?: string;
+    type?: string;
+    name: string;
+    section?: string;
+    linked_recommendations?: string[];
+    linked_decisions?: string[];
+  };
+  escalated?: boolean;
+  escalation_reason?: string;
+  escalation_errors?: string[];
+}
+
 export interface RecommendationResult {
   artifact_id?: string;
   id: string;
@@ -106,6 +149,7 @@ export interface AssemblyReport {
   cpg_id: string;
   recommendations_count: number;
   dmn_models_count: number;
+  automation_templates_count?: number;
   escalated_count: number;
   integrity_errors: string[];
 }
@@ -120,10 +164,12 @@ export interface EscalatedItem {
 }
 
 export interface PublishedArtifact {
-  type: 'metadata' | 'dmn' | 'recommendations' | 'assembly_report' | 'escalated_items';
+  type: 'metadata' | 'dmn' | 'bpmn' | 'recommendations' | 'assembly_report' | 'escalated_items';
   ref: string;
   artifact_id?: string;
   name?: string;
+  template_id?: string;
+  version?: string;
   cpg_id?: string;
   count?: number;
 }
@@ -140,7 +186,7 @@ export interface DeliveryStatus {
 
 export interface ReviewFeedbackItem {
   itemId: string;
-  itemType: 'decision' | 'recommendation' | 'classification';
+  itemType: 'decision' | 'recommendation' | 'classification' | 'process' | 'automation';
   comment: string;
 }
 
@@ -171,7 +217,9 @@ export interface RunDetail {
   previousFeedback?: ReviewAction;
   metadata?: CPGMetadata;
   sectionMap?: SectionMapEntry[];
+  manifest?: ManifestItem[];
   decisions?: DecisionResult[];
+  automations?: AutomationResult[];
   recommendations?: RecommendationResult[];
   recommendationEscalations?: EscalatedItem[];
   assemblyReport?: AssemblyReport;
@@ -179,4 +227,18 @@ export interface RunDetail {
   escalatedItems?: EscalatedItem[];
   errors?: StepError[];
   warnings?: RunWarning[];
+}
+
+export interface ManifestItem {
+  id: string;
+  type: 'decision' | 'recommendation' | 'process' | string;
+  name: string;
+  section?: string;
+  tier?: 'A' | 'B' | string;
+  tier_hint?: 'A' | 'B' | 'C' | string;
+  automatability?: { tier?: string };
+  trigger_hint?: string;
+  linked_recommendations?: string[];
+  linked_decisions?: string[];
+  [key: string]: unknown;
 }

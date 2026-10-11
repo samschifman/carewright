@@ -28,6 +28,7 @@ import { DecisionReviewPage } from './DecisionReviewPage';
 import { RecommendationReviewPage } from './RecommendationReviewPage';
 import { AssemblyReportPage } from './AssemblyReportPage';
 import { ProvenancePage } from './ProvenancePage';
+import { AutomationReviewPage } from './AutomationReviewPage';
 
 function isAtLeast(current: RunStatus, threshold: RunStatus): boolean {
   const order: RunStatus[] = [
@@ -94,6 +95,7 @@ export function RunDetailPage() {
   const showRecommendations = showDecisions;
   const showAssembly = isAtLeast(run.status, 'assembling');
   const showProvenance = isAtLeast(run.status, 'awaiting_artifact_review');
+  const showAutomations = !!run.automations?.length;
 
   return (
     <>
@@ -191,6 +193,12 @@ export function RunDetailPage() {
           {showProvenance && (
             <Tab eventKey={5} title={<TabTitleText>Provenance</TabTitleText>}>
               <ProvenancePage run={run} />
+            </Tab>
+          )}
+
+          {showAutomations && (
+            <Tab eventKey={6} title={<TabTitleText>Automations</TabTitleText>}>
+              <AutomationReviewPage run={run} />
             </Tab>
           )}
         </Tabs>

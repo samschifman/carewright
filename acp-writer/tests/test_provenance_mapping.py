@@ -126,6 +126,32 @@ class TestPlanActivityFromEntry:
                   "sourceRecommendationId", "sourceCpg", "clinicalRationale"):
             assert k not in pa
 
+    def test_maps_automation_state_template_source_and_bindings(self):
+        pa = plan_activity_from_entry({
+            "id": "activity-1",
+            "description": "Monitor home readings",
+            "automations": [{
+                "id": "00000000-0000-4000-8000-000000000001",
+                "template_refs": [{
+                    "template_id": "home-bp-monitoring",
+                    "version": "a" * 12,
+                    "source_cpg": "SYN-HTN-2026-002",
+                }],
+                "enabled": True,
+                "revision": "b" * 12,
+                "bpmn_xml": "<bpmn:definitions />",
+                "capabilities_used": ["patient.request_observation"],
+                "bindings": [{"name": "reporting_interval", "value": "P1W", "source": "cpg-default"}],
+                "validation": {"status": "valid", "rungs_passed": ["L0"], "warnings": [], "errors": []},
+                "review_notes": [],
+            }],
+        }, 0)
+        automation = pa["automations"][0]
+        assert automation["enabled"] is True
+        assert automation["templateRefs"][0]["sourceCpg"] == "SYN-HTN-2026-002"
+        assert automation["bindings"][0]["name"] == "reporting_interval"
+        assert automation["validation"]["status"] == "valid"
+
 
 from acp_writer.services.artifact_resolver import enrich_run_detail
 
@@ -171,6 +197,33 @@ class TestEnrichRunDetailProvenance:
         assert cp["activities"][0]["id"] == "a0"
         assert cp["activities"][0]["dose"] == "500mg"
         assert cp["activities"][0]["clinicalRationale"] == "First-line."
+
+    def test_brief_automations_remain_visible_at_review_gate_with_shared_activity_ids(self):
+        automation = {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "template_refs": [{"template_id": "bp-check", "version": "a" * 12, "source_cpg": "CPG-1"}],
+            "enabled": False,
+            "revision": "b" * 12,
+            "bpmn_xml": "<bpmn:definitions />",
+            "capabilities_used": ["patient.request_observation"],
+            "bindings": [],
+            "validation": {"status": "incomplete", "rungs_passed": ["L0"], "warnings": [], "errors": []},
+            "review_notes": [],
+        }
+        detail = {
+            "workflowData": {
+                "composerData": {"planning_brief": {"activities": [
+                    {"id": "activity-1", "description": "First activity", "automations": [automation]},
+                    {"id": "activity-2", "description": "Second activity", "automations": [automation]},
+                ]}},
+                "fhirGenData": {"fhir_bundle": {"resourceType": "Bundle", "entry": []}},
+            },
+        }
+        out = enrich_run_detail(detail, phi_store=None, artifacts_store=None)
+        activities = out["carePlan"]["activities"]
+        assert activities[0]["automations"][0]["enabled"] is False
+        assert activities[0]["automations"][0]["validation"]["status"] == "incomplete"
+        assert activities[0]["automations"][0]["activityIds"] == ["activity-1", "activity-2"]
 
 
 from acp_writer.services.bff import _extract_view_from_bundle

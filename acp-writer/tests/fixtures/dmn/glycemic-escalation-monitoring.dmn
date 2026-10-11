@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             xmlns:acp="https://redhat.com/cpg-to-acp/dmn"
+             id="glycemic-escalation-monitoring"
+             name="Glycemic Escalation Monitoring"
+             namespace="https://redhat.com/cpg-to-acp/dmn/glycemic-escalation-monitoring">
+  <inputData id="input_elevated_hba1c_count" name="Elevated HbA1c Count">
+    <extensionElements>
+      <acp:extraction><![CDATA[{"function":"observation_count","params":{"code":"http://loinc.org|4548-4","duration":"P6M","threshold":9,"comparator":"ge"}}]]></acp:extraction>
+    </extensionElements>
+    <variable id="var_elevated_hba1c_count" name="Elevated HbA1c Count" typeRef="number"/>
+  </inputData>
+  <inputData id="input_treatment" name="Treatment">
+    <variable id="var_treatment" name="Treatment" typeRef="string"/>
+  </inputData>
+  <decision id="decision_glycemic_escalation_monitoring" name="Glycemic Escalation Monitoring">
+    <description><![CDATA[Count HbA1c measurements at or above 9 in the prior six months and escalate when at least two are present.]]></description>
+    <variable id="var_glycemic_escalation_monitoring" name="Glycemic Escalation Monitoring" typeRef="string"/>
+    <informationRequirement id="req_elevated_hba1c_count"><requiredInput href="#input_elevated_hba1c_count"/></informationRequirement>
+    <informationRequirement id="req_treatment"><requiredInput href="#input_treatment"/></informationRequirement>
+    <decisionTable id="table_glycemic_escalation_monitoring" hitPolicy="UNIQUE" preferredOrientation="Rule-as-Row">
+      <input id="input_column_treatment"><inputExpression id="expression_treatment" typeRef="string"><text><![CDATA[Treatment]]></text></inputExpression></input>
+      <input id="input_column_elevated_hba1c_count"><inputExpression id="expression_elevated_hba1c_count" typeRef="number"><text><![CDATA[Elevated HbA1c Count]]></text></inputExpression></input>
+      <output id="output_action" name="Action" typeRef="string"/>
+      <rule id="rule_escalate_combination"><description><![CDATA[Patients receiving metformin plus lifestyle with at least two HbA1c measurements at or above 9 in the prior six months require escalation to combination therapy.]]></description><inputEntry id="entry_escalate_combination_treatment"><text><![CDATA["Metformin plus lifestyle"]]></text></inputEntry><inputEntry id="entry_escalate_combination_count"><text><![CDATA[>= 2]]></text></inputEntry><outputEntry id="output_escalate_combination"><text><![CDATA["Escalate to combination therapy"]]></text></outputEntry></rule>
+      <rule id="rule_continue_current"><description><![CDATA[Patients receiving metformin plus lifestyle with fewer than two HbA1c measurements at or above 9 in the prior six months should continue the current plan and reassess at the next scheduled interval.]]></description><inputEntry id="entry_continue_current_treatment"><text><![CDATA["Metformin plus lifestyle"]]></text></inputEntry><inputEntry id="entry_continue_current_count"><text><![CDATA[< 2]]></text></inputEntry><outputEntry id="output_continue_current"><text><![CDATA["Continue current plan and reassess at the next scheduled interval"]]></text></outputEntry></rule>
+      <rule id="rule_not_applicable"><description><![CDATA[This escalation decision does not apply to other treatment plans.]]></description><inputEntry id="entry_not_applicable_treatment"><text><![CDATA[not("Metformin plus lifestyle")]]></text></inputEntry><inputEntry id="entry_not_applicable_count"><text><![CDATA[-]]></text></inputEntry><outputEntry id="output_not_applicable"><text><![CDATA["Not applicable"]]></text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+</definitions>

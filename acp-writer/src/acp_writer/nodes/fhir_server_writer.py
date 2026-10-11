@@ -22,7 +22,12 @@ import mlflow
 import requests
 
 from acp_writer.output import write_artifact
-from acp_writer.services.ai_transparency import apply_approval_transition
+from acp_writer.services.ai_transparency import (
+    ACP_CS_BASE,
+    AUTOMATION_ID_SYSTEM,
+    AUTOMATION_REVISION_SYSTEM,
+    apply_approval_transition,
+)
 from acp_writer.state import CarePlanComposerState
 
 if TYPE_CHECKING:
@@ -123,7 +128,7 @@ def _update_on_server(server_ref: str, resource: dict) -> bool:
 
 @mlflow.trace(name="fhir_server_writer")
 def fhir_server_writer(state: CarePlanComposerState) -> dict:
-    """Write the FHIR Bundle to the FHIR server."""
+    """Store a draft locally or publish an already-approved FHIR Bundle."""
     logger.info("── FHIR Server Writer ──")
     bundle = state.get("fhir_bundle", {})
     output_dir = state.get("output_dir", "")
@@ -132,15 +137,19 @@ def fhir_server_writer(state: CarePlanComposerState) -> dict:
         logger.info("Empty FHIR bundle — skipping server write")
         return {"delivery_status": "skipped", "careplan_id": ""}
 
-    careplan_id = str(uuid.uuid4())
+    careplan_id = state.get("careplan_id") or str(uuid.uuid4())
+    _set_careplan_identifier(bundle, careplan_id)
     initial_status = "active" if state.get("approved", False) else "draft"
 
+    approval_job = None
     if initial_status == "active":
         # Deployed (SonataFlow) approval lands here with approved=True. Apply the
         # SAME full transition the monolith approve endpoint uses so the split
         # path also records the human verifier and acknowledges conflicts — not
         # just the security-tag swap it did before (issue #169 F1).
-        apply_approval_transition(bundle, _state_reviewer(state))
+        reviewer = _state_reviewer(state)
+        apply_approval_transition(bundle, reviewer)
+        approval_job, _was_existing = _start_approval_job(careplan_id, bundle, reviewer)
 
     _care_plans[careplan_id] = {
         "id": careplan_id,
@@ -155,6 +164,37 @@ def fhir_server_writer(state: CarePlanComposerState) -> dict:
     if output_dir:
         write_artifact(output_dir, "fhir-careplan-bundle.json", bundle)
 
+    if initial_status == "draft":
+        logger.info("Care plan %s stored as a draft; awaiting clinician approval", careplan_id)
+        return {
+            "careplan_id": careplan_id,
+            "delivery_status": "draft",
+        }
+
+    publication = None
+    resumed = _resume_existing_approval(approval_job) if approval_job and _was_existing else None
+    if resumed is None:
+        delivery = _post_bundle(bundle)
+    else:
+        delivery, publication = resumed
+    _care_plans[careplan_id].update(delivery)
+    if approval_job is not None and delivery.get("delivery_status") == "delivered" and publication is None:
+        publication = _record_and_publish(approval_job, delivery)
+        _care_plans[careplan_id]["automation_publication"] = publication
+    elif publication is not None:
+        _care_plans[careplan_id]["automation_publication"] = publication
+    if output_dir and delivery.get("fhir_server_response"):
+        write_artifact(output_dir, "fhir-server-response.json", delivery["fhir_server_response"])
+    return {
+        "careplan_id": careplan_id,
+        **delivery,
+        **({"automation_publication": publication} if publication is not None else {}),
+    }
+
+
+@mlflow.trace(name="fhir_server_writer.post_bundle")
+def _post_bundle(bundle: dict) -> dict:
+    """Post one transaction Bundle and return delivery metadata."""
     try:
         headers = {"Content-Type": "application/fhir+json", **_get_auth_headers()}
         r = requests.post(
@@ -164,7 +204,18 @@ def fhir_server_writer(state: CarePlanComposerState) -> dict:
             timeout=30,
         )
 
-        response_data = r.json() if r.content else {}
+        try:
+            response_data = r.json() if r.content else {}
+        except ValueError:
+            if r.status_code in (200, 201):
+                logger.warning("FHIR transaction succeeded without a JSON response; approval requires reconciliation")
+                return {
+                    "fhir_server_response": {},
+                    "delivery_status": "stored_locally",
+                    "server_ids": {},
+                    "error": "FHIR transaction response was not valid JSON",
+                }
+            response_data = {}
 
         if r.status_code in (200, 201):
             logger.info("FHIR Bundle posted successfully (status %d)", r.status_code)
@@ -184,16 +235,10 @@ def fhir_server_writer(state: CarePlanComposerState) -> dict:
             else:
                 logger.info("  Response body: %s", json.dumps(response_data)[:500])
             server_ids = _parse_server_ids(bundle, response_data)
-            _care_plans[careplan_id]["fhir_response"] = response_data
-            _care_plans[careplan_id]["server_ids"] = server_ids
-
-            if output_dir:
-                write_artifact(output_dir, "fhir-server-response.json", response_data)
-
             return {
                 "fhir_server_response": response_data,
-                "careplan_id": careplan_id,
                 "delivery_status": "delivered",
+                "server_ids": server_ids,
             }
         elif r.status_code in (401, 403):
             logger.warning(
@@ -203,25 +248,142 @@ def fhir_server_writer(state: CarePlanComposerState) -> dict:
             )
             return {
                 "fhir_server_response": response_data,
-                "careplan_id": careplan_id,
                 "delivery_status": "stored_locally",
+                "server_ids": {},
             }
         else:
             logger.warning("FHIR server returned %d: %s", r.status_code, r.text[:200])
-            _care_plans[careplan_id]["error"] = r.text[:500]
             return {
                 "fhir_server_response": response_data,
-                "careplan_id": careplan_id,
                 "delivery_status": "error",
+                "error": r.text[:500],
+                "server_ids": {},
             }
 
     except requests.RequestException as e:
         logger.warning("FHIR server unavailable: %s — CarePlan saved locally only", e)
         return {
             "fhir_server_response": {},
-            "careplan_id": careplan_id,
             "delivery_status": "stored_locally",
+            "server_ids": {},
         }
+
+
+@mlflow.trace(name="fhir_server_writer.automation_revisions")
+def _automation_revisions(bundle: dict) -> list[dict[str, str]]:
+    revisions = []
+    for entry in bundle.get("entry", []):
+        task = entry.get("resource") or {}
+        if task.get("resourceType") != "Task":
+            continue
+        automation_id = next(
+            (item.get("value") for item in task.get("identifier", [])
+             if item.get("system") == AUTOMATION_ID_SYSTEM),
+            None,
+        )
+        revision = next(
+            (item.get("value") for item in task.get("identifier", [])
+             if item.get("system") == AUTOMATION_REVISION_SYSTEM),
+            None,
+        )
+        if automation_id and revision:
+            revisions.append({"automation_id": automation_id, "revision": revision})
+    return sorted(revisions, key=lambda item: item["automation_id"])
+
+
+@mlflow.trace(name="fhir_server_writer.start_approval_job")
+def _start_approval_job(careplan_id: str, bundle: dict, reviewer: "ReviewerContext") -> tuple[dict, bool]:
+    """Persist the approved bundle before any FHIR transaction is sent."""
+    from acp_writer.services.automation_publisher import get_publisher
+
+    return get_publisher().start_approval_with_status(
+        careplan_id,
+        _automation_revisions(bundle),
+        reviewer,
+        datetime.now(timezone.utc),
+        bundle=bundle,
+    )
+
+
+@mlflow.trace(name="fhir_server_writer.resume_existing_approval")
+def _resume_existing_approval(job: dict) -> tuple[dict, dict] | None:
+    """Recover an approving job before re-sending its transaction bundle."""
+    from acp_writer.services.automation_publisher import get_publisher
+
+    publisher = get_publisher()
+    if job.get("state") == "approving":
+        recovered, lookup_ok = publisher.recover_approval_if_written(job)
+        if not lookup_ok:
+            return (
+                {
+                    "delivery_status": "stored_locally",
+                    "fhir_server_response": {},
+                    "server_ids": {},
+                    "error": "FHIR recovery lookup failed; transaction was not re-sent",
+                },
+                {"status": "approving", "attempts": job.get("publish_attempts", 0)},
+            )
+        if recovered is None:
+            return None
+        delivery = {
+            "delivery_status": "delivered",
+            "fhir_server_response": {},
+            "server_ids": recovered.get("server_ids", {}),
+        }
+        return delivery, _publish_pending(recovered)
+
+    if job.get("server_ids"):
+        delivery = {
+            "delivery_status": "delivered",
+            "fhir_server_response": job.get("transaction_response", {}),
+            "server_ids": job["server_ids"],
+        }
+        if job.get("state") in {"pending", "failed"} and job.get("publication_payload"):
+            return delivery, _publish_pending(job)
+        return delivery, {
+            "status": job.get("state", "pending"),
+            "attempts": job.get("publish_attempts", 0),
+            "lastError": job.get("last_error"),
+        }
+    return None
+
+
+@mlflow.trace(name="fhir_server_writer.record_and_publish")
+def _record_and_publish(job: dict, delivery: dict) -> dict:
+    """Record a successful transaction and attempt automation publication."""
+    from acp_writer.services.automation_publisher import get_publisher
+
+    publisher = get_publisher()
+    response = delivery.get("fhir_server_response") or {}
+    try:
+        pending = publisher.record_write(job, response)
+    except ValueError as exc:
+        logger.warning(
+            "Approval job %s awaits recovery after incomplete FHIR response: %s",
+            job["job_id"], exc,
+        )
+        return {
+            "status": "approving",
+            "attempts": job.get("publish_attempts", 0),
+            "lastError": str(exc),
+        }
+    return _publish_pending(pending)
+
+
+@mlflow.trace(name="fhir_server_writer.publish_pending")
+def _publish_pending(pending: dict) -> dict:
+    from acp_writer.services.automation_publisher import get_publisher
+
+    publisher = get_publisher()
+    result = publisher.publish(pending)
+    if result.get("state") == "pending":
+        publisher.schedule_retries(result)
+    return {
+        "status": result.get("state"),
+        "attempts": result.get("publish_attempts", 0),
+        "lastError": result.get("last_error"),
+        "lastAttemptAt": result.get("last_attempt_at"),
+    }
 
 
 def _extract_patient_name(bundle: dict) -> str:
@@ -287,6 +449,31 @@ def _find_careplan_resource(bundle: dict) -> dict | None:
     return None
 
 
+@mlflow.trace(name="fhir_server_writer.set_careplan_identifier")
+def _set_careplan_identifier(bundle: dict, careplan_id: str) -> None:
+    """Set the stable business identifier and transaction upsert condition."""
+    careplan_entry = next(
+        (
+            entry for entry in bundle.get("entry", [])
+            if (entry.get("resource") or {}).get("resourceType") == "CarePlan"
+        ),
+        None,
+    )
+    if careplan_entry is None:
+        return
+    system = f"{ACP_CS_BASE}/careplan-id"
+    resource = careplan_entry["resource"]
+    identifiers = [
+        item for item in resource.get("identifier", [])
+        if item.get("system") != system
+    ]
+    identifiers.append({"system": system, "value": careplan_id})
+    resource["identifier"] = identifiers
+    careplan_entry.setdefault("request", {})["ifNoneExist"] = (
+        f"identifier={system}|{careplan_id}"
+    )
+
+
 def approve_care_plan(
     careplan_id: str,
     reviewer: "ReviewerContext | None" = None,
@@ -305,18 +492,32 @@ def approve_care_plan(
     if not cp:
         return None
 
-    cp["status"] = "active"
+    if cp.get("status") == "active" and cp.get("delivery_status") == "delivered":
+        return {"id": careplan_id, "status": "active", "delivery_status": "delivered"}
+
     bundle = cp.get("bundle", {})
-    apply_approval_transition(bundle, reviewer or default_reviewer())
-
-    careplan_resource = _find_careplan_resource(bundle)
-    server_ref = _find_careplan_server_id(cp.get("server_ids", {}))
-    if server_ref and careplan_resource:
-        _update_on_server(server_ref, careplan_resource)
-    elif careplan_resource:
-        logger.info("No server ID for CarePlan — server-side update skipped (local only)")
-
-    return {"id": careplan_id, "status": "active"}
+    reviewer_context = reviewer or default_reviewer()
+    apply_approval_transition(bundle, reviewer_context)
+    cp["status"] = "active"
+    job, was_existing = _start_approval_job(careplan_id, bundle, reviewer_context)
+    resumed = _resume_existing_approval(job) if was_existing else None
+    if resumed is None:
+        delivery = _post_bundle(bundle)
+        publication = None
+    else:
+        delivery, publication = resumed
+    cp.update(delivery)
+    if publication is None:
+        publication = {"status": "approving", "attempts": 0}
+    if delivery.get("delivery_status") == "delivered" and publication.get("status") == "approving":
+        publication = _record_and_publish(job, delivery)
+    cp["automation_publication"] = publication
+    return {
+        "id": careplan_id,
+        "status": "active",
+        "delivery_status": delivery["delivery_status"],
+        "automation_publication": publication,
+    }
 
 
 def reject_care_plan(careplan_id: str, reason: str) -> dict | None:
@@ -324,6 +525,10 @@ def reject_care_plan(careplan_id: str, reason: str) -> dict | None:
     cp = _care_plans.get(careplan_id)
     if not cp:
         return None
+
+    from acp_writer.services.automation_publisher import get_publisher
+
+    get_publisher().withdraw(careplan_id)
 
     cp["status"] = "entered-in-error"
     bundle = cp.get("bundle", {})

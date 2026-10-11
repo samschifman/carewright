@@ -1,0 +1,156 @@
+"""Prompt builders for generating BPMN process IR from a CPG process."""
+
+import json
+
+from cpg_contracts.automation.catalog import Catalog, load_catalog
+from cpg_contracts.automation.ir import ProcessIR
+
+
+_SYSTEM_RULES = """\
+You are a clinical informaticist translating a guideline process into the
+project's Process IR. The IR is a strict JSON contract. Return exactly one JSON
+object that validates against the schema below.
+
+Never write BPMN XML and never write coordinates. Never invent timing,
+thresholds, actors, clinical steps, or defaults. Preserve the source's clinical
+meaning and cite source text on source-derived elements.
+
+## BPMN element subset and compiler macros
+The only flow element types are startEvent, endEvent, task, userTask,
+businessRuleTask, exclusiveGateway, intermediateCatchEvent, boundaryEvent, and
+sequenceFlow. Use one start, at least one end, explicit converging gateways
+instead of implicit joins, and one default outgoing flow for each diverging
+exclusive gateway. A boundary event attaches to `main` and uses a timer.
+
+The deterministic compiler expands these macros; do not add their generated
+elements to the IR:
+1. M1 adds catalog-defined task inputs and mapped outputs, plus the Kogito
+   TaskName work parameter.
+2. M2 binds a businessRuleTask to the named DMN model and maps its inputs and
+   outputs.
+3. M3 adds counter properties/scripts and reset scripts for repeated work.
+4. M4 wraps the flow in the `main` sub-process and adds outcome routing.
+5. M5 serializes provenance and template metadata as `acp` extension blocks.
+6. M6 turns timer parameter references into Kogito timer expressions.
+
+## Source and structural provenance
+Every task, userTask, businessRuleTask, timer intermediateCatchEvent,
+boundaryEvent, and conditional sequenceFlow needs source provenance with
+`source_text` copied from the supplied CPG and `source_location` when known.
+The source quote must support the element's meaning. Structural elements use
+one of the schema's closed `derivation_rule` values and `supports` ids:
+start-event, end-event, sequence, exclusive-split, exclusive-join,
+default-flow, or plan-bound. Do not label a clinical action as structural.
+No source-derived element may use free-text literals. Free text is a string
+parameter with authored provenance. Enum and unit literals must come from the
+catalog. Quantity units must match the receiving property. Numeric and
+duration literals must be supported by the cited text, except marked 0/1
+structural constants in existence checks.
+
+## Identifiers and reserved timeout
+Element ids, property names, and parameter names are lower-case snake_case,
+match `^[a-z][a-z0-9_]*$`, contain no dots, and are not Java keywords or
+compiler-reserved names. Do not use `init`, `main`, `main_start`, `gw_outcome`,
+`end_completed`, `f_init`, `f_main`, `f_after`, `f_completed`, `outcome`, any
+id beginning `main_`, or ids containing `_counter`, `_reset`, `_outcome`, or
+`_route`. Catalog capability ids retain their dots in `taskName`; these are
+catalog ids rather than IR identifiers.
+
+Every process is a `template` with its stable id and has the reserved required
+duration parameter `max_duration` with no default. It also has exactly one
+boundary event attached to `main`, with `timeDuration: {"param":"max_duration"}`
+and structural provenance `plan-bound`. The creator deterministically adds
+these two records if omitted, with boundary id `period_elapsed` and supports
+listing every task id. Do not add a second main boundary.
+
+## Grounding requirements
+T1: source provenance quotes must occur in the supplied CPG section text.
+T2: a CPG-sourced parameter default must be stated in its citation; authored
+defaults are allowed only for string parameters.
+T3: structural provenance uses only the closed rules above and has resolvable
+supports. A diverging gateway needs a source-derived condition.
+T4: source-derived numeric, duration, quantity, enum, unit, and code values
+must meet the literal rules above; code inputs use a `{concept}` reference.
+T5: behavior-changing elements use source provenance, except the plan-bound
+main boundary.
+
+The catalog and JSON schema follow. Do not use a capability outside the
+catalog. Output JSON only.
+"""
+
+
+def _catalog_payload(catalog: Catalog) -> list[dict]:
+    """Convert catalog dataclasses into a compact prompt representation."""
+    return [
+        {
+            "id": capability.id,
+            "direction": capability.direction,
+            "description": capability.description,
+            "inputs": [
+                {
+                    "name": value.name,
+                    "type": value.type,
+                    "required": value.required,
+                    **({"default": value.default} if value.default is not None else {}),
+                    **({"values": value.values} if value.values is not None else {}),
+                    **({"free_text": True} if value.free_text else {}),
+                }
+                for value in capability.inputs
+            ],
+            "outputs": [
+                {"name": value.name, "type": value.type}
+                for value in capability.outputs
+            ],
+            "human_in_loop": capability.human_in_loop,
+        }
+        for capability in catalog.capabilities
+    ]
+
+
+def build_bpmn_ir_creator_system(catalog: Catalog | None = None) -> str:
+    """Render the schema and the active capability catalog into the system prompt."""
+    active_catalog = catalog or load_catalog()
+    schema = ProcessIR.model_json_schema()
+    return (
+        _SYSTEM_RULES
+        + "\n## Capability catalog v"
+        + active_catalog.version
+        + "\n"
+        + json.dumps(_catalog_payload(active_catalog), indent=2, ensure_ascii=False)
+        + "\n\n## ProcessIR JSON schema\n"
+        + json.dumps(schema, indent=2, ensure_ascii=False)
+    )
+
+
+def build_bpmn_ir_creator_user(
+    *,
+    item: dict,
+    source_pages: str,
+    linked_dmn_summaries: list[dict],
+    linked_recs: list[dict],
+    mermaid_figures: str,
+    abbreviations: str,
+    human_feedback: str = "",
+    repair_feedback: str = "",
+) -> str:
+    """Render source context, linked artifacts, and repair or human feedback."""
+    parts = [
+        "Create a ProcessIR template for this identified care process.",
+        "\n## Manifest process item\n"
+        + json.dumps(item, indent=2, ensure_ascii=False, default=str),
+        "\n## CPG source sections\n" + (source_pages or "(no source text available)"),
+        "\n## Linked DMN summaries (including model namespace)\n"
+        + json.dumps(linked_dmn_summaries, indent=2, ensure_ascii=False, default=str),
+        "\n## Linked recommendations\n"
+        + json.dumps(linked_recs, indent=2, ensure_ascii=False, default=str),
+        "\n## Figure flowcharts as Mermaid\n" + (mermaid_figures or "(none)"),
+        "\n## Abbreviations\n" + (abbreviations or "(none)"),
+    ]
+    if human_feedback.strip():
+        parts.append("\n## PREVIOUS HUMAN REVIEW FEEDBACK\n" + human_feedback)
+    if repair_feedback.strip():
+        parts.append("\n## REPAIR MODE — CORRECT THESE FINDINGS\n" + repair_feedback)
+    parts.append(
+        "\nReturn the complete ProcessIR JSON object. Do not return BPMN XML or prose."
+    )
+    return "\n".join(parts)

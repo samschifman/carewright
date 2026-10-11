@@ -21,6 +21,10 @@ def _load_sample_data() -> dict:
     return json.loads((FIXTURES / "sample-recommendations.json").read_text())
 
 
+def _retrieve(state):
+    return recommendation_retriever(state, vector_store=api_module._vector_store)
+
+
 def _ingest_recommendations():
     from cpg_contracts import RecommendationBundle
     data = _load_sample_data()
@@ -63,7 +67,7 @@ class TestBuildSearchQuery:
 
 class TestRecommendationRetriever:
     def test_empty_store(self):
-        result = recommendation_retriever({
+        result = _retrieve({
             "condition_codes": [{"display": "hypertension"}],
             "dmn_results": [],
             "applicable_cpgs": [],
@@ -72,7 +76,7 @@ class TestRecommendationRetriever:
 
     def test_retrieves_from_store(self):
         _ingest_recommendations()
-        result = recommendation_retriever({
+        result = _retrieve({
             "condition_codes": [{"display": "Essential hypertension"}],
             "dmn_results": [],
             "applicable_cpgs": [{"cpg_id": "SYN-HTN-2026-001"}],
@@ -86,7 +90,7 @@ class TestRecommendationRetriever:
 
     def test_no_duplicates(self):
         _ingest_recommendations()
-        result = recommendation_retriever({
+        result = _retrieve({
             "condition_codes": [{"display": "Essential hypertension"}],
             "dmn_results": [],
             "applicable_cpgs": [{"cpg_id": "SYN-HTN-2026-001"}],
@@ -96,7 +100,7 @@ class TestRecommendationRetriever:
 
     def test_with_dmn_results(self):
         _ingest_recommendations()
-        result = recommendation_retriever({
+        result = _retrieve({
             "condition_codes": [{"display": "Essential hypertension"}],
             "dmn_results": [{
                 "outputs": {
@@ -112,7 +116,7 @@ class TestRecommendationRetriever:
 
     def test_no_cpg_filter_returns_all(self):
         _ingest_recommendations()
-        result = recommendation_retriever({
+        result = _retrieve({
             "condition_codes": [{"display": "hypertension treatment"}],
             "dmn_results": [],
             "applicable_cpgs": [],
@@ -121,7 +125,7 @@ class TestRecommendationRetriever:
 
     def test_full_recommendation_objects(self):
         _ingest_recommendations()
-        result = recommendation_retriever({
+        result = _retrieve({
             "condition_codes": [{"display": "Essential hypertension"}],
             "dmn_results": [],
             "applicable_cpgs": [{"cpg_id": "SYN-HTN-2026-001"}],

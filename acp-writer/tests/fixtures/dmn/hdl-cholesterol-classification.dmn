@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="hdl-cholesterol-classification"
+             name="HDL Cholesterol Classification"
+             namespace="https://redhat.com/cpg-to-acp/dmn/hdl-cholesterol-classification">
+  <inputData id="input_hdl_cholesterol" name="HDL Cholesterol">
+    <description>HDL cholesterol in mg/dL.</description>
+    <variable id="var_hdl_cholesterol" name="HDL Cholesterol" typeRef="number"/>
+  </inputData>
+  <decision id="decision_hdl_cholesterol_classification" name="HDL Cholesterol Classification">
+    <description>Classifies HDL cholesterol using ATP III thresholds; the middle band is not an ATP III category.</description>
+    <variable id="var_hdl_cholesterol_classification" name="HDL Cholesterol Classification" typeRef="string"/>
+    <informationRequirement id="ir_hdl_cholesterol"><requiredInput href="#input_hdl_cholesterol"/></informationRequirement>
+    <decisionTable id="dt_hdl_cholesterol_classification" hitPolicy="UNIQUE" preferredOrientation="Rule-as-Row">
+      <input id="input_column_hdl_cholesterol">
+        <inputExpression id="expression_hdl_cholesterol" typeRef="number"><text><![CDATA[HDL Cholesterol]]></text></inputExpression>
+      </input>
+      <output id="output_category" name="Category" typeRef="string"/>
+      <rule id="rule_1">
+        <inputEntry id="r1i"><text><![CDATA[< 40]]></text></inputEntry>
+        <outputEntry id="r1o"><text><![CDATA["Low"]]></text></outputEntry>
+      </rule>
+      <rule id="rule_2">
+        <description>Assumption: ATP III leaves the 40–59 mg/dL band unclassified, so this explicit row returns a neutral label.</description>
+        <inputEntry id="r2i"><text><![CDATA[[40..60)]]></text></inputEntry>
+        <outputEntry id="r2o"><text><![CDATA["Not classified"]]></text></outputEntry>
+      </rule>
+      <rule id="rule_3">
+        <inputEntry id="r3i"><text><![CDATA[>= 60]]></text></inputEntry>
+        <outputEntry id="r3o"><text><![CDATA["High"]]></text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

@@ -4,7 +4,7 @@ Two-phase architecture:
   Phase 1 (Analysis): sequential nodes build a manifest
   Phase 2 (Generation): per-item pipelines with review loops, then assembly + delivery
 
-Generation subgraphs (DMN, Rec) are in generation.py to avoid
+Generation subgraphs (DMN, recommendations, BPMN) are in generation.py to avoid
 importing Docling in the LLM Analysis pod.
 """
 

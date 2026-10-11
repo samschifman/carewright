@@ -213,6 +213,93 @@ paths:
         "404":
           description: Model not found
 
+  /api/v1/automation/templates:
+    post:
+      operationId: registerAutomationTemplate
+      summary: Validate and register an immutable automation template
+      parameters:
+        - name: source_cpg
+          in: query
+          required: true
+          schema: { type: string }
+        - name: validate_only
+          in: query
+          schema: { type: boolean, default: false }
+        - name: replace
+          in: query
+          description: Allow a new source CPG to take ownership of a colliding template id.
+          schema: { type: boolean, default: false }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AutomationTemplate" }
+      responses:
+        "201": { description: Template version registered }
+        "200": { description: Validation-only result or idempotent replay }
+        "400": { description: Invalid template JSON }
+        "409": { description: Cross-CPG id collision or immutable version conflict }
+        "422": { description: IR, static ladder, source grounding, or Kogito validation failed }
+        "503": { description: Kogito validation unavailable }
+    get:
+      operationId: listAutomationTemplates
+      summary: List current automation template versions
+      parameters:
+        - name: recommendation_id
+          in: query
+          schema: { type: string }
+        - name: dmn_model_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Matching current template versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AutomationTemplate" }
+
+  /api/v1/automation/templates/{templateId}:
+    get:
+      operationId: getAutomationTemplate
+      summary: Get a template version, latest by default
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: version
+          in: query
+          schema: { type: string, pattern: "^[0-9a-f]{12}$" }
+      responses:
+        "200":
+          description: Template definition and BPMN
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AutomationTemplate" }
+        "404": { description: Template version not found }
+
+  /api/v1/automation/validate:
+    post:
+      operationId: validateAutomation
+      summary: Validate an automation IR or BPMN definition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              oneOf:
+                - required: [ir]
+                  properties: { ir: { type: object } }
+                - required: [bpmn_xml]
+                  properties: { bpmn_xml: { type: string } }
+      responses:
+        "200": { description: Ladder and Kogito validation result }
+        "400": { description: Invalid request shape }
+        "503": { description: Kogito validation unavailable }
+
   /api/v1/decisions/evaluate/{modelId}:
     post:
       operationId: evaluateDecision
@@ -589,6 +676,8 @@ components:
             type: string
         source_location:
           $ref: "#/components/schemas/SourceLocation"
+        namespace:
+          type: string
 
     DecisionModelDetail:
       allOf:
@@ -597,6 +686,16 @@ components:
           properties:
             dmn_xml:
               type: string
+
+    AutomationTemplate:
+      type: object
+      description: cpg-contracts AutomationTemplate contract (version 1.1).
+      required: [contract_version, summary, ir, bpmn_xml]
+      properties:
+        contract_version: { type: string, const: "1.1" }
+        summary: { type: object }
+        ir: { type: object }
+        bpmn_xml: { type: string }
 
     DecisionVariable:
       type: object

@@ -14,6 +14,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import mlflow
+
 from acp_writer.planning_brief import ActivityType, PlanningBrief
 from acp_writer.services import ai_transparency as ait
 from acp_writer.services.ai_transparency import ACP_EXT_BASE, aiast_security
@@ -65,17 +67,21 @@ def _codeable_concept(code_dict: dict | None, text: str | None = None) -> dict:
     return {"text": "Unknown"}
 
 
+@mlflow.trace(name="fhir.build_bundle")
 def build_fhir_bundle(
     brief: PlanningBrief,
     patient_demographics: dict[str, Any] | None = None,
     model_id: str | None = None,
     prompts: dict[str, str] | None = None,
+    careplan_id: str | None = None,
 ) -> dict:
     """Build a complete FHIR R4 transaction Bundle from a PlanningBrief.
 
     ``model_id`` names the LLM behind the AI-Device (from state ``llm_model``).
     ``prompts`` maps a human label → rendered prompt text; each becomes an
     AI-InputPrompt DocumentReference (when ``ACP_CAPTURE_PROMPTS`` is enabled).
+    ``careplan_id`` is the stable business identifier used for idempotent
+    transaction creation; it is distinct from the FHIR resource's UUID id.
     """
     entries: list[dict] = []
     now = datetime.now(timezone.utc).isoformat()
@@ -124,6 +130,10 @@ def build_fhir_bundle(
     goal_uids: list[str] = []
     activity_refs: list[dict] = []
     activity_uid_map: dict[int, str] = {}
+    careplan_uid = _uuid()
+    careplan_urn = _urn(careplan_uid)
+    careplan_business_id = careplan_id or _uuid().replace("-", "")
+    automation_resources: dict[tuple[str, str], dict[str, Any]] = {}
 
     for goal in brief.goals:
         uid = _uuid()
@@ -162,6 +172,7 @@ def build_fhir_bundle(
 
     for i, activity in enumerate(brief.activities):
         uid = _uuid()
+        activity_ref: dict[str, Any] = {"id": activity.id}
 
         if activity.type == ActivityType.MEDICATION:
             activity_uid_map[i] = uid
@@ -182,7 +193,7 @@ def build_fhir_bundle(
                     "text": f"{activity.dose} {activity.route or ''} {activity.frequency or ''}".strip(),
                 }]
             entries.append(_entry(resource, uid))
-            activity_refs.append({"reference": {"reference": _urn(uid)}})
+            activity_ref["reference"] = {"reference": _urn(uid)}
 
         elif activity.type in (ActivityType.MONITORING, ActivityType.REFERRAL):
             activity_uid_map[i] = uid
@@ -201,7 +212,7 @@ def build_fhir_bundle(
             if activity.frequency:
                 resource["note"] = [{"text": f"Frequency: {activity.frequency}"}]
             entries.append(_entry(resource, uid))
-            activity_refs.append({"reference": {"reference": _urn(uid)}})
+            activity_ref["reference"] = {"reference": _urn(uid)}
 
         else:
             detail_entry: dict[str, Any] = {
@@ -216,14 +227,88 @@ def build_fhir_bundle(
             )
             if code:
                 detail_entry["detail"]["code"] = code
-            activity_refs.append(detail_entry)
+            activity_ref.update(detail_entry)
 
-    careplan_uid = _uuid()
-    careplan_urn = _urn(careplan_uid)
+        for automation in activity.automations:
+            if automation.enabled is not True or automation.validation.status != "valid":
+                continue
+            key = (automation.id, automation.revision or "")
+            record = automation_resources.get(key)
+            if record is None:
+                template_ref = automation.template_refs[0]
+                snapshot = next(
+                    (
+                        item for item in automation.template_snapshots
+                        if item.process.id == template_ref.template_id
+                    ),
+                    None,
+                )
+                if snapshot is None:
+                    raise ValueError(
+                        f"automation {automation.id} has no snapshot for template {template_ref.template_id}"
+                    )
+                name = snapshot.process.name
+                docref_uid = _uuid()
+                task_uid = _uuid()
+                docref_ref = _urn(docref_uid)
+                task_ref = _urn(task_uid)
+                docref = ait.build_automation_docref(
+                    docref_id=docref_uid,
+                    task_id=task_uid,
+                    patient_ref=patient_ref,
+                    careplan_ref=careplan_urn,
+                    revision=automation.revision or "",
+                    name=name,
+                    template_id=template_ref.template_id,
+                    bpmn_xml=automation.bpmn_xml,
+                    now=now,
+                )
+                focus_ref = activity_ref.get("reference", {}).get("reference")
+                task = ait.build_automation_task(
+                    task_id=task_uid,
+                    automation=automation,
+                    name=name,
+                    patient_ref=patient_ref,
+                    careplan_ref=careplan_urn,
+                    focus_ref=focus_ref,
+                    docref_ref=docref_ref,
+                    now=now,
+                )
+                entries.append(_entry(docref, docref_uid))
+                entries.append(_entry(task, task_uid))
+                record = {
+                    "docref_ref": docref_ref,
+                    "task_ref": task_ref,
+                    "task": task,
+                    "automation": automation,
+                    "template_refs": automation.template_refs,
+                    "activity_indices": [],
+                    "recommendation_ids": set(),
+                    "name": name,
+                }
+                automation_resources[key] = record
+            elif not record["task"].get("focus"):
+                focus_ref = activity_ref.get("reference", {}).get("reference")
+                if focus_ref:
+                    record["task"]["focus"] = {"reference": focus_ref}
+            record["activity_indices"].append(i)
+            if activity.source_recommendation_id:
+                record["recommendation_ids"].add(activity.source_recommendation_id)
+            activity_ref.setdefault("extension", []).append(
+                ait.activity_automation_extension(
+                    record["docref_ref"], record["task_ref"], status="enabled"
+                )
+            )
+        activity_refs.append(activity_ref)
+
     careplan: dict[str, Any] = {
         "resourceType": "CarePlan",
         "id": careplan_uid,
         "meta": _meta(),
+        "identifier": [{
+            "system": f"{ait.ACP_CS_BASE}/careplan-id",
+            "value": careplan_business_id,
+        }],
         "status": "draft",
         "intent": "proposal",
         "title": "Care Plan",
@@ -244,7 +329,11 @@ def build_fhir_bundle(
             "url": f"{ACP_EXT_BASE}/careplan-conflict-detected",
             "valueBoolean": True,
         }]
-    entries.append(_entry(careplan, careplan_uid))
+    careplan_entry = _entry(careplan, careplan_uid)
+    careplan_entry["request"]["ifNoneExist"] = (
+        f"identifier={ait.ACP_CS_BASE}/careplan-id|{careplan_business_id}"
+    )
+    entries.append(careplan_entry)
 
     # ── AI-Device ───────────────────────────────────────────────────────────
     device_uid = _uuid()
@@ -254,6 +343,7 @@ def build_fhir_bundle(
 
     # ── AI-InputPrompt DocumentReferences (captured prompts) ─────────────────
     input_prompt_urns: list[str] = []
+    input_prompt_by_label: dict[str, str] = {}
     if ait.prompts_capture_enabled():
         for label, text in prompts.items():
             if not text:
@@ -263,7 +353,41 @@ def build_fhir_bundle(
                 docref_uid, text, f"Rendered prompt: {label}"
             )
             entries.append(_entry(docref, docref_uid))
-            input_prompt_urns.append(_urn(docref_uid))
+            prompt_ref = _urn(docref_uid)
+            input_prompt_urns.append(prompt_ref)
+            input_prompt_by_label[label] = prompt_ref
+
+    # Each instance gets one provenance record, even when a composed instance
+    # is referenced from several CarePlan.activity entries.
+    for (automation_id, _revision), record in automation_resources.items():
+        automation = record["automation"]
+        activity_ids = {
+            brief.activities[index].id
+            for index in record["activity_indices"]
+        }
+        template_ids = {ref.template_id for ref in record["template_refs"]}
+        prompt_refs = [
+            prompt_ref
+            for label, prompt_ref in input_prompt_by_label.items()
+            if any(
+                label.startswith(f"{activity_id}:{template_id}:")
+                for activity_id in activity_ids
+                for template_id in template_ids
+            )
+        ]
+        provenance = ait.build_automation_provenance(
+            prov_uid=_uuid(),
+            careplan_ref=careplan_urn,
+            activity_indices=record["activity_indices"],
+            docref_ref=record["docref_ref"],
+            task_ref=record["task_ref"],
+            device_ref=device_urn,
+            recorded=now,
+            source_recommendation_ids=sorted(record["recommendation_ids"]),
+            template_refs=record["template_refs"],
+            input_prompt_refs=prompt_refs,
+        )
+        entries.append(_entry(provenance, provenance["id"]))
 
     # ── AI-ModelCard DocumentReference (optional, env-gated) ─────────────────
     model_card_urn: str | None = None

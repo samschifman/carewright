@@ -72,7 +72,13 @@ class _LLM:
         return SimpleNamespace(content=json.dumps(self.response))
 
 
-def test_monolith_and_split_compose_share_automation_synthesis_result():
+def test_monolith_and_split_compose_share_automation_synthesis_result(monkeypatch):
+    # The synthesizer intentionally generates a fresh instance id per call;
+    # pin it so this parity assertion compares the orchestration results.
+    monkeypatch.setattr(
+        "acp_writer.nodes.automation_synthesizer._new_automation_id",
+        lambda: "a0000000-0000-4000-8000-000000000000",
+    )
     golden = Path(__file__).parent / "fixtures/home-bp-monitoring.template.json"
     template = AutomationTemplate.model_validate_json(golden.read_text())
     instance = template.ir.model_copy(deep=True)

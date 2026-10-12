@@ -12,8 +12,13 @@ PDF="$ROOT_DIR/cpg-ingester/data/synthetic-hypertension-cpg-v2.pdf"
 PATIENT="$ROOT_DIR/mock-EHR/data/patient-bundle-medication.json"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 RESUME_BPMN_RUN_DIR=""
+FROM_GOLDEN=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --from-golden)
+      FROM_GOLDEN=1
+      shift
+      ;;
     --resume-bpmn-run)
       if [ "$#" -lt 2 ]; then
         echo "--resume-bpmn-run requires a saved cpg-ingester run directory" >&2
@@ -23,8 +28,11 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     -h|--help)
-      echo "Usage: $0 [--resume-bpmn-run RUN_DIR]"
-      echo "Without the option, run the complete local automation slice. Resume mode reruns only BPMN generation from saved run artifacts."
+      echo "Usage: $0 [--from-golden | --resume-bpmn-run RUN_DIR]"
+      echo "Without an option, run the complete local automation slice."
+      echo "--from-golden skips extraction and runs delivery, care-plan approval, FHIR checks, and UI setup using saved CPG artifacts plus the checked-in automation goldens."
+      echo "Set SLICE_GOLDEN_SOURCE_RUN_DIR to select the completed extraction run to replay; otherwise the newest usable run is selected."
+      echo "--resume-bpmn-run reruns only BPMN generation from saved run artifacts."
       echo "Set SLICE_SKIP_BUILD=1 to use the existing slice-local service images."
       exit 0
       ;;
@@ -34,6 +42,10 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+if [ "$FROM_GOLDEN" = "1" ] && [ -n "$RESUME_BPMN_RUN_DIR" ]; then
+  echo "--from-golden and --resume-bpmn-run cannot be combined" >&2
+  exit 2
+fi
 if ! command -v podman-compose >/dev/null || ! command -v podman >/dev/null; then
   echo "podman and podman-compose are required" >&2
   exit 1
@@ -41,10 +53,13 @@ fi
 PROJECT="slice-local"
 COMPOSE_SLICE=(-f "$ROOT_DIR/compose.yml" -f "$ROOT_DIR/compose.slice.yml")
 RUN_ROOT="$ROOT_DIR/working/slice-run"
-SLICE_EVIDENCE_PATH="${SLICE_EVIDENCE_PATH:-$ROOT_DIR/working/slice-evidence.md}"
+BPMN_EVIDENCE_DIR="${SLICE_EVIDENCE_DIR:-bpmn-automation}"
+SLICE_EVIDENCE_PATH="${SLICE_EVIDENCE_PATH:-$ROOT_DIR/working/$BPMN_EVIDENCE_DIR/slice-evidence.md}"
 if [ -n "$RESUME_BPMN_RUN_DIR" ]; then
   RUN_ID="$(basename "$RESUME_BPMN_RUN_DIR")"
   INGESTER_RUN_DIR="$RESUME_BPMN_RUN_DIR"
+elif [ "$FROM_GOLDEN" = "1" ]; then
+  INGESTER_RUN_DIR="$RUN_ROOT/from-golden/$RUN_ID"
 else
   INGESTER_RUN_DIR="$RUN_ROOT/ingester/$RUN_ID"
 fi
@@ -59,10 +74,16 @@ SLICE_S3_ACCESS_KEY="${SLICE_S3_ACCESS_KEY:-slice-access}"
 SLICE_S3_SECRET_KEY="${SLICE_S3_SECRET_KEY:-slice-secret}"
 S3_CONFIG_FILE="$RUN_ROOT/s3-config.json"
 export SLICE_S3_ACCESS_KEY SLICE_S3_SECRET_KEY
+export SLICE_MLFLOW_EXPERIMENT_NAME
+export BPMN_EVIDENCE_DIR
 CPG_ID="SYN-HTN-2026-002"
 CAREPLAN_SYSTEM="https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/careplan-id"
 
-for required in "$INGESTER_CLI" "$INGESTER_PYTHON" "$PDF" "$PATIENT"; do
+REQUIRED_INPUTS=("$INGESTER_PYTHON" "$PATIENT")
+if [ "$FROM_GOLDEN" != "1" ]; then
+  REQUIRED_INPUTS+=("$INGESTER_CLI" "$PDF")
+fi
+for required in "${REQUIRED_INPUTS[@]}"; do
   if [ ! -e "$required" ]; then
     echo "Required slice input is missing: $required" >&2
     exit 1
@@ -70,6 +91,42 @@ for required in "$INGESTER_CLI" "$INGESTER_PYTHON" "$PDF" "$PATIENT"; do
 done
 
 mkdir -p "$INGESTER_RUN_DIR" "$PLAN_ROOT"
+if [ "$FROM_GOLDEN" = "1" ]; then
+  if [ -n "${SLICE_GOLDEN_SOURCE_RUN_DIR:-}" ]; then
+    GOLDEN_SOURCE_RUN_DIR="$(cd "$SLICE_GOLDEN_SOURCE_RUN_DIR" && pwd)"
+  else
+    GOLDEN_SOURCE_RUN_DIR=""
+    for candidate in "$RUN_ROOT"/ingester/*; do
+      if [ -s "$candidate/deploy/metadata.json" ] \
+        && [ -s "$candidate/deploy/recommendations.json" ] \
+        && [ -d "$candidate/deploy/dmn" ] \
+        && compgen -G "$candidate/deploy/dmn/*.dmn" >/dev/null; then
+        GOLDEN_SOURCE_RUN_DIR="$candidate"
+      fi
+    done
+  fi
+  if [ -z "$GOLDEN_SOURCE_RUN_DIR" ] \
+    || [ ! -s "$GOLDEN_SOURCE_RUN_DIR/deploy/metadata.json" ] \
+    || [ ! -s "$GOLDEN_SOURCE_RUN_DIR/deploy/recommendations.json" ] \
+    || ! compgen -G "$GOLDEN_SOURCE_RUN_DIR/deploy/dmn/*.dmn" >/dev/null; then
+    echo "--from-golden requires a completed extraction run with metadata, recommendations, and DMNs; set SLICE_GOLDEN_SOURCE_RUN_DIR" >&2
+    exit 1
+  fi
+  cp -R "$GOLDEN_SOURCE_RUN_DIR/." "$INGESTER_RUN_DIR/"
+  "$INGESTER_PYTHON" - "$INGESTER_RUN_DIR/run-summary.json" "$RUN_ID" "$GOLDEN_SOURCE_RUN_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+summary_path = Path(sys.argv[1])
+summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
+summary["run_id"] = sys.argv[2]
+summary["downstream_mode"] = "from-golden"
+summary["source_run_dir"] = sys.argv[3]
+summary_path.write_text(json.dumps(summary, indent=2) + "\n")
+PY
+  echo "Replaying downstream from saved CPG artifacts in $GOLDEN_SOURCE_RUN_DIR."
+fi
 SLICE_S3_ACCESS_KEY="$SLICE_S3_ACCESS_KEY" \
 SLICE_S3_SECRET_KEY="$SLICE_S3_SECRET_KEY" \
   "$INGESTER_PYTHON" - "$S3_CONFIG_FILE" <<'PY'
@@ -173,6 +230,8 @@ if [ -n "$RESUME_BPMN_RUN_DIR" ]; then
     echo "SLICE FAIL: BPMN resume failed; see $INGESTER_RUN_DIR/bpmn-resume.log" >&2
     exit 1
   fi
+elif [ "$FROM_GOLDEN" = "1" ]; then
+  echo "Skipping cpg-ingester model calls; the run directory contains copied upstream artifacts."
 else
   echo "Running cpg-ingester on the v2 hypertension PDF."
   if ! ARTIFACT_STORE_URL="http://localhost:9000" \
@@ -208,17 +267,22 @@ wait_for "http://localhost:3003/" "cpg-ingester UI"
 
 echo "Preparing CPG artifacts for acp-writer."
 export SLICE_EVIDENCE_PATH
-"$INGESTER_PYTHON" - "$INGESTER_RUN_DIR" "$DELIVERY_DIR" "$CPG_ID" <<'PY'
+"$INGESTER_PYTHON" - "$INGESTER_RUN_DIR" "$DELIVERY_DIR" "$CPG_ID" "$FROM_GOLDEN" "$ROOT_DIR/cpg-ingester/data/golden/automation" <<'PY'
 import json
 import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from cpg_contracts import RecommendationBundle
+from cpg_contracts.automation.compiler import compile as compile_bpmn
+from cpg_contracts.automation.ir import ir_version
 from cpg_contracts.automation.templates import AutomationTemplate
 
 run_dir, delivery_dir, expected_cpg = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+from_golden = sys.argv[4] == "1"
+golden_template_dir = Path(sys.argv[5])
 analysis = json.loads((run_dir / "analysis-result.json").read_text())
 generation = json.loads((run_dir / "generation-result.json").read_text())
 metadata = analysis.get("cpg_metadata") or {}
@@ -241,6 +305,27 @@ for index, item in enumerate(generation.get("dmn_results") or []):
     path = dmn_dir / f"decision-{index + 1}.dmn"
     path.write_text(item["dmn_xml"])
     dmn_count += 1
+if from_golden:
+    canonical_dmns = {}
+    for path in golden_template_dir.parent.glob("*.dmn"):
+        try:
+            model_id = ET.fromstring(path.read_text()).get("id")
+        except ET.ParseError:
+            continue
+        if model_id:
+            canonical_dmns[model_id] = path
+    replaced = []
+    for path in dmn_dir.glob("*.dmn"):
+        try:
+            model_id = ET.fromstring(path.read_text()).get("id")
+        except ET.ParseError:
+            continue
+        if model_id in canonical_dmns:
+            path.write_text(canonical_dmns[model_id].read_text())
+            replaced.append(model_id)
+    if not replaced:
+        raise SystemExit("No canonical golden DMNs matched the replay bundle")
+    print(f"Using canonical golden DMNs for: {', '.join(sorted(replaced))}")
 
 recommendations = [
     item for item in generation.get("recommendation_results") or []
@@ -260,23 +345,75 @@ rec_bundle = RecommendationBundle(
 template_dir = delivery_dir / "templates"
 template_dir.mkdir(exist_ok=True)
 templates = []
-for result in generation.get("bpmn_results") or []:
-    if not isinstance(result, dict) or result.get("escalated"):
-        continue
-    raw = result.get("automation_template")
-    if not raw:
-        continue
-    template = AutomationTemplate.model_validate(raw)
-    if template.summary.source_cpg != expected_cpg:
-        continue
-    filename = re.sub(r"[^a-zA-Z0-9_-]", "-", template.summary.id)
-    target = template_dir / f"{filename}.template.json"
-    target.write_text(template.model_dump_json(indent=2, exclude_none=True) + "\n")
-    templates.append(template)
+if from_golden:
+    for stale in template_dir.glob("*.template.json"):
+        stale.unlink()
+    for source in sorted(golden_template_dir.glob("*.template.json")):
+        template = AutomationTemplate.model_validate_json(source.read_text())
+        if template.summary.source_cpg != expected_cpg:
+            raise SystemExit(f"Golden template source CPG mismatch: {source.name}")
+        if template.summary.id == "home-bp-monitoring":
+            candidates = [
+                item for item in rec_bundle.recommendations
+                if item.recommendation_type == "monitoring"
+                and item.title.strip().casefold()
+                == "perform and submit home blood pressure readings"
+            ]
+            if len(candidates) != 1:
+                raise SystemExit(
+                    "Expected exactly one recommendation for performing and submitting "
+                    "home blood-pressure readings "
+                    f"in replay artifacts; found {len(candidates)}"
+                )
+            recommendation_id = candidates[0].id
+            template.summary.linked_recommendation_ids = [recommendation_id]
+            for trigger in template.summary.triggers:
+                if trigger.kind == "recommendation":
+                    trigger.recommendation_id = recommendation_id
+            for trigger in template.ir.process.acp.triggers:
+                if trigger.kind == "recommendation":
+                    trigger.recommendation_id = recommendation_id
+            template.summary.version = ir_version(template.ir)
+            template.bpmn_xml = compile_bpmn(template.ir)
+        target = template_dir / source.name
+        target.write_text(template.model_dump_json(indent=2, exclude_none=True) + "\n")
+        templates.append(template)
+else:
+    for result in generation.get("bpmn_results") or []:
+        if not isinstance(result, dict) or result.get("escalated"):
+            continue
+        raw = result.get("automation_template")
+        if not raw:
+            continue
+        template = AutomationTemplate.model_validate(raw)
+        if template.summary.source_cpg != expected_cpg:
+            continue
+        filename = re.sub(r"[^a-zA-Z0-9_-]", "-", template.summary.id)
+        target = template_dir / f"{filename}.template.json"
+        target.write_text(template.model_dump_json(indent=2, exclude_none=True) + "\n")
+        templates.append(template)
 
 home_monitoring = [item for item in templates if item.summary.id == "home-bp-monitoring"]
 if not home_monitoring:
-    raise SystemExit("No publishable home-bp-monitoring template was generated")
+    raise SystemExit("No publishable home-bp-monitoring template is available")
+if from_golden:
+    generation["bpmn_results"] = [
+        {
+            "artifact_id": f"{expected_cpg}-bpmn-{template.summary.id}",
+            "bpmn_xml": template.bpmn_xml,
+            "process_ir": template.ir.model_dump(mode="json", exclude_none=True),
+            "template_summary": template.summary.model_dump(mode="json", exclude_none=True),
+            "item": {
+                "id": template.summary.id,
+                "type": "process",
+                "name": template.summary.name,
+                "section": template.summary.section,
+            },
+            "escalated": False,
+        }
+        for template in templates
+    ]
+    (run_dir / "generation-result.json").write_text(json.dumps(generation, indent=2) + "\n")
 print(f"Manifest processes: {len(processes)}; DMNs: {dmn_count}; templates: {len(templates)}")
 PY
 
@@ -300,11 +437,42 @@ for template in "$DELIVERY_DIR"/templates/*.template.json; do
 done
 
 echo "Generating the patient-specific care plan."
-curl --silent --show-error --fail --max-time 1800 \
-  --output "$RUN_ROOT/generated-careplan-bundle.json" \
-  -H 'Content-Type: application/fhir+json' \
-  --data-binary "@$PATIENT" \
-  "$ACP_WRITER_URL/api/v1/careplans"
+CAREPLAN_HTTP_STATUS="$("$INGESTER_PYTHON" - "$PATIENT" "$ACP_WRITER_URL" "$RUN_ROOT" <<'PY'
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+patient, writer_url, run_root = sys.argv[1], sys.argv[2], Path(sys.argv[3])
+result = subprocess.run(
+    [
+        "curl", "--silent", "--show-error", "--max-time", "1800",
+        "--output", "-", "--write-out", "\\n%{http_code}",
+        "-H", "Content-Type: application/fhir+json",
+        "--data-binary", f"@{patient}", f"{writer_url}/api/v1/careplans",
+    ],
+    capture_output=True,
+    text=True,
+    check=False,
+)
+body, separator, status = result.stdout.rpartition("\n")
+if not separator:
+    body, status = result.stdout, "000"
+for name in ("OPENAI_API_KEY", "LITELLM_API_KEY", "LLM_API_KEY"):
+    secret = os.environ.get(name)
+    if secret:
+        body = body.replace(secret, "[redacted]")
+if status == "201":
+    (run_root / "generated-careplan-bundle.json").write_text(body)
+else:
+    (run_root / "careplan-http-error.json").write_text(body)
+print(status)
+PY
+)"
+if [ "$CAREPLAN_HTTP_STATUS" != "201" ]; then
+  echo "Care-plan endpoint returned HTTP $CAREPLAN_HTTP_STATUS; sanitized response saved under $RUN_ROOT." >&2
+  exit 1
+fi
 CAREPLAN_ID="$("$INGESTER_PYTHON" - "$RUN_ROOT/generated-careplan-bundle.json" "$CAREPLAN_SYSTEM" <<'PY'
 import json
 import sys
@@ -408,6 +576,7 @@ wait_for "http://localhost:3001/" "acp-writer UI"
 
 "$INGESTER_PYTHON" - "$INGESTER_RUN_DIR" "$CAREPLAN_ARTIFACT_DIR" "$MLFLOW_URL" "$RUN_ROOT" "$CAREPLAN_ID" "$SLICE_MLFLOW_EXPERIMENT_NAME" <<'PY'
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -438,21 +607,26 @@ excerpt = {"carePlan": careplan, "task": task, "documentReference": docref}
 
 client = MlflowClient(tracking_uri=tracking_uri)
 experiment = client.get_experiment_by_name(experiment_name)
-if experiment is None:
-    raise SystemExit(f"MLflow experiment was not found: {experiment_name}")
 trace_ids = []
 all_traces = []
-traces = client.search_traces(
-    experiment_ids=[experiment.experiment_id],
-    max_results=1000,
-    flush=True,
-)
-trace_ids.extend(trace.info.trace_id for trace in traces)
-all_traces.extend(traces)
+if experiment is not None:
+    traces = client.search_traces(
+        experiment_ids=[experiment.experiment_id],
+        max_results=1000,
+        flush=True,
+    )
+    trace_ids.extend(trace.info.trace_id for trace in traces)
+    all_traces.extend(traces)
 trace_ids = list(dict.fromkeys(trace_ids))
+token_usage = summarize_trace_usage(all_traces) if all_traces else {}
+trace_note = ""
 if not trace_ids:
-    raise SystemExit(f"No MLflow trace IDs were available in {experiment_name}")
-token_usage = summarize_trace_usage(all_traces)
+    if run_summary.get("downstream_mode") != "from-golden":
+        raise SystemExit(f"No MLflow trace IDs were available in {experiment_name}")
+    trace_note = (
+        f"No traces were returned for the downstream experiment `{experiment_name}`; "
+        "the slice acceptance checks below do not depend on token accounting."
+    )
 
 manifest_processes = [
     item for item in analysis.get("item_manifest", []) if item.get("type") == "process"
@@ -462,18 +636,21 @@ records = [
     {key: item.get(key) for key in ("automation_id", "revision", "status", "template_refs")}
     for item in record_summaries
 ]
-evidence = f"""# Local automation slice evidence
+evidence = f"""## Downstream slice from golden automation templates
 
-## Result
+### Result
 
 SLICE PASS
 
-## Run inputs and artifacts
+### Run inputs and artifacts
 
 - CPG: `{analysis.get('cpg_metadata', {}).get('cpg_id')}`
 - cpg-ingester run directory: `{ingester_dir.relative_to(root)}`
+- Replayed upstream run: `{run_summary.get('source_run_dir', 'live extraction')}`
+- Mode: `{run_summary.get('downstream_mode', 'full generation')}`; model: `{os.environ.get('SLICE_LLM_MODEL', 'not set')}`
 - Identified process items: {len(manifest_processes)}
 - Home-monitoring template: `{template['summary']['id']}@{template['summary']['version']}`
+- Registered golden templates: {', '.join(f"`{item['summary']['id']}`" for item in templates)}
 - Planning brief: `{careplan_dir.relative_to(root)}/planning-brief.json`
 - UI fixture: `acp-writer/ui/src/mocks/fixtures/slice-careplan.json`
 
@@ -486,7 +663,7 @@ SLICE PASS
 
 ## MLflow traces
 
-{chr(10).join(f'- `{trace_id}`' for trace_id in trace_ids)}
+{chr(10).join(f'- `{trace_id}`' for trace_id in trace_ids) if trace_ids else trace_note}
 
 ## MLflow token totals by node
 
@@ -498,11 +675,29 @@ SLICE PASS
 
 - cpg-ingester: `http://localhost:3003/runs/{run_summary['run_id']}`
 - acp-writer: `http://localhost:3001/careplans/slice-careplan-example`
-- Screenshot paths: `working/slice-cpg-ingester.png` and `working/slice-acp-writer.png`
+- Screenshot paths: `working/{os.environ['BPMN_EVIDENCE_DIR']}/slice-cpg-ingester.png` and `working/{os.environ['BPMN_EVIDENCE_DIR']}/slice-acp-writer.png`
 """
 evidence_path = Path(os.environ["SLICE_EVIDENCE_PATH"])
 evidence_path.parent.mkdir(parents=True, exist_ok=True)
-evidence_path.write_text(evidence)
+if run_summary.get("downstream_mode") == "from-golden":
+    existing = evidence_path.read_text() if evidence_path.exists() else "# Local automation slice evidence\n"
+    marker = "## Downstream slice from golden automation templates"
+    if marker in existing:
+        existing = existing[:existing.index(marker)].rstrip()
+    existing = existing.replace(
+        "**Live extraction remains incomplete; the downstream run is blocked before delivery.**",
+        "**Live extraction remains incomplete; the golden downstream slice passed.**",
+    )
+    outstanding = "## Outstanding"
+    if outstanding in existing:
+        existing = existing[:existing.index(outstanding)].rstrip() + (
+            "\n\n## Outstanding\n\n"
+            "Live extraction remains outstanding. The golden downstream slice verifies delivery "
+            "using saved CPG artifacts and the checked-in automation goldens."
+        )
+    evidence_path.write_text(existing.rstrip() + "\n\n" + evidence)
+else:
+    evidence_path.write_text("# Local automation slice evidence\n\n" + evidence)
 print(f"CarePlan {careplan_id}; {len(records)} automation service record(s); {len(trace_ids)} MLflow trace(s).")
 PY
 

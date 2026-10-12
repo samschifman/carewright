@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 import json
 import logging
+from pathlib import Path
 import re
 from typing import Any, Callable
 from uuid import uuid4
@@ -36,6 +37,10 @@ from acp_writer.planning_brief import PlanningBrief
 logger = logging.getLogger(__name__)
 _STATIC_REPAIR_LIMIT = 3
 _REVIEW_REPAIR_LIMIT = 2
+_CREDENTIAL_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(?:OPENAI_API_KEY|LITELLM_API_KEY|LLM_API_KEY)\b\s*[:=]\s*[\"']?[^\s,;\"']+"
+)
+_API_KEY_RE = re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b")
 
 
 def _field(value: Any, name: str, default: Any = None) -> Any:
@@ -62,7 +67,16 @@ def _template_ir(template: Any) -> ProcessIR:
 
 
 def _template_version(template: Any, ir: ProcessIR) -> str:
-    return str(_field(_summary(template), "version") or ir_version(ir))
+    # Template versions are content hashes of the pinned snapshot, never model output.
+    return ir_version(ir)
+
+
+def _new_automation_id() -> str:
+    """Return a UUID that is also safe as a BPMN process XML id."""
+    while True:
+        automation_id = str(uuid4())
+        if automation_id[0] in "abcdef":
+            return automation_id
 
 
 def _safe_text(value: Any, known_values: Sequence[str]) -> Any:
@@ -76,6 +90,63 @@ def _safe_text(value: Any, known_values: Sequence[str]) -> Any:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return [_safe_text(v, known_values) for v in value]
     return value
+
+
+def _artifact_component(value: Any, fallback: str) -> str:
+    component = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(value or "")).strip("-")
+    return component[:100] or fallback
+
+
+def _artifact_response_recorder(
+    output_dir: str,
+    run_id: Any,
+    activity_id: Any,
+    known_values: Sequence[str],
+) -> Callable[[str], Callable[[str, str], Callable[[str], None]]] | None:
+    """Create redacted request/response writers for calls in one activity synthesis."""
+    if not output_dir:
+        return None
+    output_path = Path(output_dir)
+    root = output_path.parent.parent if output_path.parent.name == "careplans" else output_path
+    directory = (
+        root
+        / "acp-writer"
+        / _artifact_component(run_id, "run")
+        / "automation"
+        / _artifact_component(activity_id, "activity")
+    )
+    attempt = 0
+
+    def record_role(role: str) -> Callable[[str, str], Callable[[str], None]]:
+        def begin(system: str, user: str) -> Callable[[str], None]:
+            nonlocal attempt
+            attempt += 1
+            stem = f"attempt-{attempt}"
+
+            def write_json(suffix: str, payload: Any) -> None:
+                safe_payload = _safe_text(payload, known_values)
+                encoded = json.dumps(safe_payload, ensure_ascii=False, indent=2, default=str)
+                encoded = _CREDENTIAL_ASSIGNMENT_RE.sub("[REDACTED_CREDENTIAL]", encoded)
+                encoded = _API_KEY_RE.sub("[REDACTED_CREDENTIAL]", encoded)
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / f"{stem}.{suffix}.json").write_text(encoded + "\n")
+
+            write_json("request", {
+                "role": role,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            })
+
+            return lambda content: write_json("response", {
+                "role": role,
+                "content": content,
+            })
+
+        return begin
+
+    return record_role
 
 
 def _activity_facts(activity: Any, known_values: Sequence[str]) -> dict[str, Any]:
@@ -154,38 +225,55 @@ def _instance_from_template(template: Any) -> ProcessIR:
     return instance
 
 
-def _apply_selected_reference(ir: ProcessIR, template: Any) -> ProcessIR:
-    result = ir.model_copy(deep=True)
+def _normalize_instance_metadata(
+    raw_ir: Mapping[str, Any],
+    template: Any,
+    process_id: str,
+) -> ProcessIR:
+    """Overwrite model-authored instance metadata from the selected snapshot."""
+    result = json.loads(json.dumps(raw_ir))
     template_ir = _template_ir(template)
     template_id = template_ir.process.id
-    version = _template_version(template, template_ir)
-    process = result.process
-    if process.kind != "instance":
-        raise ValueError("synthesized IR process.kind must be 'instance'")
-    refs = {(ref.template_id, ref.version) for ref in process.acp.template_refs}
-    if len(refs) > 1 or any(ref.template_id != template_id or ref.version != version for ref in process.acp.template_refs):
-        raise ValueError("I9-not-supported: the slice accepts one selected template per instance")
-    if process.acp.pruned or process.acp.consolidated_boundaries or process.acp.unify:
+    version = ir_version(template_ir)
+    process = result.get("process")
+    if not isinstance(process, dict):
+        raise ValueError("synthesized IR must contain a process object")
+    process["id"] = process_id
+    process["kind"] = "instance"
+    acp = process.setdefault("acp", {})
+    if not isinstance(acp, dict):
+        raise ValueError("synthesized process acp must be an object")
+    provenance = acp.get("provenance")
+    if not isinstance(provenance, dict):
+        provenance = {}
+    provenance["source_cpg"] = _source_cpg(template_ir)
+    acp["provenance"] = provenance
+    acp["template_refs"] = [{"template_id": template_id, "version": version}]
+
+    if acp.get("pruned") or acp.get("consolidated_boundaries") or acp.get("unify"):
         raise ValueError("I9-not-supported: pruning, boundary consolidation, and fragment records are deferred")
-    process.acp.template_refs = [TemplateRef(
-        template_id=template_id,
-        version=version,
-        source_cpg=_source_cpg(template_ir),
-    )]
-    process.acp.provenance.template_snapshots = [template_ir.process.model_copy(deep=True)]
-    for element in process.flowElements:
-        ref = element.acp.template_ref
-        if ref is not None and (ref.template_id != template_id or ref.version != version):
-            raise ValueError("I9-not-supported: an element references a second template")
-        if ref is None:
-            element.acp.template_ref = TemplateRef(
-                template_id=template_id,
-                version=version,
-                source_cpg=_source_cpg(template_ir),
-                element_id=element.id,
-            )
+    acp["provenance"]["template_snapshots"] = [
+        template_ir.process.model_dump(mode="json", exclude_none=True)
+    ]
+    snapshots = {template_id: template_ir}
+    for element in process.get("flowElements", []):
+        if not isinstance(element, dict):
+            continue
+        element_acp = element.get("acp")
+        if not isinstance(element_acp, dict):
+            continue
+        ref = element_acp.get("template_ref")
+        if not isinstance(ref, dict):
+            continue
+        snapshot = snapshots.get(ref.get("template_id"))
+        if snapshot is not None:
+            ref["version"] = ir_version(snapshot)
+            ref["source_cpg"] = _source_cpg(snapshot)
+
+    instance = ProcessIR.model_validate(result)
+    for element in instance.process.flowElements:
         _keep_instance_provenance(element)
-    return ProcessIR.model_validate(result.model_dump(mode="python"))
+    return instance
 
 
 def _slice_findings(exc: Exception) -> list[Finding]:
@@ -195,13 +283,28 @@ def _slice_findings(exc: Exception) -> list[Finding]:
 
 
 @mlflow.trace(name="automation.llm_json_call")
-def _invoke_json(llm: Any, system: str, user: str) -> dict[str, Any]:
-    response = llm.invoke([
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ])
+def _invoke_json(
+    llm: Any,
+    system: str,
+    user: str,
+    *,
+    attempt_recorder: Callable[[str, str], Callable[[str], None]] | None = None,
+) -> dict[str, Any]:
+    finish_recording = attempt_recorder(system, user) if attempt_recorder else None
+    try:
+        response = llm.invoke([
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ])
+    except Exception as exc:
+        if finish_recording:
+            finish_recording(json.dumps({"error_type": type(exc).__name__}))
+        raise
     content = getattr(response, "content", response)
-    parsed = loads_json(content_to_text(content))
+    raw_content = content_to_text(content)
+    if finish_recording:
+        finish_recording(raw_content)
+    parsed = loads_json(raw_content)
     if not isinstance(parsed, dict):
         raise ValueError("LLM response must be a JSON object")
     return parsed
@@ -239,6 +342,7 @@ def _review(
     plan_facts: Any,
     ir: ProcessIR,
     findings: Sequence[Finding],
+    attempt_recorder: Callable[[str, str], Callable[[str], None]] | None = None,
 ) -> tuple[bool, str]:
     template_ir = _template_ir(template)
     response = _invoke_json(
@@ -251,6 +355,7 @@ def _review(
             instance=_json(ir),
             findings=_json([item.__dict__ for item in findings]),
         ),
+        attempt_recorder=attempt_recorder,
     )
     verdict = str(response.get("verdict", "REVISE")).upper()
     issues = response.get("issues") or []
@@ -260,6 +365,7 @@ def _review(
 
 
 def _automation(
+    automation_id: str,
     ir: ProcessIR,
     template: Any,
     bindings: Sequence[ParameterBinding],
@@ -278,7 +384,7 @@ def _automation(
     warnings = [item.message for item in findings if item.severity == "WARNING"]
     errors = [item.message for item in findings if item.severity == "ERROR"]
     return ActivityAutomation(
-        id=str(uuid4()),
+        id=automation_id,
         template_refs=[TemplateRef(
             template_id=template_ir.process.id,
             version=_template_version(template, template_ir),
@@ -338,6 +444,13 @@ def synthesize_for_activity(
     for template in selected:
         template_ir = _template_ir(template)
         template_json = _json(template_ir)
+        automation_id = _new_automation_id()
+        record_attempt = _artifact_response_recorder(
+            str(_field(state, "output_dir", "") or ""),
+            _field(state, "run_id"),
+            _field(activity, "id"),
+            known_values,
+        )
         candidate: ProcessIR | None = None
         candidate_bindings: list[ParameterBinding] = []
         evidence: dict[str, Evidence] = {}
@@ -360,10 +473,14 @@ def synthesize_for_activity(
                 prompt_key = f"{_field(activity, 'id', 'activity')}:{_field(_summary(template), 'id', template_ir.process.id)}:synthesis:{attempt + 1}"
                 prompt_sink[prompt_key] = prompt
             try:
-                generated = _invoke_json(llm, AUTOMATION_SYNTHESIZER_SYSTEM, prompt)
+                generated = _invoke_json(
+                    llm,
+                    AUTOMATION_SYNTHESIZER_SYSTEM,
+                    prompt,
+                    attempt_recorder=record_attempt("synthesizer") if record_attempt else None,
+                )
                 raw_ir = generated.get("ir", generated)
-                candidate = ProcessIR.model_validate(raw_ir)
-                candidate = _apply_selected_reference(candidate, template)
+                candidate = _normalize_instance_metadata(raw_ir, template, automation_id)
                 raw_bindings = generated.get("bindings", [])
             except Exception as exc:
                 final_findings = _slice_findings(exc)
@@ -414,6 +531,7 @@ def synthesize_for_activity(
 
         if candidate is None:
             candidate = _instance_from_template(template)
+            candidate.process.id = automation_id
             candidate, candidate_bindings, evidence, binding_findings = bind_instance(
                 candidate,
                 [template_ir],
@@ -441,6 +559,7 @@ def synthesize_for_activity(
                             plan_facts=plan_facts,
                             ir=candidate,
                             findings=final_findings,
+                            attempt_recorder=record_attempt("reviewer") if record_attempt else None,
                         )
                     else:
                         approved, review_feedback = reviewer(
@@ -478,9 +597,14 @@ def synthesize_for_activity(
                     if prompt_sink is not None:
                         prompt_key = f"{_field(activity, 'id', 'activity')}:{_field(_summary(template), 'id', template_ir.process.id)}:synthesis:semantic-{review_attempt + 1}"
                         prompt_sink[prompt_key] = repair_prompt
-                    generated = _invoke_json(llm, AUTOMATION_SYNTHESIZER_SYSTEM, repair_prompt)
-                    candidate = _apply_selected_reference(
-                        ProcessIR.model_validate(generated.get("ir", generated)), template
+                    generated = _invoke_json(
+                        llm,
+                        AUTOMATION_SYNTHESIZER_SYSTEM,
+                        repair_prompt,
+                        attempt_recorder=record_attempt("synthesizer") if record_attempt else None,
+                    )
+                    candidate = _normalize_instance_metadata(
+                        generated.get("ir", generated), template, automation_id
                     )
                     candidate, candidate_bindings, evidence, binding_findings = bind_instance(
                         candidate,
@@ -516,6 +640,7 @@ def synthesize_for_activity(
         if has_incomplete and status == "incomplete":
             review_notes.append("Required plan-specific values are unresolved; bind them before enabling.")
         outputs.append(_automation(
+            automation_id,
             candidate,
             template,
             candidate_bindings,

@@ -1,16 +1,19 @@
 """Prompt for deriving a one-template automation instance."""
 
 AUTOMATION_SYNTHESIZER_SYSTEM = """You synthesize one patient-plan automation from a pinned BPMN template.
-Return one JSON object with keys `ir` (a complete ProcessIR object) and
+Return one JSON object with keys `ir` (the process structure and elements) and
 `bindings` (an array of ParameterBinding objects). The IR is a definition;
 patient-specific values belong only in bindings. Preserve the selected template's
 clinical behavior and exact element names, task capabilities, input/output
 shape, properties, and source-authored text. Copy all retained elements and
-record `acp.template_ref` with the selected template id, version, and original
-element id. The instance process must have kind `instance`, one selected
-template reference, and retain the reserved `max_duration` parameter and its
-plan-bound main boundary. Do not add clinical steps, conditions, thresholds,
-names, or free-text values. Never request or include the patient's IPS, name,
+copy each retained element's id and original template element id. For each
+element, record `acp.template_ref` with `template_id` and `element_id` only;
+omit its `version` and `source_cpg`. Do not produce process `id`, `kind`,
+`acp.provenance.source_cpg`, or process-level `acp.template_refs`: the
+synthesizer fills those from the selected template snapshot. The instance must
+retain the reserved `max_duration` parameter and its plan-bound main boundary.
+Do not add clinical steps, conditions, thresholds, names, or free-text values.
+Never request or include the patient's IPS, name,
 identifier, or date of birth. Use only the provided activity summary and
 decision facts. Do not compose multiple templates or prune/consolidate fragments
 in this slice. If repair feedback is present, correct only the listed defects.

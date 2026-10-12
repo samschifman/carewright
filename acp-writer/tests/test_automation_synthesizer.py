@@ -8,7 +8,7 @@ from cpg_contracts.automation.instances import ActivityAutomation
 from cpg_contracts.automation.ir import Parameter, ProcessIR, TemplateRef, ir_version
 from cpg_contracts.automation.templates import AutomationTemplate
 from acp_writer.nodes.automation_synthesizer import _validation_payload, synthesize_for_activity
-from cpg_contracts.automation.validators.grounding import InstanceContext
+from cpg_contracts.automation.validators.grounding import InstanceContext, validate_instance
 
 
 GOLDEN = (
@@ -67,13 +67,48 @@ def _template_with_parameter(name: str, *, required: bool, default=None):
     return template
 
 
-def _output(template, *, rename: bool = False, add_second_ref: bool = False):
+def _output(
+    template,
+    *,
+    rename: bool = False,
+    add_second_ref: bool = False,
+    wrong_reference_versions: bool = False,
+):
     ir = _instance(template)
+    for element in ir.process.flowElements:
+        element.acp.template_ref = TemplateRef(
+            template_id=template.summary.id,
+            version=template.summary.version,
+            element_id=element.id,
+        )
     if rename:
         next(item for item in ir.process.flowElements if item.id == "query_systolic").name = "Invented node name"
     if add_second_ref:
         ir.process.acp.template_refs.append(TemplateRef(template_id="other", version="0" * 12))
-    return {"ir": ir.model_dump(mode="json", exclude_none=True), "bindings": []}
+    result = ir.model_dump(mode="json", exclude_none=True)
+    process = result["process"]
+    process.pop("id", None)
+    process.pop("kind", None)
+    process["acp"].pop("template_refs", None)
+    process["acp"]["provenance"].pop("source_cpg", None)
+    for element in process["flowElements"]:
+        ref = element.get("acp", {}).get("template_ref")
+        if ref:
+            ref.pop("version", None)
+            ref.pop("source_cpg", None)
+    if wrong_reference_versions:
+        process["acp"]["template_refs"] = [{
+            "template_id": template.summary.id,
+            "version": "1.0",
+        }]
+        query = next(item for item in process["flowElements"] if item["id"] == "query_systolic")
+        query["acp"]["template_ref"]["version"] = "1.0"
+    elif add_second_ref:
+        process["acp"]["template_refs"] = [
+            {"template_id": template.summary.id, "version": template.summary.version},
+            {"template_id": "other", "version": "0" * 12},
+        ]
+    return {"ir": result, "bindings": []}
 
 
 def _activity():
@@ -86,13 +121,13 @@ def _activity():
     }
 
 
-def _synthesize(template, llm, *, reviewer=None, use_llm_reviewer=False):
+def _synthesize(template, llm, *, reviewer=None, use_llm_reviewer=False, state=None):
     return synthesize_for_activity(
         _activity(),
         Registry([template]),
         [],
         brief={"dmn_audit_trail": []},
-        state={"patient_demographics": {"name": "Ada Patient"}},
+        state=state or {"patient_demographics": {"name": "Ada Patient"}},
         llm=llm,
         validator=lambda payload: {"valid": True, "rungs_passed": ["L6"]},
         reviewer=reviewer if use_llm_reviewer else (reviewer or (lambda **_: (True, ""))),
@@ -113,6 +148,44 @@ def test_golden_derived_instance_passes_static_and_semantic_checks():
     assert automation.validation.rungs_passed == ["L0", "L1", "L2", "L3", "L4", "L5a", "L6", "L7"]
     assert len(llm.prompts) == 2
     assert "Ada Patient" not in str(llm.prompts)
+
+
+def test_wrong_model_template_versions_are_replaced_from_selected_snapshot():
+    template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
+    llm = ScriptedLLM([_output(template, wrong_reference_versions=True), {"verdict": "APPROVE"}])
+
+    automations = _synthesize(template, llm, use_llm_reviewer=True)
+
+    assert len(automations) == 1
+    automation = automations[0]
+    expected_version = ir_version(template.ir)
+    assert automation.validation.status == "valid"
+    assert automation.ir.process.id == automation.id
+    assert automation.ir.process.kind == "instance"
+    assert automation.ir.process.acp.provenance.source_cpg == template.summary.source_cpg
+    assert [(ref.template_id, ref.version) for ref in automation.template_refs] == [
+        (template.summary.id, expected_version),
+    ]
+    assert [(ref.template_id, ref.version) for ref in automation.ir.process.acp.template_refs] == [
+        (template.summary.id, expected_version),
+    ]
+    query = next(item for item in automation.ir.process.flowElements if item.id == "query_systolic")
+    assert query.acp.template_ref.version == expected_version
+    assert all(
+        element.acp.template_ref is None
+        or (
+            element.acp.template_ref.template_id == template.summary.id
+            and element.acp.template_ref.version == expected_version
+            and element.acp.template_ref.source_cpg == template.summary.source_cpg
+        )
+        for element in automation.ir.process.flowElements
+    )
+    context = InstanceContext(
+        bindings=automation.bindings,
+        evidence=automation.derivation_evidence,
+        activities=[_activity()],
+    )
+    assert validate_instance(automation.ir, [template.ir], context) == []
 
 
 def test_remote_validation_payload_excludes_patient_activity_and_phi_values():
@@ -181,13 +254,32 @@ def test_no_linked_template_returns_no_automation():
     assert llm.prompts == []
 
 
-def test_composed_output_is_repaired_toward_single_template():
+def test_process_template_refs_are_replaced_with_selected_snapshot():
     template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
-    llm = ScriptedLLM([_output(template, add_second_ref=True), _output(template)])
+    llm = ScriptedLLM([_output(template, add_second_ref=True), {"verdict": "APPROVE"}])
 
-    automations = _synthesize(template, llm)
+    automations = _synthesize(template, llm, use_llm_reviewer=True)
 
     assert automations[0].enabled is True
     assert len(automations[0].template_refs) == 1
     assert len(llm.prompts) == 2
-    assert "I9-not-supported" in str(llm.prompts[1])
+
+
+def test_synthesis_attempt_artifacts_are_phi_redacted(tmp_path):
+    template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
+    llm = ScriptedLLM([_output(template), {"verdict": "APPROVE"}])
+    state = {
+        "patient_demographics": {"name": "Ada Patient"},
+        "run_id": "run-123",
+        "output_dir": str(tmp_path / "careplans" / "careplan-123"),
+    }
+
+    _synthesize(template, llm, use_llm_reviewer=True, state=state)
+
+    artifact_dir = tmp_path / "acp-writer" / "run-123" / "automation" / "activity-1"
+    requests = sorted(artifact_dir.glob("attempt-*.request.json"))
+    responses = sorted(artifact_dir.glob("attempt-*.response.json"))
+    assert len(requests) == len(responses) == 2
+    assert all("Ada Patient" not in path.read_text() for path in requests + responses)
+    assert json.loads(responses[0].read_text())["role"] == "synthesizer"
+    assert json.loads(responses[1].read_text())["role"] == "reviewer"

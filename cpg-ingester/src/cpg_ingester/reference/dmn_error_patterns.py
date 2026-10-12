@@ -36,6 +36,11 @@ class ErrorPattern:
 # mismatches, missing structure, and duplicate identifiers.
 ERROR_PATTERNS: list[ErrorPattern] = [
     ErrorPattern(
+        match="Extraction annotation",
+        cause="The generated DMN contains an invalid extraction annotation.",
+        fix="Do not emit acp:extraction; remove it from the DMN XML. The system adds the manifest's mechanical annotation.",
+    ),
+    ErrorPattern(
         match="forbidden control character",
         cause="The DMN contains a non-printable control character copied from source text.",
         fix="Remove non-printable control characters (U+0000–U+001F except tab/newline) from the document; they usually come from copied text — retype the affected FEEL entry.",
@@ -153,6 +158,11 @@ ERROR_PATTERNS: list[ErrorPattern] = [
         fix="Make each <input><inputExpression><text> match a declared "
             "inputData/variable @name (or an upstream decision variable) exactly, "
             "character for character.",
+    ),
+    ErrorPattern(
+        match="does not match declared inputData or upstream decision variable names",
+        cause="A FEEL inputExpression references a variable outside the decision's declared inputs.",
+        fix="Use only variables declared by this decision's informationRequirements. A valid FEEL inputExpression may combine those exact declared names with arithmetic or other FEEL operators; do not invent variable names.",
     ),
     ErrorPattern(
         match="Duplicate id",

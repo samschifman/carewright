@@ -36,7 +36,6 @@ MAX_CLASSIFICATION_REVIEWS = 2
 
 LITELLM_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
 LLM_MODEL = os.environ.get("LLM_MODEL", "default")
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "sk-change-me")
 
 
 @app.get("/health")
@@ -95,7 +94,6 @@ def _do_analyze(data: dict) -> dict:
             "output_dir": output_dir,
             "litellm_url": LITELLM_URL,
             "llm_model": LLM_MODEL,
-            "llm_api_key": LLM_API_KEY,
         }
 
         if review_feedback and review_iteration:
@@ -206,7 +204,6 @@ def _do_generate(data: dict) -> dict:
             "output_dir": output_dir,
             "litellm_url": LITELLM_URL,
             "llm_model": LLM_MODEL,
-            "llm_api_key": LLM_API_KEY,
         }
 
         if review_feedback and review_iteration:

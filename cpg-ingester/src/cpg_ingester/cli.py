@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import uuid
 from pathlib import Path
 
@@ -16,6 +17,13 @@ try:
     mlflow.langchain.autolog()
 except Exception:
     pass
+
+
+def _configure_mlflow_experiment() -> None:
+    """Select the run-scoped experiment when the caller provides one."""
+    experiment_name = os.environ.get("MLFLOW_EXPERIMENT_NAME")
+    if experiment_name:
+        mlflow.set_experiment(experiment_name)
 
 
 @click.command()
@@ -34,6 +42,12 @@ def main(
     """Run the cpg-ingester pipeline on a CPG PDF."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
+    # Slice runs use a fresh experiment so its traces are stored through the
+    # MLflow artifact proxy rather than the legacy local-path Default experiment.
+    _configure_mlflow_experiment()
+    if api_key and api_key != "sk-change-me":
+        os.environ.setdefault("LITELLM_API_KEY", api_key)
+
     run_id = str(uuid.uuid4())[:8]
     if output_dir is None:
         output_dir = Path("output") / run_id
@@ -49,7 +63,6 @@ def main(
         "pdf_path": str(input_pdf),
         "litellm_url": litellm_url,
         "llm_model": model,
-        "llm_api_key": api_key,
     }
 
     config = {"configurable": {"thread_id": run_id}}

@@ -220,6 +220,17 @@ class TestContentFilter:
             result = content_filter(state)
             assert len(result["markdown"]) < len(SAMPLE_MARKDOWN)
 
+    def test_preserves_unfiltered_source_markdown(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state = {
+                "section_map": self._make_section_map(),
+                "markdown": SAMPLE_MARKDOWN,
+                "output_dir": tmpdir,
+            }
+            result = content_filter(state)
+            assert result["source_markdown"] == SAMPLE_MARKDOWN
+            assert result["markdown"] != result["source_markdown"]
+
     def test_passthrough_when_no_section_map(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             state = {"markdown": SAMPLE_MARKDOWN, "output_dir": tmpdir}

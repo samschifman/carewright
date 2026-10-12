@@ -164,7 +164,11 @@ def test_template_id_uses_the_decision_model_slug_rule() -> None:
         ),
         (
             lambda d: flow(d, "gw_received").update(name=""),
-            "element 'gw_received' (exclusiveGateway) requires a name",
+            "String should have at least 1 character",
+        ),
+        (
+            lambda d: flow(d, "gw_received").pop("name"),
+            "Field required",
         ),
         (
             lambda d: d["process"]["acp"]["parameters"].remove(

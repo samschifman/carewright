@@ -7,8 +7,10 @@ from lxml import etree
 
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.automation.compiler import compile
-from cpg_contracts.automation.ir import ProcessIR, ir_version
+from cpg_contracts.automation.expressions import parse, typecheck
+from cpg_contracts.automation.ir import Constraints, Parameter, ProcessIR, ir_version
 from cpg_contracts.automation.validators.ladder import run_static_ladder
+from cpg_contracts.automation.validators.ladder import _expression_environment
 
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "automation"
@@ -44,6 +46,21 @@ def test_golden_template_passes_every_static_rung_and_defers_only_max_duration()
     assert result.rungs_passed == ["L0", "L1", "L2", "L3", "L4", "L5a", "L5b"]
     assert result.deferred == ir.process.acp.invariants
     assert result.errors() == []
+
+
+def test_enum_constrained_string_parameter_has_enum_expression_type() -> None:
+    ir = fixture_ir()
+    ir.process.acp.parameters.append(
+        Parameter(
+            name="treatment_action",
+            type="string",
+            required=True,
+            constraints=Constraints(enum=["Start medication", "Lifestyle modification only"]),
+        )
+    )
+
+    environment = _expression_environment(ir)
+    assert typecheck(parse('treatment_action == "Start medication"'), environment) == "boolean"
 
 
 def test_xml_input_passes_after_recovering_its_ir() -> None:

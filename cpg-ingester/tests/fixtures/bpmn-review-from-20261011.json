@@ -1,0 +1,54 @@
+{
+  "claims_checked": [
+    {
+      "claim": "The workflow is implemented through a clinical decision support system integrated into the electronic health record.",
+      "verdict": "DISCREPANCY",
+      "severity": "MINOR",
+      "evidence": "The source says the guideline is designed for implementation through CDS integrated into the EHR. The model does not represent that integration context."
+    },
+    {
+      "claim": "The notification is sent to clinicians.",
+      "verdict": "VERIFIED",
+      "severity": "MINOR",
+      "evidence": "The source says: \u201cAutomated alerts should notify clinicians.\u201d"
+    },
+    {
+      "claim": "The notification concerns pharmacological-intervention criteria based on blood pressure readings and documented comorbidities.",
+      "verdict": "VERIFIED",
+      "severity": "MINOR",
+      "evidence": "The notification task and description reflect the source\u2019s stated intervention criteria and supporting information."
+    },
+    {
+      "claim": "The workflow triggers notification only when the patient meets the stated criteria.",
+      "verdict": "DISCREPANCY",
+      "severity": "CRITICAL",
+      "evidence": "The source says alerts should notify clinicians \u201cwhen a patient meets criteria.\u201d The model flows from start directly to notification and does not represent this condition. Add a criteria-based trigger or decision before notification."
+    },
+    {
+      "claim": "A required alert urgency must be selected from routine, urgent, or emergency.",
+      "verdict": "DISCREPANCY",
+      "severity": "CRITICAL",
+      "evidence": "The source specifies no urgency levels or required urgency input. Remove this unsupported mandatory field or cite a source that establishes it."
+    },
+    {
+      "claim": "The alert must include a reason.",
+      "verdict": "DISCREPANCY",
+      "severity": "CRITICAL",
+      "evidence": "The source does not require a reason field. Remove this unsupported mandatory field or cite a source that establishes it."
+    },
+    {
+      "claim": "The notification has a maximum duration, after which it is cancelled and the process times out.",
+      "verdict": "DISCREPANCY",
+      "severity": "CRITICAL",
+      "evidence": "The source specifies no maximum duration, timeout, or cancellation behavior. Remove the unsupported timeout and cancellation path or cite a source that establishes them."
+    }
+  ],
+  "discrepancies_found": true,
+  "summary": "The notification purpose and recipient align with the source. The model omits the criteria-based trigger and adds unsupported mandatory alert fields and timeout behavior. It also omits the EHR integration context.",
+  "discrepancies": [
+    "CRITICAL: Add a criteria-based trigger or decision before notification so clinicians are notified only when the patient meets pharmacological-intervention criteria based on blood pressure readings and documented comorbidities.",
+    "CRITICAL: Remove the unsupported required alert urgency and routine/urgent/emergency enum, or cite a guideline source that establishes them.",
+    "CRITICAL: Remove the unsupported mandatory reason field, or cite a guideline source that establishes it.",
+    "CRITICAL: Remove the unsupported maximum-duration timeout and cancellation path, or cite a guideline source that establishes them."
+  ]
+}

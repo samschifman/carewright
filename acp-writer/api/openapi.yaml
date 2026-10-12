@@ -627,6 +627,9 @@ components:
           type: string
         version:
           type: string
+        effective_date:
+          type: string
+          description: Effective date as stated in the guideline, preserving partial dates.
         publication_date:
           type: string
           format: date

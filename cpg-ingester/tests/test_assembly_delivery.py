@@ -230,9 +230,29 @@ class TestDeliveryNode:
                 "artifact_store": None,
                 "output_dir": tmpdir,
             }
-            result = delivery(state)
+            with patch("cpg_ingester.nodes.delivery.get_artifact_store", return_value=None):
+                result = delivery(state)
             assert result["delivery_status"]["published"] is False
             assert (Path(tmpdir) / "delivery-status.json").exists()
+
+    def test_resolves_configured_store_outside_checkpointed_state(self):
+        store = _mock_store()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state = {
+                "cpg_metadata": {"cpg_id": "CPG-001"},
+                "dmn_results": [],
+                "recommendation_results": [],
+                "bpmn_results": [],
+                "escalated_items": [],
+                "assembly_report": {},
+                "output_dir": tmpdir,
+            }
+            with patch("cpg_ingester.nodes.delivery.get_artifact_store", return_value=store):
+                result = delivery(state)
+
+        assert result["delivery_status"]["published"] is True
+        assert result["delivery_status"]["artifact_location"] == "cpg-artifacts:published/CPG-001"
+        store.put.assert_called_once()
 
     def test_publishes_all_artifacts(self):
         store = _mock_store()

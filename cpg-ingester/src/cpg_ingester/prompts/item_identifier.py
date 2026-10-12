@@ -30,10 +30,22 @@ For each decision, provide:
   Each code must be a `system|code` token (for example,
   `http://loinc.org|8480-6`). Never guess or look up a code.
 - For inputs whose CPG text explicitly requires temporal aggregation, add an
-  `extraction` object with one of `observations_in_window`,
+  `extraction` object with exactly the keys `function` and `params`. The
+  `function` value must be exactly one of `observations_in_window`,
   `observation_count`, `consecutive_above`, `rate_of_change`, or
-  `cross_resource_temporal`, plus explicit parameters. Leave it absent for
-  ordinary most-recent extraction and never infer unstated temporal meaning.
+  `cross_resource_temporal`; `params` is an object containing the explicit
+  parameters required by that function. Do not use `type` or `parameters` as
+  aliases. Required `params` keys are `observations_in_window: code, duration`,
+  `observation_count: code, duration`, `consecutive_above: code, threshold`,
+  `rate_of_change: code, duration`, and
+  `cross_resource_temporal: anchor_code, target_code, window`. Durations are
+  ISO-8601 strings such as `P7D`; do not use prose like "weekly" in place of a
+  duration. Code values must be explicit `system|code` tokens from the CPG or
+  its explicitly identified input codes; never guess or look them up. If a
+  required parameter is not supported by the source, leave `extraction` absent
+  and do not claim that the input can be automatically extracted. Leave
+  extraction absent for ordinary most-recent extraction and never infer
+  unstated temporal meaning.
 - Output values: what the decision produces
 - Hit policy hint: UNIQUE (mutually exclusive), FIRST or PRIORITY (ordered), COLLECT (multiple matches)
 - Cross-references to other items (by the other item's name — IDs will be assigned later)
@@ -69,8 +81,10 @@ another clinical recommendation. Use these care-process criteria:
 - Follow-up workflows
 - Patient education workflows
 
-Apply the splitting principle: one decision output should link to one process, \
-unless the resulting pathways are identical. Do not merge distinct pathways.
+Apply the process-granularity rule: identify one template per care process. \
+Variants that differ only by a decision output or an interval are one process, \
+represented with parameters and a trigger for each output value. Keep processes \
+separate when their actual care-team workflows differ.
 
 Perform a hidden-roles sweep. Verbs such as Order, Refer, Send, Notify, and \
 Schedule often imply an actor; name the actor when the source supports one and \

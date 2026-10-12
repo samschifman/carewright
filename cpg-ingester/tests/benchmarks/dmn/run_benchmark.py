@@ -51,7 +51,6 @@ def _llm_config() -> dict:
     return {
         "litellm_url": os.environ.get("LITELLM_URL", "http://localhost:4000"),
         "llm_model": os.environ.get("LLM_MODEL", "default"),
-        "llm_api_key": os.environ.get("LITELLM_API_KEY", "sk-change-me"),
     }
 
 

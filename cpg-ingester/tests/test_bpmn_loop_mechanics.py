@@ -101,12 +101,13 @@ def _state(output_dir):
     }
 
 
-def _invoke(scripted_llm, tmp_path, monkeypatch):
+def _invoke(scripted_llm, tmp_path, monkeypatch, reviewer_llm=None):
     monkeypatch.setattr(
         "cpg_ingester.nodes.bpmn_ir_creator.get_llm", lambda _state: scripted_llm
     )
     monkeypatch.setattr(
-        "cpg_ingester.nodes.bpmn_semantic_reviewer.get_llm", lambda _state: scripted_llm
+        "cpg_ingester.nodes.bpmn_semantic_reviewer.get_llm",
+        lambda _state: reviewer_llm or scripted_llm,
     )
     return _build_bpmn_subgraph().compile().invoke(_state(tmp_path))
 
@@ -121,6 +122,9 @@ def test_golden_is_accepted_on_first_creation_attempt(tmp_path, monkeypatch):
     assert result["bpmn_xml"].startswith("<?xml")
     assert result["static_retry_count"] == 0
     assert len(llm.calls) == 2
+    response_dir = tmp_path / "bpmn" / "responses" / "home-blood-pressure-monitoring"
+    assert (response_dir / "creator-001.json").is_file()
+    assert (response_dir / "reviewer-001.json").is_file()
 
 
 def test_implicit_join_repair_receives_l0_finding(tmp_path, monkeypatch):
@@ -160,6 +164,33 @@ def test_two_critical_reviews_exhaust_semantic_budget(tmp_path, monkeypatch):
     assert result["escalated"] is True
     assert result["escalation_reason"] == "semantic-budget-exhausted"
     assert len(llm.calls) == 4
+
+
+def test_static_failures_after_semantic_review_retry_and_escalate_at_l0(
+    tmp_path, monkeypatch
+):
+    invalid = _implicit_join(_ir())
+    creator = ScriptedLLM([
+        json.dumps(invalid),
+        json.dumps(_ir()),
+        json.dumps(invalid),
+        json.dumps(invalid),
+    ])
+    reviewer = ScriptedLLM([_review(discrepancy=True)])
+
+    result = _invoke(creator, tmp_path, monkeypatch, reviewer_llm=reviewer)
+
+    assert len(creator.calls) == 4  # after attempt 3, static retries are 2 < 3
+    assert len(reviewer.calls) == 1
+    assert result["semantic_retry_count"] == 1
+    assert result["static_retry_count"] == 3
+    assert result["escalated"] is True
+    assert result["escalation_reason"] == "static-budget-exhausted"
+    assert any("implicit join" in error for error in result["escalation_errors"])
+    assert any(
+        finding.get("rung") == "L0"
+        for finding in result["static_findings"]
+    )
 
 
 def test_unset_preflight_url_does_not_fail(monkeypatch):

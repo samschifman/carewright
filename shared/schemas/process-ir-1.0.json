@@ -179,7 +179,7 @@
           "type": "string"
         },
         "name": {
-          "default": "",
+          "minLength": 1,
           "title": "Name",
           "type": "string"
         },
@@ -194,6 +194,7 @@
       },
       "required": [
         "id",
+        "name",
         "type",
         "attachedToRef",
         "timerEventDefinition"
@@ -236,7 +237,7 @@
           "type": "object"
         },
         "name": {
-          "default": "",
+          "minLength": 1,
           "title": "Name",
           "type": "string"
         },
@@ -255,6 +256,7 @@
       },
       "required": [
         "id",
+        "name",
         "type",
         "dmnModel"
       ],
@@ -366,7 +368,7 @@
           "type": "string"
         },
         "name": {
-          "default": "",
+          "minLength": 1,
           "title": "Name",
           "type": "string"
         },
@@ -378,6 +380,7 @@
       },
       "required": [
         "id",
+        "name",
         "type"
       ],
       "title": "EndEvent",
@@ -414,7 +417,7 @@
           "type": "string"
         },
         "name": {
-          "default": "",
+          "minLength": 1,
           "title": "Name",
           "type": "string"
         },
@@ -426,6 +429,7 @@
       },
       "required": [
         "id",
+        "name",
         "type",
         "gatewayDirection"
       ],
@@ -443,7 +447,7 @@
           "type": "string"
         },
         "name": {
-          "default": "",
+          "minLength": 1,
           "title": "Name",
           "type": "string"
         },
@@ -458,6 +462,7 @@
       },
       "required": [
         "id",
+        "name",
         "type",
         "timerEventDefinition"
       ],
@@ -1117,7 +1122,7 @@
           "type": "string"
         },
         "name": {
-          "default": "",
+          "minLength": 1,
           "title": "Name",
           "type": "string"
         },
@@ -1129,6 +1134,7 @@
       },
       "required": [
         "id",
+        "name",
         "type"
       ],
       "title": "StartEvent",
@@ -1230,7 +1236,7 @@
           "type": "object"
         },
         "name": {
-          "default": "",
+          "minLength": 1,
           "title": "Name",
           "type": "string"
         },
@@ -1253,6 +1259,7 @@
       },
       "required": [
         "id",
+        "name",
         "type",
         "taskName"
       ],
@@ -1457,7 +1464,7 @@
           "type": "string"
         },
         "name": {
-          "default": "",
+          "minLength": 1,
           "title": "Name",
           "type": "string"
         },
@@ -1476,6 +1483,7 @@
       },
       "required": [
         "id",
+        "name",
         "type",
         "groupId"
       ],

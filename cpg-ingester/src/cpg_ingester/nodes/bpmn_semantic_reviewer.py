@@ -8,6 +8,7 @@ import mlflow
 from cpg_contracts import content_to_text, get_llm
 from cpg_ingester.nodes.structure_analyzer import _parse_llm_json
 from cpg_ingester.output import write_artifact
+from cpg_ingester.llm_responses import persist_llm_response
 from cpg_ingester.prompts.bpmn_semantic_reviewer import (
     BPMN_SEMANTIC_REVIEWER_SYSTEM,
     BPMN_SEMANTIC_REVIEWER_USER,
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_review_result(result: dict) -> dict:
-    """Validate the claim-level reviewer response before routing it."""
+    """Validate claims and derive routing fields from the claims themselves."""
     if not isinstance(result, dict):
         raise ValueError("reviewer response must be a JSON object")
     claims = result.get("claims_checked")
@@ -30,21 +31,21 @@ def _validate_review_result(result: dict) -> dict:
             raise ValueError(f"reviewer claim {index} has invalid severity")
         if claim.get("verdict") not in {"VERIFIED", "DISCREPANCY"}:
             raise ValueError(f"reviewer claim {index} has invalid verdict")
-    if not isinstance(result.get("discrepancies_found"), bool):
-        raise ValueError("reviewer response must include boolean discrepancies_found")
-    discrepancies = result.get("discrepancies")
-    if not isinstance(discrepancies, list) or not all(
-        isinstance(item, str) and item.strip() for item in discrepancies
-    ):
-        raise ValueError("reviewer response must include a list of non-blank discrepancies")
     critical = [
         claim for claim in claims
         if claim.get("verdict") == "DISCREPANCY" and claim.get("severity") == "CRITICAL"
     ]
-    if bool(critical) != result["discrepancies_found"]:
-        raise ValueError("discrepancies_found must match critical discrepancy claims")
-    if result["discrepancies_found"] != bool(discrepancies):
-        raise ValueError("critical discrepancies must include repair feedback")
+    derived_discrepancies = []
+    for claim in critical:
+        feedback = claim.get("feedback") or claim.get("evidence") or claim.get("claim", "")
+        if isinstance(feedback, str) and feedback.strip() and feedback not in derived_discrepancies:
+            derived_discrepancies.append(feedback.strip())
+    result["discrepancies_found"] = bool(critical)
+    supplied = result.get("discrepancies")
+    if not isinstance(supplied, list) or not all(
+        isinstance(item, str) and item.strip() for item in supplied
+    ) or bool(supplied) != bool(critical):
+        result["discrepancies"] = derived_discrepancies
     return result
 
 
@@ -90,6 +91,12 @@ def bpmn_semantic_reviewer(state: dict) -> dict:
     started = time.time()
     response = llm.invoke(messages)
     logger.info("ProcessIR reviewer responded in %.1fs", time.time() - started)
+    persist_llm_response(
+        output_dir,
+        process_name=name,
+        role="reviewer",
+        content=content_to_text(response.content),
+    )
 
     try:
         result = _validate_review_result(_parse_llm_json(content_to_text(response.content)))
@@ -102,6 +109,12 @@ def bpmn_semantic_reviewer(state: dict) -> dict:
             )},
         ])
         response = llm.invoke(messages)
+        persist_llm_response(
+            output_dir,
+            process_name=name,
+            role="reviewer",
+            content=content_to_text(response.content),
+        )
         try:
             result = _validate_review_result(_parse_llm_json(content_to_text(response.content)))
         except (json.JSONDecodeError, ValueError):
@@ -114,11 +127,7 @@ def bpmn_semantic_reviewer(state: dict) -> dict:
                 "escalation_reason": "reviewer-unparseable",
             }
 
-    discrepancies = [
-        claim.get("feedback") or claim.get("evidence") or claim.get("claim", "")
-        for claim in result["claims_checked"]
-        if claim.get("verdict") == "DISCREPANCY" and claim.get("severity") == "CRITICAL"
-    ]
+    discrepancies = result["discrepancies"]
     safe_name = _safe_name(name)
     write_artifact(output_dir, f"bpmn-review-{safe_name}-{retry_count + 1}.json", result)
     logger.info(

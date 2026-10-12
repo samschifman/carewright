@@ -20,6 +20,7 @@ working/
 .git
 .claude
 **/*.log
+**/mlflow.db
 **/.DS_Store
 dev_docs/
 docs/

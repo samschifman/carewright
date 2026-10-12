@@ -55,6 +55,8 @@ _COMBINED_COMPARISONS = re.compile(
     rf"^{_COMPARISON}(?:\s+(?:and|or)\s+{_COMPARISON})+$"
 )
 _BARE_STRING = re.compile(r"^[A-Za-z][A-Za-z0-9 _/\-]*$")
+_DMN_STRING_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
+_FEEL_REFERENCE_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 def _result(errors: list[str] | None = None,
@@ -64,6 +66,30 @@ def _result(errors: list[str] | None = None,
 
 def _normalized_name(value: str | None) -> str:
     return " ".join((value or "").split())
+
+
+def _expression_references(value: str, names: set[str]) -> tuple[set[str], set[str]]:
+    """Find declared variable references and unresolved identifiers in FEEL text."""
+    expression = _DMN_STRING_LITERAL.sub(" ", value)
+    references: set[str] = set()
+    for name in sorted(names, key=len, reverse=True):
+        escaped = re.escape(f"`{name}`")
+        plain = re.escape(name)
+        pattern = re.compile(
+            rf"(?<![A-Za-z0-9_])(?:{escaped}|{plain})(?![A-Za-z0-9_])"
+        )
+        expression, count = pattern.subn(" __declared__ ", expression)
+        if count:
+            references.add(name)
+    expression = expression.replace("__declared__", " ")
+    unresolved = set()
+    for match in _FEEL_REFERENCE_TOKEN.finditer(expression):
+        token = match.group(0)
+        following = expression[match.end():].lstrip()
+        if token.casefold() in _FEEL_KEYWORDS or following.startswith("("):
+            continue
+        unresolved.add(token)
+    return references, unresolved
 
 
 def _local_name(element: etree._Element) -> str:
@@ -188,20 +214,26 @@ def check_input_expressions(root: etree._Element) -> tuple[list[str], list[str]]
         for expression in decision.xpath('.//*[local-name()="inputExpression"]'):
             texts = expression.xpath('./*[local-name()="text"]')
             value = _normalized_name(texts[0].text if texts else "")
-            if value not in allowed:
+            references, unresolved = _expression_references(value, all_names)
+            disallowed = references - allowed
+            if unresolved or disallowed:
+                unknown = sorted(unresolved | disallowed)
                 errors.append(
                     f"InputExpression '{expression.get('id', '?')}' text '{value}' does not "
-                    "match a declared inputData or upstream decision variable name"
+                    "match declared inputData or upstream decision variable names; "
+                    f"unresolved or unlinked reference(s): {', '.join(unknown)}"
                 )
     for expression in _elements(root, "inputExpression"):
         if expression.xpath("ancestor::*[local-name()='decision']"):
             continue
         texts = expression.xpath('./*[local-name()="text"]')
         value = _normalized_name(texts[0].text if texts else "")
-        if value not in all_names:
+        _, unresolved = _expression_references(value, all_names)
+        if unresolved:
             errors.append(
                 f"InputExpression '{expression.get('id', '?')}' text '{value}' does not "
-                "match a declared inputData or decision variable name"
+                "match declared inputData or decision variable names; "
+                f"unresolved reference(s): {', '.join(sorted(unresolved))}"
             )
     return _result(errors)
 

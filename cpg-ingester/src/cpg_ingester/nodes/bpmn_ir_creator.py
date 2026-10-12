@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from cpg_contracts import content_to_text, get_llm
 from cpg_ingester.nodes.structure_analyzer import _parse_llm_json
 from cpg_ingester.output import write_artifact
+from cpg_ingester.llm_responses import persist_llm_response
 from cpg_ingester.prompts.bpmn_ir_creator import (
     build_bpmn_ir_creator_system,
     build_bpmn_ir_creator_user,
@@ -169,6 +170,12 @@ def bpmn_ir_creator(state: dict) -> dict:
     started = time.time()
     response = llm.invoke(messages)
     logger.info("ProcessIR creator responded in %.1fs", time.time() - started)
+    persist_llm_response(
+        output_dir,
+        process_name=name,
+        role="creator",
+        content=content_to_text(response.content),
+    )
 
     try:
         raw_ir = _parse_llm_json(content_to_text(response.content))

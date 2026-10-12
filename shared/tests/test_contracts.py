@@ -91,6 +91,15 @@ def test_contract_version_bumps_without_rejecting_legacy_payloads():
     assert RecommendationBundle.model_validate(raw["recommendation_bundle"]).contract_version == "1.0"
 
 
+def test_cpg_metadata_preserves_partial_effective_dates():
+    metadata = CPGMetadata(
+        cpg_id="SYN-HTN-2026-002",
+        title="Synthetic hypertension guideline",
+        effective_date="October 2026",
+    )
+    assert metadata.model_dump(mode="json")["effective_date"] == "October 2026"
+
+
 def test_decision_model_summary_with_source_location():
     dm = DecisionModelSummary(
         id="dm-1",

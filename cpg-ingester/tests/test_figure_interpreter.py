@@ -427,7 +427,6 @@ class TestFigureImagesThroughCompiledGraph:
                 "markdown": "",
                 "litellm_url": "http://unused",
                 "llm_model": "unused",
-                "llm_api_key": "unused",
             })
 
         md = result.get("markdown", "")

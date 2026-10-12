@@ -6,27 +6,59 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT_DIR"
 
-if ! command -v podman-compose >/dev/null || ! command -v podman >/dev/null; then
-  echo "podman and podman-compose are required" >&2
-  exit 1
-fi
-
 INGESTER_CLI="$ROOT_DIR/cpg-ingester/.venv/bin/cpg-ingest"
 INGESTER_PYTHON="$ROOT_DIR/cpg-ingester/.venv/bin/python"
 PDF="$ROOT_DIR/cpg-ingester/data/synthetic-hypertension-cpg-v2.pdf"
 PATIENT="$ROOT_DIR/mock-EHR/data/patient-bundle-medication.json"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+RESUME_BPMN_RUN_DIR=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --resume-bpmn-run)
+      if [ "$#" -lt 2 ]; then
+        echo "--resume-bpmn-run requires a saved cpg-ingester run directory" >&2
+        exit 2
+      fi
+      RESUME_BPMN_RUN_DIR="$(cd "$2" && pwd)"
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--resume-bpmn-run RUN_DIR]"
+      echo "Without the option, run the complete local automation slice. Resume mode reruns only BPMN generation from saved run artifacts."
+      echo "Set SLICE_SKIP_BUILD=1 to use the existing slice-local service images."
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+if ! command -v podman-compose >/dev/null || ! command -v podman >/dev/null; then
+  echo "podman and podman-compose are required" >&2
+  exit 1
+fi
 PROJECT="slice-local"
 COMPOSE_SLICE=(-f "$ROOT_DIR/compose.yml" -f "$ROOT_DIR/compose.slice.yml")
 RUN_ROOT="$ROOT_DIR/working/slice-run"
 SLICE_EVIDENCE_PATH="${SLICE_EVIDENCE_PATH:-$ROOT_DIR/working/slice-evidence.md}"
-INGESTER_RUN_DIR="$RUN_ROOT/ingester/$RUN_ID"
+if [ -n "$RESUME_BPMN_RUN_DIR" ]; then
+  RUN_ID="$(basename "$RESUME_BPMN_RUN_DIR")"
+  INGESTER_RUN_DIR="$RESUME_BPMN_RUN_DIR"
+else
+  INGESTER_RUN_DIR="$RUN_ROOT/ingester/$RUN_ID"
+fi
+SLICE_MLFLOW_EXPERIMENT_NAME="slice-$RUN_ID"
 PLAN_ROOT="$RUN_ROOT/careplans"
 DELIVERY_DIR="$INGESTER_RUN_DIR/deploy"
 ACP_WRITER_URL="${ACP_WRITER_URL:-http://localhost:8082}"
 FHIR_URL="${FHIR_URL:-http://localhost:8103/fhir/R4}"
 AUTOMATION_URL="${AUTOMATION_URL:-http://localhost:8096}"
 MLFLOW_URL="${MLFLOW_URL:-http://localhost:5000}"
+SLICE_S3_ACCESS_KEY="${SLICE_S3_ACCESS_KEY:-slice-access}"
+SLICE_S3_SECRET_KEY="${SLICE_S3_SECRET_KEY:-slice-secret}"
+S3_CONFIG_FILE="$RUN_ROOT/s3-config.json"
+export SLICE_S3_ACCESS_KEY SLICE_S3_SECRET_KEY
 CPG_ID="SYN-HTN-2026-002"
 CAREPLAN_SYSTEM="https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/careplan-id"
 
@@ -38,6 +70,26 @@ for required in "$INGESTER_CLI" "$INGESTER_PYTHON" "$PDF" "$PATIENT"; do
 done
 
 mkdir -p "$INGESTER_RUN_DIR" "$PLAN_ROOT"
+SLICE_S3_ACCESS_KEY="$SLICE_S3_ACCESS_KEY" \
+SLICE_S3_SECRET_KEY="$SLICE_S3_SECRET_KEY" \
+  "$INGESTER_PYTHON" - "$S3_CONFIG_FILE" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+config = {
+    "identities": [{
+        "name": "slice-artifact-store",
+        "credentials": [{
+            "accessKey": os.environ["SLICE_S3_ACCESS_KEY"],
+            "secretKey": os.environ["SLICE_S3_SECRET_KEY"],
+        }],
+        "actions": ["Admin", "Read", "Write", "List", "Tagging"],
+    }]
+}
+Path(sys.argv[1]).write_text(json.dumps(config) + "\n")
+PY
 export VITE_MOCK_SCENARIO=slice
 HOST_SERVICE_PIDS=()
 HOST_LOG_DIR="$INGESTER_RUN_DIR/host-services"
@@ -67,12 +119,23 @@ if ! podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" down --remove-orphans >"
 fi
 
 echo "Building and starting the isolated compose stack ($PROJECT)."
-for service in litellm kogito automation acp-writer; do
-  echo "Building $service"
-  podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" build "$service"
-done
+if [ "${SLICE_SKIP_BUILD:-0}" = "1" ]; then
+  for service in litellm kogito automation acp-writer; do
+    image="localhost/${PROJECT}_${service}:latest"
+    if ! podman image exists "$image"; then
+      echo "Required cached slice image is missing: $image" >&2
+      exit 1
+    fi
+  done
+  echo "Using existing slice-local service images."
+else
+  for service in litellm kogito automation acp-writer; do
+    echo "Building $service"
+    podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" build "$service"
+  done
+fi
 podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" up -d --no-build \
-  litellm medplum-server medplum-loader acp-writer
+  litellm artifact-store medplum-server medplum-loader acp-writer
 
 wait_for() {
   local url="$1"
@@ -92,17 +155,40 @@ wait_for() {
 wait_for "$ACP_WRITER_URL/health" "acp-writer"
 wait_for "$AUTOMATION_URL/health" "automation service"
 wait_for "$MLFLOW_URL/health" "MLflow"
+wait_for "http://localhost:9333/cluster/status" "S3-compatible artifact store"
 
-echo "Running cpg-ingester on the v2 hypertension PDF."
-RUN_STARTED_MS="$(date +%s000)"
-if ! LITELLM_URL="${SLICE_LITELLM_URL:-http://localhost:4000}" \
-  LLM_MODEL="${LLM_MODEL:-default}" \
-  LITELLM_API_KEY="${LITELLM_API_KEY:-sk-change-me}" \
-  MLFLOW_TRACKING_URI="$MLFLOW_URL" \
-    "$INGESTER_CLI" "$PDF" --output-dir "$INGESTER_RUN_DIR" \
-    2>&1 | tee "$INGESTER_RUN_DIR/cpg-ingest.log"; then
-  echo "SLICE FAIL: cpg-ingester exited non-zero; see $INGESTER_RUN_DIR/cpg-ingest.log" >&2
-  exit 1
+if [ -n "$RESUME_BPMN_RUN_DIR" ]; then
+  echo "Resuming only the BPMN subgraph from $INGESTER_RUN_DIR."
+  if ! ARTIFACT_STORE_URL="http://localhost:9000" \
+    ARTIFACT_STORE_ACCESS_KEY="$SLICE_S3_ACCESS_KEY" \
+    ARTIFACT_STORE_SECRET_KEY="$SLICE_S3_SECRET_KEY" \
+    LITELLM_URL="${SLICE_LITELLM_URL:-http://localhost:4000}" \
+    LLM_MODEL="${SLICE_LLM_MODEL:-${LLM_MODEL:-default}}" \
+    LLM_MAX_RETRIES="${SLICE_LLM_MAX_RETRIES:-0}" \
+    LLM_API_KEY="" \
+    MLFLOW_TRACKING_URI="$MLFLOW_URL" \
+    MLFLOW_EXPERIMENT_NAME="$SLICE_MLFLOW_EXPERIMENT_NAME" \
+      "$INGESTER_PYTHON" -m cpg_ingester.resume_bpmn "$INGESTER_RUN_DIR" \
+      2>&1 | tee "$INGESTER_RUN_DIR/bpmn-resume.log"; then
+    echo "SLICE FAIL: BPMN resume failed; see $INGESTER_RUN_DIR/bpmn-resume.log" >&2
+    exit 1
+  fi
+else
+  echo "Running cpg-ingester on the v2 hypertension PDF."
+  if ! ARTIFACT_STORE_URL="http://localhost:9000" \
+    ARTIFACT_STORE_ACCESS_KEY="$SLICE_S3_ACCESS_KEY" \
+    ARTIFACT_STORE_SECRET_KEY="$SLICE_S3_SECRET_KEY" \
+    LITELLM_URL="${SLICE_LITELLM_URL:-http://localhost:4000}" \
+    LLM_MODEL="${SLICE_LLM_MODEL:-${LLM_MODEL:-default}}" \
+    LLM_MAX_RETRIES="${SLICE_LLM_MAX_RETRIES:-0}" \
+    LITELLM_API_KEY="sk-change-me" \
+    MLFLOW_TRACKING_URI="$MLFLOW_URL" \
+    MLFLOW_EXPERIMENT_NAME="$SLICE_MLFLOW_EXPERIMENT_NAME" \
+      "$INGESTER_CLI" "$PDF" --output-dir "$INGESTER_RUN_DIR" \
+      2>&1 | tee "$INGESTER_RUN_DIR/cpg-ingest.log"; then
+    echo "SLICE FAIL: cpg-ingester exited non-zero; see $INGESTER_RUN_DIR/cpg-ingest.log" >&2
+    exit 1
+  fi
 fi
 
 mkdir -p "$HOST_LOG_DIR"
@@ -320,11 +406,12 @@ env VITE_MOCK_SCENARIO=slice npm --prefix "$ROOT_DIR/acp-writer/ui" run dev -- -
 HOST_SERVICE_PIDS+=("$!")
 wait_for "http://localhost:3001/" "acp-writer UI"
 
-"$INGESTER_PYTHON" - "$INGESTER_RUN_DIR" "$CAREPLAN_ARTIFACT_DIR" "$MLFLOW_URL" "$RUN_ROOT" "$CAREPLAN_ID" "$RUN_STARTED_MS" <<'PY'
+"$INGESTER_PYTHON" - "$INGESTER_RUN_DIR" "$CAREPLAN_ARTIFACT_DIR" "$MLFLOW_URL" "$RUN_ROOT" "$CAREPLAN_ID" "$SLICE_MLFLOW_EXPERIMENT_NAME" <<'PY'
 import json
 import sys
 from pathlib import Path
 
+from cpg_ingester.mlflow_usage import summarize_trace_usage
 from mlflow.tracking import MlflowClient
 
 ingester_dir = Path(sys.argv[1])
@@ -332,7 +419,7 @@ careplan_dir = Path(sys.argv[2])
 tracking_uri = sys.argv[3]
 root = Path(sys.argv[4])
 careplan_id = sys.argv[5]
-run_started_ms = int(sys.argv[6])
+experiment_name = sys.argv[6]
 
 analysis = json.loads((ingester_dir / "analysis-result.json").read_text())
 run_summary = json.loads((ingester_dir / "run-summary.json").read_text())
@@ -350,21 +437,22 @@ excerpt = {"carePlan": careplan, "task": task, "documentReference": docref}
 )
 
 client = MlflowClient(tracking_uri=tracking_uri)
+experiment = client.get_experiment_by_name(experiment_name)
+if experiment is None:
+    raise SystemExit(f"MLflow experiment was not found: {experiment_name}")
 trace_ids = []
-for experiment in client.search_experiments():
-    try:
-        traces = client.search_traces(
-            experiment_ids=[experiment.experiment_id],
-            filter_string=f"timestamp_ms >= {run_started_ms}",
-            max_results=200,
-            flush=True,
-        )
-    except Exception:
-        continue
-    trace_ids.extend(trace.info.trace_id for trace in traces)
+all_traces = []
+traces = client.search_traces(
+    experiment_ids=[experiment.experiment_id],
+    max_results=1000,
+    flush=True,
+)
+trace_ids.extend(trace.info.trace_id for trace in traces)
+all_traces.extend(traces)
 trace_ids = list(dict.fromkeys(trace_ids))
 if not trace_ids:
-    raise SystemExit("No MLflow trace IDs were available for the slice run after its start time")
+    raise SystemExit(f"No MLflow trace IDs were available in {experiment_name}")
+token_usage = summarize_trace_usage(all_traces)
 
 manifest_processes = [
     item for item in analysis.get("item_manifest", []) if item.get("type") == "process"
@@ -399,6 +487,12 @@ SLICE PASS
 ## MLflow traces
 
 {chr(10).join(f'- `{trace_id}`' for trace_id in trace_ids)}
+
+## MLflow token totals by node
+
+```json
+{json.dumps(token_usage, indent=2, sort_keys=True)}
+```
 
 ## UI routes for screenshots
 

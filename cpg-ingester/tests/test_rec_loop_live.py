@@ -12,6 +12,7 @@ Requires: LiteLLM running in podman on port 4000.
 """
 
 import json
+import os
 import re
 import tempfile
 from pathlib import Path
@@ -26,7 +27,7 @@ MANIFEST = ARTIFACTS_DIR / "manifest.json"
 
 LITELLM_URL = "http://localhost:4000"
 LLM_MODEL = "default"
-LLM_API_KEY = "sk-change-me"
+LLM_API_KEY = os.environ.get("LITELLM_API_KEY", "sk-change-me")
 
 SECTION_HEADINGS = {
     "3.4": "3.4 Lifestyle Modification Recommendations",
@@ -115,7 +116,6 @@ class TestRecLoopLive:
                 "abbreviations": {},
                 "litellm_url": LITELLM_URL,
                 "llm_model": LLM_MODEL,
-                "llm_api_key": LLM_API_KEY,
                 "output_dir": tmpdir,
             })
 

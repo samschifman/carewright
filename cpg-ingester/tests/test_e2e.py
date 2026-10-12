@@ -22,7 +22,6 @@ from cpg_ingester.validators.dmn_syntax import validate_dmn_xml
 SYNTHETIC_CPG = Path(__file__).parent.parent / "data" / "synthetic-hypertension-cpg.pdf"
 
 LITELLM_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
-LITELLM_API_KEY = os.environ.get("LITELLM_API_KEY", "sk-change-me")
 LLM_MODEL = os.environ.get("LLM_MODEL", "default")
 
 pytestmark = [
@@ -46,7 +45,6 @@ def pipeline_result(tmp_path_factory):
         "pdf_path": str(SYNTHETIC_CPG),
         "litellm_url": LITELLM_URL,
         "llm_model": LLM_MODEL,
-        "llm_api_key": LITELLM_API_KEY,
     }
     config = {"configurable": {"thread_id": "e2e-test"}}
 

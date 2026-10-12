@@ -66,7 +66,15 @@ def _expression_environment(ir: ProcessIR) -> dict[str, TypeInfo]:
     }
     environment.update(
         {
-            parameter.name: TypeInfo(type=parameter.type, unit=parameter.unit)
+            parameter.name: TypeInfo(
+                type=(
+                    "enum"
+                    if parameter.constraints is not None
+                    and parameter.constraints.enum is not None
+                    else parameter.type
+                ),
+                unit=parameter.unit,
+            )
             for parameter in process.acp.parameters
         }
     )

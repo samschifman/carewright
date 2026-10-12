@@ -1,7 +1,62 @@
 services:
+  litellm:
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY must be set}
+
+  artifact-store:
+    image: docker.io/chrislusf/seaweedfs:4.22
+    command:
+      ["server", "-dir=/data", "-filer", "-s3", "-s3.port=9000",
+       "-s3.config=/etc/seaweedfs/s3.json"]
+    ports:
+      - "9000:9000"
+      - "9333:9333"
+    volumes:
+      - slice-artifact-store-data:/data
+      - ./working/slice-run/s3-config.json:/etc/seaweedfs/s3.json:ro
+
+  mlflow:
+    command:
+      ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000",
+       "--backend-store-uri", "sqlite:////mlflow/mlflow.db",
+       "--artifacts-destination", "/mlflow/artifacts"]
+    volumes:
+      - slice-mlflow-data:/mlflow
+
+  cpg-ingester:
+    depends_on:
+      artifact-store:
+        condition: service_started
+    environment:
+      - ARTIFACT_STORE_URL=http://artifact-store:9000
+      - ARTIFACT_STORE_ACCESS_KEY=${SLICE_S3_ACCESS_KEY:-slice-access}
+      - ARTIFACT_STORE_SECRET_KEY=${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  cpg-ingester-llm:
+    depends_on:
+      artifact-store:
+        condition: service_started
+    environment:
+      - ARTIFACT_STORE_URL=http://artifact-store:9000
+      - ARTIFACT_STORE_ACCESS_KEY=${SLICE_S3_ACCESS_KEY:-slice-access}
+      - ARTIFACT_STORE_SECRET_KEY=${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  cpg-ingester-delivery:
+    depends_on:
+      artifact-store:
+        condition: service_started
+    environment:
+      - ARTIFACT_STORE_URL=http://artifact-store:9000
+      - ARTIFACT_STORE_ACCESS_KEY=${SLICE_S3_ACCESS_KEY:-slice-access}
+      - ARTIFACT_STORE_SECRET_KEY=${SLICE_S3_SECRET_KEY:-slice-secret}
+
   acp-writer:
     environment:
       - ACP_RUN_ARTIFACT_DIR=/slice-run/careplans
+      - LITELLM_URL=${SLICE_LITELLM_URL:-http://litellm:4000}
+      - LLM_MODEL=${SLICE_LLM_MODEL:-default}
+      - LLM_MAX_RETRIES=${SLICE_LLM_MAX_RETRIES:-0}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       - ./working/slice-run:/slice-run
 
@@ -10,3 +65,7 @@ services:
       - CPG_INGESTER_MOCK_RUN_DIR=${CPG_INGESTER_MOCK_RUN_DIR:-/slice-run}
     volumes:
       - ./working/slice-run:/slice-run:ro
+
+volumes:
+  slice-artifact-store-data:
+  slice-mlflow-data:

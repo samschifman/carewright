@@ -6,8 +6,10 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 from langgraph.checkpoint.memory import MemorySaver
 
+from cpg_ingester import cli
 from cpg_ingester.output import write_artifact
 from cpg_ingester.pipeline import build_pipeline
 
@@ -87,6 +89,29 @@ def test_write_artifact_nested_dir():
         assert path.parent.name == "dmn"
 
 
+def test_cli_does_not_put_artifact_store_client_in_checkpointed_state(tmp_path, monkeypatch):
+    pdf = tmp_path / "input.pdf"
+    pdf.write_bytes(b"test")
+    output_dir = tmp_path / "run"
+
+    class FakeGraph:
+        def compile(self, checkpointer=None):
+            return self
+
+        def invoke(self, state, config=None):
+            assert "artifact_store" not in state
+            return {}
+
+    monkeypatch.setattr(cli, "build_pipeline", FakeGraph)
+
+    result = CliRunner().invoke(
+        cli.main, [str(pdf), "--output-dir", str(output_dir)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads((output_dir / "run-summary.json").read_text())["delivery_status"] is None
+
+
 # --- Full pipeline integration tests (require LLM) ---
 
 @pytest.mark.skipif(not SYNTHETIC_CPG.exists(), reason="Synthetic CPG PDF not found")
@@ -107,7 +132,6 @@ class TestFullPipelineIntegration:
             "pdf_path": str(SYNTHETIC_CPG),
             "litellm_url": os.environ.get("LITELLM_URL", "http://localhost:4000"),
             "llm_model": os.environ.get("LLM_MODEL", "default"),
-            "llm_api_key": os.environ.get("LITELLM_API_KEY", "sk-change-me"),
         }
         config = {"configurable": {"thread_id": "integration-test"}}
         self.result = compiled.invoke(state, config=config)

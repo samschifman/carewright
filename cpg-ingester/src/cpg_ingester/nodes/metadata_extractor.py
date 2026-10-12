@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import time
+from datetime import date, datetime
 
 import mlflow
 from cpg_contracts import content_to_text, CPGMetadata, GradingSystem
@@ -31,6 +32,55 @@ GRADING_VOCABULARY = {
     ],
 }
 
+_FRONT_MATTER_LABELS = {
+    "guideline id": "cpg_id",
+    "version": "version",
+    "effective date": "effective_date",
+    "publication date": "publication_date",
+    "evidence review date": "evidence_review_date",
+    "issuing body": "issuing_body",
+}
+_FRONT_MATTER_LABEL_RE = re.compile(
+    r"(?P<label>Guideline\s+ID|Evidence\s+Review\s+Date|Effective\s+Date|"
+    r"Publication\s+Date|Issuing\s+Body|Version)\s*:\s*",
+    re.IGNORECASE,
+)
+
+
+def _extract_front_matter(markdown: str) -> dict[str, str]:
+    """Read known labels from either line-oriented or flattened PDF front matter."""
+    text = (markdown or "")[:6000].replace("**", "")
+    matches = list(_FRONT_MATTER_LABEL_RE.finditer(text))
+    extracted: dict[str, str] = {}
+    for index, match in enumerate(matches):
+        line_end = text.find("\n", match.end())
+        if line_end < 0:
+            line_end = len(text)
+        next_label = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        end = min(line_end, next_label)
+        value = re.sub(r"\s+", " ", text[match.end():end]).strip(" \t:*-")
+        if value:
+            key = _FRONT_MATTER_LABELS[match.group("label").casefold()]
+            extracted[key] = value
+    return extracted
+
+
+def _parse_full_date(value: str | None) -> date | None:
+    """Parse only dates whose source specifies a day; preserve partials separately."""
+    if not value:
+        return None
+    candidate = value.strip()
+    try:
+        return date.fromisoformat(candidate)
+    except ValueError:
+        pass
+    for date_format in ("%B %d, %Y", "%b %d, %Y", "%B %d %Y", "%b %d %Y"):
+        try:
+            return datetime.strptime(candidate, date_format).date()
+        except ValueError:
+            continue
+    return None
+
 
 def _cross_check_grading_system(declared: str | None, markdown: str) -> str | None:
     """Cross-check declared grading system against vocabulary found in the document."""
@@ -54,11 +104,12 @@ def metadata_extractor(state: dict) -> dict:
     """Extract CPGMetadata from the document."""
     logger.info("── Metadata Extractor ──")
     markdown = state.get("markdown", "")
+    source_markdown = state.get("source_markdown") or markdown
     output_dir = state.get("output_dir", "output")
 
     llm = get_llm(state)
 
-    content = markdown[:6000]
+    content = source_markdown[:6000]
 
     logger.info("Calling LLM...")
     t0 = time.time()
@@ -75,6 +126,18 @@ def metadata_extractor(state: dict) -> dict:
         logger.error("Failed to parse metadata extractor response")
         return {"cpg_metadata": {}}
 
+    # Explicit front-matter values are deterministic and often survive PDF
+    # extraction on one flattened line where the LLM misses their boundaries.
+    front_matter = _extract_front_matter(source_markdown)
+    for field in ("cpg_id", "version", "effective_date"):
+        if front_matter.get(field):
+            raw[field] = front_matter[field]
+    if front_matter.get("publication_date"):
+        raw["publication_date"] = front_matter["publication_date"]
+    elif front_matter.get("effective_date"):
+        # Do not invent a day for month/year values such as "October 2026".
+        raw["publication_date"] = None
+
     grading_str = raw.get("grading_system")
     grading_enum = None
     if grading_str:
@@ -88,8 +151,9 @@ def metadata_extractor(state: dict) -> dict:
             cpg_id=raw.get("cpg_id") or "UNKNOWN",
             title=raw.get("title") or "Untitled",
             version=raw.get("version"),
-            publication_date=raw.get("publication_date"),
-            evidence_review_date=raw.get("evidence_review_date"),
+            effective_date=raw.get("effective_date"),
+            publication_date=_parse_full_date(raw.get("publication_date")),
+            evidence_review_date=_parse_full_date(raw.get("evidence_review_date")),
             issuing_body=raw.get("issuing_body"),
             grading_system=grading_enum,
             scope=raw.get("scope"),
@@ -99,7 +163,7 @@ def metadata_extractor(state: dict) -> dict:
         logger.error("CPGMetadata validation failed: %s", e)
         return {"cpg_metadata": raw}
 
-    grading_warning = _cross_check_grading_system(grading_str, markdown)
+    grading_warning = _cross_check_grading_system(grading_str, source_markdown)
     if grading_warning:
         logger.warning("Grading system cross-check: %s", grading_warning)
 

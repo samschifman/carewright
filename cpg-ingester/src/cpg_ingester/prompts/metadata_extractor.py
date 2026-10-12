@@ -13,6 +13,8 @@ construct one from the issuing body abbreviation, condition abbreviation, \
 and publication year (e.g., "AHA-HTN-2024").
 - **title**: The full title of the guideline.
 - **version**: Version number if stated (e.g., "1.0", "2024 Update"). Null if not stated.
+- **effective_date**: Effective date exactly as stated, preserving partial dates
+  such as "October 2026". Null if not stated.
 - **publication_date**: Publication or effective date in YYYY-MM-DD format. Null if not stated.
 - **evidence_review_date**: Date through which the evidence was reviewed, \
 if stated. Null if not stated.
@@ -38,6 +40,7 @@ Respond with a single JSON object containing exactly these fields:
   "cpg_id": "...",
   "title": "...",
   "version": "..." or null,
+  "effective_date": "..." or null,
   "publication_date": "YYYY-MM-DD" or null,
   "evidence_review_date": "YYYY-MM-DD" or null,
   "issuing_body": "..." or null,

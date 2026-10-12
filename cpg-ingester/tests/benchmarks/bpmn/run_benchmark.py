@@ -61,10 +61,10 @@ def _llm_config() -> dict:
     key = os.environ["LITELLM_API_KEY"].strip()
     if key.casefold() in {"sk-change-me", "change-me", "placeholder"}:
         raise click.ClickException("LITELLM_API_KEY is a placeholder; benchmark was not started.")
+    os.environ.setdefault("LITELLM_API_KEY", key)
     return {
         "litellm_url": os.environ["LITELLM_URL"].strip().rstrip("/"),
         "llm_model": os.environ["LLM_MODEL"].strip(),
-        "llm_api_key": key,
     }
 
 

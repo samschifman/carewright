@@ -17,6 +17,7 @@ export interface CPGMetadata {
   cpg_id: string;
   title: string;
   version?: string;
+  effective_date?: string;
   publication_date?: string;
   evidence_review_date?: string;
   issuing_body?: string;

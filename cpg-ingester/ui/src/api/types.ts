@@ -30,6 +30,7 @@ export interface CPGMetadata {
   cpg_id: string;
   title: string;
   version?: string;
+  effective_date?: string;
   issuing_body?: string;
   grading_system?: string;
   scope?: string;

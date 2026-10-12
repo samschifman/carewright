@@ -2,14 +2,17 @@
 
 import json
 import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from cpg_ingester.nodes.item_identifier import (
     _assign_guids,
+    _normalize_extraction_fields,
     _validate_decision,
     _validate_recommendation,
     item_identifier,
 )
+from cpg_ingester.prompts.item_identifier import ITEM_IDENTIFIER_SYSTEM
 
 
 MOCK_LLM_RESPONSE = json.dumps({
@@ -214,6 +217,54 @@ class TestAssignGUIDs:
 
 
 class TestItemIdentifier:
+
+    def test_prompt_pins_extraction_contract_field_names_and_functions(self):
+        prompt = " ".join(ITEM_IDENTIFIER_SYSTEM.split())
+        assert "exactly the keys `function` and `params`" in prompt
+        assert "Do not use `type` or `parameters` as aliases" in prompt
+        for function in (
+            "observations_in_window", "observation_count", "consecutive_above",
+            "rate_of_change", "cross_resource_temporal",
+        ):
+            assert function in ITEM_IDENTIFIER_SYSTEM
+        assert "observations_in_window: code, duration" in prompt
+        assert "cross_resource_temporal: anchor_code, target_code, window" in prompt
+        assert 'If a required parameter is not supported by the source, leave `extraction` absent' in prompt
+
+    def test_normalizes_nested_legacy_parameters_alias(self):
+        result = {"decisions": [{"inputs": [{"extraction": {
+            "type": "observation_count",
+            "parameters": {"code": "http://loinc.org|8480-6", "duration": "P7D"},
+        }}]}]}
+
+        _normalize_extraction_fields(result)
+
+        assert result["decisions"][0]["inputs"][0]["extraction"] == {
+            "function": "observation_count",
+            "params": {"code": "http://loinc.org|8480-6", "duration": "P7D"},
+        }
+
+    def test_normalizes_extraction_aliases_from_saved_slice_manifest(self):
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures" / "extraction-manifest-from-20261011.json").read_text()
+        )
+
+        normalized = _normalize_extraction_fields(fixture)
+        extraction = normalized["decisions"][0]["inputs"][0]["extraction"]
+
+        assert extraction["function"] == "observations_in_window"
+        assert extraction["params"] == {"window": "weekly", "aggregation": "average"}
+        assert "type" not in extraction
+        assert "parameters" not in extraction
+        assert all(
+            input_variable["extraction"].get("function") == "observations_in_window"
+            for decision in normalized["decisions"]
+            for input_variable in decision["inputs"]
+            if "extraction" in input_variable
+        )
+        issues = _validate_decision(normalized["decisions"][0])
+        assert any("missing required parameter(s)" in issue for issue in issues)
+        assert not any("function: Field required" in issue for issue in issues)
 
     def test_with_mocked_llm(self):
         mock_llm = MagicMock()

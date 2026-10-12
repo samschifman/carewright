@@ -118,9 +118,15 @@ def _ensure_extraction_annotations(dmn_xml: str, inputs: list[dict]) -> str:
         blocks = re.findall(r"<inputData\b[^>]*>.*?</inputData\s*>", dmn_xml, flags=re.DOTALL)
         for block in blocks:
             variable = re.search(r"<variable\b[^>]*\bname=(['\"])(.*?)\1", block)
-            if not variable or variable.group(2) != name or "<acp:extraction" in block:
+            if not variable or variable.group(2) != name:
                 continue
-            if re.search(r"<extensionElements\b[^>]*>", block):
+            extraction_tag = re.compile(
+                r"<acp:extraction\b[^>]*(?:/>|>.*?</acp:extraction\s*>)",
+                flags=re.DOTALL,
+            )
+            if extraction_tag.search(block):
+                updated = extraction_tag.sub(annotation, block, count=1)
+            elif re.search(r"<extensionElements\b[^>]*>", block):
                 updated = re.sub(
                     r"</extensionElements\s*>", annotation + "</extensionElements>", block, count=1
                 )

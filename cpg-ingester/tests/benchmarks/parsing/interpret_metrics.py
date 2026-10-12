@@ -74,8 +74,8 @@ def _score_one(fig: dict, gt: dict) -> dict:
 def score_figures(pdf_path, groundtruth_path, llm_cfg: dict) -> dict:
     """Interpret a PDF's figures with the production node and score them.
 
-    ``llm_cfg`` supplies ``litellm_url`` / ``llm_model`` / ``llm_api_key`` for
-    the vision call (see ``cpg_contracts.get_llm``). Returns a dict with a
+    ``llm_cfg`` supplies ``litellm_url`` / ``llm_model``; the vision call reads
+    its credential from the process environment (see ``cpg_contracts.get_llm``). Returns a dict with a
     per-figure ``figures`` list of score rows.
     """
     import json

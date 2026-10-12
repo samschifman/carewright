@@ -1,6 +1,7 @@
 """Prompt builders for generating BPMN process IR from a CPG process."""
 
 import json
+from pathlib import Path
 
 from cpg_contracts.automation.catalog import Catalog, load_catalog
 from cpg_contracts.automation.ir import ProcessIR
@@ -20,7 +21,25 @@ The only flow element types are startEvent, endEvent, task, userTask,
 businessRuleTask, exclusiveGateway, intermediateCatchEvent, boundaryEvent, and
 sequenceFlow. Use one start, at least one end, explicit converging gateways
 instead of implicit joins, and one default outgoing flow for each diverging
-exclusive gateway. A boundary event attaches to `main` and uses a timer.
+exclusive gateway. Every flow node has a short, human-readable name; only
+sequence flows may omit it. A boundary event attaches to `main` and uses a timer.
+
+Every node with multiple incoming sequence flows must be preceded by an explicit
+converging `exclusiveGateway`: redirect each incoming flow to the gateway and
+add one unconditional flow from the gateway to the original target. Never send
+two flows directly to an end event, task, or gateway. When a parameter represents
+a categorical DMN output, set `constraints.enum` to the complete finite set of
+that output's values so its trigger conditions are enum-typed.
+
+A template is the care team's automation expressed with catalog capabilities,
+such as patient outreach, EHR queries, notifications, and visit requests. The
+patient's own actions are not process steps. Use `userTask` only for clinician
+or care-team review.
+
+Timer ValueRefs must be either `{"param":"parameter_name"}` or a duration
+literal such as `{"literal":"P7D","type":"duration"}`. Never use a
+`property` reference for a timer. Duration literals use ISO-8601 day/hour form;
+week form is rejected, so express one week as `P7D`, never `P1W`.
 
 The deterministic compiler expands these macros; do not add their generated
 elements to the IR:
@@ -37,6 +56,9 @@ elements to the IR:
 Every task, userTask, businessRuleTask, timer intermediateCatchEvent,
 boundaryEvent, and conditional sequenceFlow needs source provenance with
 `source_text` copied from the supplied CPG and `source_location` when known.
+Each `source_text` must be one exact, contiguous quote from the supplied CPG;
+do not combine separate sentences or omit text from the middle of a quote.
+Use separate element quotes when different sentences support different claims.
 The source quote must support the element's meaning. Structural elements use
 one of the schema's closed `derivation_rule` values and `supports` ids:
 start-event, end-event, sequence, exclusive-split, exclusive-join,
@@ -62,6 +84,10 @@ boundary event attached to `main`, with `timeDuration: {"param":"max_duration"}`
 and structural provenance `plan-bound`. The creator deterministically adds
 these two records if omitted, with boundary id `period_elapsed` and supports
 listing every task id. Do not add a second main boundary.
+
+An `acp.triggers` entry of kind `dmn-output` has exactly these fields:
+`kind`, `model_id`, `output_name`, and `output_value`. Do not add a description,
+interval, or other fields to this trigger.
 
 ## Grounding requirements
 T1: source provenance quotes must occur in the supplied CPG section text.
@@ -108,15 +134,25 @@ def _catalog_payload(catalog: Catalog) -> list[dict]:
 
 
 def build_bpmn_ir_creator_system(catalog: Catalog | None = None) -> str:
-    """Render the schema and the active capability catalog into the system prompt."""
+    """Render the schema, capability catalog, and canonical worked example."""
     active_catalog = catalog or load_catalog()
     schema = ProcessIR.model_json_schema()
+    example_path = (
+        Path(__file__).resolve().parents[3]
+        / "data"
+        / "golden"
+        / "automation"
+        / "follow-up-visit.ir.json"
+    )
+    example = json.loads(example_path.read_text(encoding="utf-8"))
     return (
         _SYSTEM_RULES
         + "\n## Capability catalog v"
         + active_catalog.version
         + "\n"
         + json.dumps(_catalog_payload(active_catalog), indent=2, ensure_ascii=False)
+        + "\n\n## Worked example: follow-up-visit\n"
+        + json.dumps(example, indent=2, ensure_ascii=False)
         + "\n\n## ProcessIR JSON schema\n"
         + json.dumps(schema, indent=2, ensure_ascii=False)
     )

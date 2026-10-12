@@ -8,6 +8,7 @@ a manifest.  The SonataFlow orchestrator owns downstream notification.
 import logging
 
 import mlflow
+from cpg_contracts import get_artifact_store
 
 from cpg_contracts.automation.templates import AutomationTemplate
 from cpg_ingester.artifact_id import make_artifact_id
@@ -27,7 +28,11 @@ def delivery(state: dict) -> dict:
     escalated_items = state.get("escalated_items", [])
     assembly_report = state.get("assembly_report", {})
     output_dir = state.get("output_dir", "output")
+    # ArtifactStore owns a boto3 client and cannot be saved by LangGraph's
+    # msgpack checkpointer. Resolve the configured client only at delivery.
     store = state.get("artifact_store")
+    if store is None:
+        store = get_artifact_store()
 
     cpg_id = cpg_metadata.get("cpg_id", "UNKNOWN")
     artifacts: list[dict] = []

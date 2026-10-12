@@ -86,6 +86,7 @@ def content_filter(state: dict) -> dict:
     logger.info("── Content Filter ──")
     section_map = state.get("section_map", [])
     markdown = state.get("markdown", "")
+    source_markdown = state.get("source_markdown") or markdown
     output_dir = state.get("output_dir", "output")
 
     if not section_map:
@@ -141,5 +142,8 @@ def content_filter(state: dict) -> dict:
 
     return {
         "markdown": filtered_markdown,
+        # Keep the parsed source available to nodes such as metadata extraction
+        # whose inputs may be removed by section filtering.
+        "source_markdown": source_markdown,
         "section_map": section_map,
     }

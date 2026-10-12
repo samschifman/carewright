@@ -238,7 +238,7 @@ class AcpElement(StrictModel):
 
 class FlowElementBase(StrictModel):
     id: str
-    name: str = ""
+    name: str = Field(min_length=1)
     acp: AcpElement = Field(default_factory=AcpElement)
 
 
@@ -301,6 +301,7 @@ class BoundaryEvent(FlowElementBase):
 
 class SequenceFlow(FlowElementBase):
     type: Literal["sequenceFlow"]
+    name: str = ""
     sourceRef: str
     targetRef: str
     conditionExpression: str | None = None

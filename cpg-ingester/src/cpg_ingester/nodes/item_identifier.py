@@ -39,6 +39,36 @@ VALID_EVIDENCE = {"high", "moderate", "low", "very-low", "ungraded"}
 CODE_TOKEN_RE = re.compile(r"^https?://[^|\s]+\|[^|\s]+$")
 
 
+def _normalize_extraction_fields(result: dict) -> dict:
+    """Normalize legacy/model aliases to the Extraction contract field names."""
+    for decision in result.get("decisions", []) or []:
+        for variable in decision.get("inputs", []) or []:
+            extraction = variable.get("extraction")
+            if not isinstance(extraction, dict):
+                continue
+            if "function" not in extraction and "type" in extraction:
+                extraction["function"] = extraction.pop("type")
+            else:
+                extraction.pop("type", None)
+            if "params" not in extraction:
+                legacy_params = extraction.pop("parameters", None)
+                if isinstance(legacy_params, dict):
+                    extraction["params"] = legacy_params
+                else:
+                    # Some model outputs flattened parameters into the
+                    # extraction object instead of nesting them.
+                    flat_params = {
+                        key: value for key, value in extraction.items()
+                        if key not in {"function", "params", "parameters"}
+                    }
+                    if flat_params:
+                        extraction["params"] = flat_params
+                        for key in flat_params:
+                            extraction.pop(key, None)
+            extraction.pop("parameters", None)
+    return result
+
+
 def _assign_guids(manifest: list[dict]) -> list[dict]:
     """Assign GUIDs to all items and resolve cross-reference names to GUIDs."""
     name_to_guid = {}
@@ -190,6 +220,8 @@ def item_identifier(state: dict) -> dict:
     except (json.JSONDecodeError, ValueError):
         logger.error("Failed to parse item identifier response")
         return {"item_manifest": []}
+
+    result = _normalize_extraction_fields(result)
 
     decisions = result.get("decisions", [])
     recommendations = result.get("recommendations", [])

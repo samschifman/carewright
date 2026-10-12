@@ -2,7 +2,10 @@
 
 import os
 
-from langchain_openai import ChatOpenAI
+try:
+    from langchain_openai import ChatOpenAI
+except ImportError:  # The LLM integration is an optional extra for shared contracts.
+    ChatOpenAI = None  # type: ignore[assignment,misc]
 
 LLM_MAX_RETRIES = int(os.environ.get("LLM_MAX_RETRIES", "5"))
 LLM_REQUEST_TIMEOUT = int(os.environ.get("LLM_REQUEST_TIMEOUT", "600"))
@@ -14,9 +17,19 @@ def get_llm(state: dict) -> ChatOpenAI:
     state['litellm_url'] must be the bare origin (e.g. 'http://localhost:4000')
     — this function appends '/v1'. Do not include '/v1' in the config value.
     """
+    if ChatOpenAI is None:
+        raise RuntimeError("LLM support requires the cpg-contracts 'llm' extra")
+    # Credentials come only from the process environment. Pipeline state is
+    # captured by tracing and checkpointing, so secrets must never enter it.
+    api_key = (
+        os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("LITELLM_API_KEY")
+        or os.environ.get("LLM_API_KEY")
+        or "sk-change-me"
+    )
     return ChatOpenAI(
         base_url=f"{state.get('litellm_url', 'http://localhost:4000')}/v1",
-        api_key=state.get("llm_api_key", "sk-change-me"),
+        api_key=api_key,
         model=state.get("llm_model", "default"),
         use_responses_api=True,
         max_retries=LLM_MAX_RETRIES,

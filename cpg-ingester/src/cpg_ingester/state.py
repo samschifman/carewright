@@ -12,10 +12,10 @@ class CPGIngesterState(TypedDict, total=False):
     pdf_path: str
     litellm_url: str
     llm_model: str
-    llm_api_key: str
 
     # Phase 1 outputs
     markdown: str
+    source_markdown: str
     docling_json: dict
     figures: list[dict]  # figure index: id, page, bbox, class, image_ref
     figure_images: dict[str, str]  # figure id -> base64 PNG (consumed by figure_interpreter)
@@ -46,7 +46,6 @@ class DMNPipelineState(TypedDict, total=False):
     abbreviations: dict[str, str]
     litellm_url: str
     llm_model: str
-    llm_api_key: str
     output_dir: str
     review_feedback: str
     review_comment: str
@@ -74,7 +73,6 @@ class RecPipelineState(TypedDict, total=False):
     abbreviations: dict[str, str]
     litellm_url: str
     llm_model: str
-    llm_api_key: str
     output_dir: str
     review_feedback: str
     review_comment: str
@@ -97,7 +95,6 @@ class BPMNPipelineState(TypedDict, total=False):
     abbreviations: dict[str, str]
     litellm_url: str
     llm_model: str
-    llm_api_key: str
     output_dir: str
     cpg_metadata: dict
     dmn_summaries: dict[str, dict]

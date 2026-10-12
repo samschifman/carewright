@@ -8,11 +8,13 @@
     "host": "medplum-postgres",
     "port": 5432,
     "dbname": "medplum",
-    "username": "medplum"
+    "username": "medplum",
+    "password": "medplum"
   },
   "redis": {
     "host": "medplum-redis",
-    "port": 6379
+    "port": 6379,
+    "password": "medplum"
   },
   "supportEmail": "CareView EHR <support@example.com>",
   "maxJsonSize": "5mb",

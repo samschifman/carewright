@@ -98,6 +98,33 @@ def test_input_expressions_accept_declared_name_and_reject_unknown_name():
     assert any("does not match" in error for error in errors)
 
 
+def test_input_expressions_accept_arithmetic_over_declared_escaped_names():
+    additional_inputs = """
+  <inputData id="input_weekly_home_bp" name="Weekly Home BP Readings">
+    <variable id="variable_weekly_home_bp" name="Weekly Home BP Readings" typeRef="number"/>
+  </inputData>
+  <inputData id="input_lower_threshold" name="Clinician-Set Lower Threshold">
+    <variable id="variable_lower_threshold" name="Clinician-Set Lower Threshold" typeRef="number"/>
+  </inputData>
+"""
+    xml = VALID_DMN.replace(
+        '<decision id="decision_recommendation"',
+        additional_inputs + '  <decision id="decision_recommendation"',
+    ).replace(
+        '<decisionTable id="table_recommendation"',
+        '<informationRequirement id="requirement_weekly_home_bp">'
+        '<requiredInput href="#input_weekly_home_bp"/></informationRequirement>'
+        '<informationRequirement id="requirement_lower_threshold">'
+        '<requiredInput href="#input_lower_threshold"/></informationRequirement>'
+        '<decisionTable id="table_recommendation"',
+    ).replace(
+        "<![CDATA[Age]]>",
+        "<![CDATA[`Weekly Home BP Readings` - `Clinician-Set Lower Threshold`]]>",
+    )
+
+    assert check_input_expressions(_root(xml)) == ([], [])
+
+
 def test_extraction_annotations_accept_consecutive_above_without_comparator():
     xml = VALID_DMN.replace(
         "</inputData>",

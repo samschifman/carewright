@@ -48,44 +48,71 @@ MAX_BPMN_SEMANTIC_RETRIES = 2
 
 
 def _extract_section_text(markdown: str, section_map: list, section_id: str) -> str:
-    """Extract the markdown text for a section by matching its heading.
+    """Extract text for all numbered sections named by a manifest section label.
 
-    Finds the section heading in the markdown and returns all text from that
-    heading to the next heading of equal or higher level.
+    Manifest labels can combine references, e.g. ``"2.2; 3.2, Key principles"``.
+    Match the numbered section headings independently so punctuation and table
+    labels do not make otherwise-present source text disappear.
     """
     if not markdown or not section_id:
         return ""
 
-    matching = [s for s in section_map if section_id in s.get("heading", "")]
-    if not matching:
-        return ""
-
-    heading = matching[0].get("heading", "")
     lines = markdown.split("\n")
+    references = re.findall(r"(?<![\w.])(\d+(?:\.\d+)+)(?![\w.])", section_id)
+    if not references:
+        references = [
+            value for value in re.findall(r"(?<![\w.])(\d+)(?![\w.])", section_id)
+            if not re.search(rf"(?:table|decision\s+table)\s+{re.escape(value)}", section_id, re.I)
+        ]
 
-    start_idx = None
-    heading_level = 0
-    for i, line in enumerate(lines):
-        if heading in line and line.strip().startswith("#"):
-            start_idx = i
-            heading_level = len(line) - len(line.lstrip("#"))
-            break
+    headings: list[str] = []
+    for reference in references:
+        entry = next((
+            section for section in section_map
+            if re.match(
+                rf"^\s*{re.escape(reference)}(?:\s|[:—-]|$)",
+                str(section.get("heading", "")),
+            )
+        ), None)
+        if entry and entry.get("heading") not in headings:
+            headings.append(entry["heading"])
 
-    if start_idx is None:
-        return ""
+    if not headings:
+        # Keep compatibility with non-numbered section labels while avoiding
+        # a whole composite label being required as a literal substring.
+        labels = [part.strip() for part in re.split(r"[;,]", section_id) if part.strip()]
+        for label in labels:
+            entry = next((
+                section for section in section_map
+                if label.casefold() in str(section.get("heading", "")).casefold()
+            ), None)
+            if entry and entry.get("heading") not in headings:
+                headings.append(entry["heading"])
 
-    end_idx = len(lines)
-    for i in range(start_idx + 1, len(lines)):
-        line = lines[i].strip()
-        if line.startswith("#"):
+    excerpts = []
+    for heading in headings:
+        start_idx = next((
+            index for index, line in enumerate(lines)
+            if heading.casefold() in line.casefold() and line.strip().startswith("#")
+        ), None)
+        if start_idx is None:
+            continue
+        heading_level = len(lines[start_idx]) - len(lines[start_idx].lstrip("#"))
+        end_idx = len(lines)
+        for index in range(start_idx + 1, len(lines)):
+            line = lines[index].strip()
+            if not line.startswith("#"):
+                continue
             level = len(line) - len(line.lstrip("#"))
-            if level <= heading_level:
-                text_after_hash = line.lstrip("#").strip()
-                if re.match(r"\d", text_after_hash):
-                    end_idx = i
-                    break
+            text_after_hash = line.lstrip("#").strip()
+            if level <= heading_level and re.match(r"\d", text_after_hash):
+                end_idx = index
+                break
+        excerpt = "\n".join(lines[start_idx:end_idx]).strip()
+        if excerpt and excerpt not in excerpts:
+            excerpts.append(excerpt)
 
-    return "\n".join(lines[start_idx:end_idx]).strip()
+    return "\n\n".join(excerpts)
 
 
 # --- DMN subgraph routing ---
@@ -793,6 +820,89 @@ def _process_generation_gate(item: dict, manifest: list[dict]) -> tuple[str, str
 
 # --- Generation orchestrator ---
 
+def _generate_bpmn_results(state: dict) -> list[dict]:
+    """Run only the BPMN subgraph for a saved analysis/generation state."""
+    manifest = state.get("item_manifest", []) or []
+    process_items = [item for item in manifest if item.get("type") == "process"]
+    dmn_results = state.get("dmn_results", []) or []
+    all_recs = state.get("recommendation_results", []) or []
+    review_feedback = state.get("review_feedback", "") or ""
+    review_comment = state.get("review_comment", "") or ""
+    shared = {
+        "abbreviations": state.get("abbreviations", {}),
+        "litellm_url": state.get("litellm_url", ""),
+        "llm_model": state.get("llm_model", ""),
+        "output_dir": state.get("output_dir", ""),
+    }
+
+    bpmn_results = []
+    bpmn_graph = None
+    for item in process_items:
+        gate = _process_generation_gate(item, manifest)
+        if gate:
+            reason, message = gate
+            bpmn_results.append({
+                "bpmn_xml": "",
+                "process_ir": {},
+                "template_summary": {},
+                "item": item,
+                "escalated": True,
+                "escalation_reason": reason,
+                "escalation_errors": [message],
+            })
+            continue
+        if bpmn_graph is None:
+            bpmn_graph = _build_bpmn_subgraph().compile()
+        logger.info("Generating BPMN template for: %s", item.get("name", "?"))
+        try:
+            result = bpmn_graph.invoke({
+                "item": item,
+                "source_pages": _bpmn_source_sections(item, state, manifest),
+                "figures": _process_figures(item, state),
+                "dmn_summaries": _linked_dmn_summaries(item, dmn_results),
+                "linked_recs": _linked_recommendations(item, manifest, all_recs),
+                "human_feedback": "\n".join(value for value in (
+                    state.get("human_feedback", ""), review_feedback, review_comment,
+                ) if value),
+                "cpg_metadata": state.get("cpg_metadata", {}),
+                **shared,
+            })
+        except Exception as exc:
+            logger.error("BPMN generation failed for '%s': %s", item.get("name"), exc)
+            bpmn_results.append({
+                "bpmn_xml": "",
+                "process_ir": {},
+                "template_summary": {},
+                "item": item,
+                "escalated": True,
+                "escalation_reason": "generation-exception",
+                "escalation_errors": [str(exc)],
+            })
+            continue
+
+        entry = {
+            "bpmn_xml": result.get("bpmn_xml", ""),
+            "process_ir": result.get("process_ir", {}),
+            "template_summary": result.get("template_summary", {}),
+            "item": item,
+            "static_findings": result.get("static_findings", []),
+            "deferred_invariants": result.get("deferred_invariants", []),
+        }
+        if result.get("escalated") or not entry["bpmn_xml"]:
+            entry["escalated"] = True
+            entry["escalation_reason"] = result.get("escalation_reason") or "empty-result"
+            entry["escalation_errors"] = result.get("escalation_errors") or [
+                finding.get("message", str(finding))
+                for finding in entry["static_findings"]
+            ]
+        bpmn_results.append(entry)
+    return bpmn_results
+
+
+def generate_bpmn_only(state: dict) -> dict:
+    """Re-drive process templates without rerunning decisions or recommendations."""
+    return {"bpmn_results": _generate_bpmn_results(state)}
+
 def generate_all(state: dict) -> dict:
     """Run DMN, recommendation, and BPMN subgraphs for manifest items.
 
@@ -812,7 +922,6 @@ def generate_all(state: dict) -> dict:
         "abbreviations": state.get("abbreviations", {}),
         "litellm_url": state.get("litellm_url", ""),
         "llm_model": state.get("llm_model", ""),
-        "llm_api_key": state.get("llm_api_key", ""),
         "output_dir": state.get("output_dir", ""),
     }
 
@@ -950,68 +1059,12 @@ def generate_all(state: dict) -> dict:
                 "escalation_errors": [str(e)],
             })
 
-    bpmn_results = []
-    process_items = [item for item in manifest if item.get("type") == "process"]
-    bpmn_graph = None
-    for item in process_items:
-        gate = _process_generation_gate(item, manifest)
-        if gate:
-            reason, message = gate
-            bpmn_results.append({
-                "bpmn_xml": "",
-                "process_ir": {},
-                "template_summary": {},
-                "item": item,
-                "escalated": True,
-                "escalation_reason": reason,
-                "escalation_errors": [message],
-            })
-            continue
-        if bpmn_graph is None:
-            bpmn_graph = _build_bpmn_subgraph().compile()
-        logger.info("Generating BPMN template for: %s", item.get("name", "?"))
-        try:
-            result = bpmn_graph.invoke({
-                "item": item,
-                "source_pages": _bpmn_source_sections(item, state, manifest),
-                "figures": _process_figures(item, state),
-                "dmn_summaries": _linked_dmn_summaries(item, dmn_results),
-                "linked_recs": _linked_recommendations(item, manifest, all_recs),
-                "human_feedback": "\n".join(value for value in (
-                    state.get("human_feedback", ""), review_feedback, review_comment,
-                ) if value),
-                "cpg_metadata": state.get("cpg_metadata", {}),
-                **shared,
-            })
-        except Exception as exc:
-            logger.error("BPMN generation failed for '%s': %s", item.get("name"), exc)
-            bpmn_results.append({
-                "bpmn_xml": "",
-                "process_ir": {},
-                "template_summary": {},
-                "item": item,
-                "escalated": True,
-                "escalation_reason": "generation-exception",
-                "escalation_errors": [str(exc)],
-            })
-            continue
-
-        entry = {
-            "bpmn_xml": result.get("bpmn_xml", ""),
-            "process_ir": result.get("process_ir", {}),
-            "template_summary": result.get("template_summary", {}),
-            "item": item,
-            "static_findings": result.get("static_findings", []),
-            "deferred_invariants": result.get("deferred_invariants", []),
-        }
-        if result.get("escalated") or not entry["bpmn_xml"]:
-            entry["escalated"] = True
-            entry["escalation_reason"] = result.get("escalation_reason") or "empty-result"
-            entry["escalation_errors"] = result.get("escalation_errors") or [
-                finding.get("message", str(finding))
-                for finding in entry["static_findings"]
-            ]
-        bpmn_results.append(entry)
+    bpmn_state = {
+        **state,
+        "dmn_results": dmn_results,
+        "recommendation_results": all_recs,
+    }
+    bpmn_results = _generate_bpmn_results(bpmn_state)
 
     return {
         "dmn_results": dmn_results,

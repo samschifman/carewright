@@ -148,7 +148,6 @@ def _drive_template(template: dict, markdown: str, llm_config: dict,
     token_tracker = _UsageTrackingModel(get_llm({
         "litellm_url": llm_config["litellm_url"],
         "llm_model": llm_config["llm_model"],
-        "llm_api_key": llm_config["llm_api_key"],
     }))
     creator_get_llm = creator_module.get_llm
     reviewer_get_llm = reviewer_module.get_llm
@@ -169,7 +168,6 @@ def _drive_template(template: dict, markdown: str, llm_config: dict,
         "output_dir": str(output_dir),
         "litellm_url": llm_config["litellm_url"],
         "llm_model": llm_config["llm_model"],
-        "llm_api_key": llm_config["llm_api_key"],
         "static_retry_count": 0,
         "semantic_retry_count": 0,
     }

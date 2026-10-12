@@ -1,10 +1,14 @@
 """Prompt contract tests for process IR creation."""
 
+import json
+from pathlib import Path
+
 from cpg_ingester.prompts.bpmn_ir_creator import build_bpmn_ir_creator_system
 
 
 def test_prompt_includes_catalog_and_forbids_xml_and_coordinates():
     prompt = build_bpmn_ir_creator_system()
+    flat_prompt = " ".join(prompt.split())
 
     assert "patient.request_observation" in prompt
     assert "ehr.query_observations" in prompt
@@ -12,6 +16,30 @@ def test_prompt_includes_catalog_and_forbids_xml_and_coordinates():
     assert "never write coordinates" in prompt
     assert "max_duration" in prompt
     assert "ProcessIR" in prompt
+    assert "Every flow node has a short, human-readable name" in flat_prompt
+    assert "Every node with multiple incoming sequence flows" in flat_prompt
+    assert "set `constraints.enum` to the complete finite set" in flat_prompt
+    assert "The patient's own actions are not process steps" in flat_prompt
+    assert "Use `userTask` only for clinician" in flat_prompt
+    assert "care team's automation expressed with catalog capabilities" in flat_prompt
+    assert "Never use a `property` reference for a timer" in flat_prompt
+    assert "express one week as `P7D`, never `P1W`" in flat_prompt
+    assert "one exact, contiguous quote" in flat_prompt
+    assert "An `acp.triggers` entry of kind `dmn-output`" in flat_prompt
+
+
+def test_prompt_renders_follow_up_golden_from_file_and_not_home_bp():
+    prompt = build_bpmn_ir_creator_system()
+    example_path = (
+        Path(__file__).parents[1]
+        / "data/golden/automation/follow-up-visit.ir.json"
+    )
+    example = json.loads(example_path.read_text(encoding="utf-8"))
+    rendered = json.dumps(example, indent=2, ensure_ascii=False)
+
+    assert "## Worked example: follow-up-visit" in prompt
+    assert rendered in prompt
+    assert "home-bp-monitoring" not in prompt
 
 
 def test_prompt_renders_human_feedback_on_first_attempt():

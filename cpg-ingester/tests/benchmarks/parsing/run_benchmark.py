@@ -71,8 +71,6 @@ def _llm_cfg_from_env():
     return {
         "litellm_url": os.environ.get("LITELLM_URL", "http://localhost:4000"),
         "llm_model": os.environ.get("LLM_MODEL", "default"),
-        "llm_api_key": os.environ.get("LLM_API_KEY")
-        or os.environ.get("OPENAI_API_KEY", "sk-change-me"),
     }
 
 

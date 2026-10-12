@@ -1,0 +1,64 @@
+{
+  "decisions": [
+    {
+      "name": "Home Blood Pressure Threshold Equivalence",
+      "inputs": [
+        {
+          "name": "Weekly average systolic blood pressure",
+          "type": "number",
+          "description": "Average home systolic blood pressure in mmHg from readings in the relevant week.",
+          "extraction": {
+            "type": "observations_in_window",
+            "window": "weekly",
+            "aggregation": "average"
+          }
+        },
+        {
+          "name": "Weekly average diastolic blood pressure",
+          "type": "number",
+          "description": "Average home diastolic blood pressure in mmHg from readings in the relevant week.",
+          "extraction": {
+            "type": "observations_in_window",
+            "window": "weekly",
+            "aggregation": "average"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Home BP Notification Decision",
+      "inputs": [
+        {
+          "name": "Weekly average systolic blood pressure",
+          "type": "number",
+          "description": "Average home systolic blood pressure in mmHg from readings in the relevant week.",
+          "extraction": {
+            "type": "observations_in_window",
+            "window": "weekly",
+            "aggregation": "average"
+          }
+        },
+        {
+          "name": "Weekly average diastolic blood pressure",
+          "type": "number",
+          "description": "Average home diastolic blood pressure in mmHg from readings in the relevant week.",
+          "extraction": {
+            "type": "observations_in_window",
+            "window": "weekly",
+            "aggregation": "average"
+          }
+        },
+        {
+          "name": "Clinician-set lower systolic threshold",
+          "type": "number",
+          "description": "Optional lower systolic threshold set by the clinician for a patient with diabetes or kidney disease."
+        },
+        {
+          "name": "Clinician-set lower diastolic threshold",
+          "type": "number",
+          "description": "Optional lower diastolic threshold set by the clinician for a patient with diabetes or kidney disease."
+        }
+      ]
+    }
+  ]
+}

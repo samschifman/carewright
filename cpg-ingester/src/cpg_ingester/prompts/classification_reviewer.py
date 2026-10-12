@@ -44,6 +44,12 @@ the manifest.
    shared decision-making, and narrative advice as process items; these remain \
    recommendations. Do not invent process steps or operational details.
 
+8. **Duplicate process variants**: Merge process items that describe the same \
+   care-team workflow and differ only by a DMN row/output value or a numeric \
+   interval. Recommend one process template with parameters and a trigger for \
+   each output value. Two process items that differ only by a DMN row or a \
+   number → merge them; do not merge genuinely different workflows.
+
 ## What NOT to challenge
 
 - Do not challenge the wording or style of titles/descriptions.

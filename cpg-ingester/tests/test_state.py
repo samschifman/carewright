@@ -17,9 +17,9 @@ def test_ingester_state_with_llm_config():
     state: CPGIngesterState = {
         "litellm_url": "http://localhost:4000",
         "llm_model": "default",
-        "llm_api_key": "sk-test",
     }
     assert state["llm_model"] == "default"
+    assert "llm_api_key" not in CPGIngesterState.__annotations__
 
 
 def test_dmn_pipeline_state():
@@ -37,10 +37,10 @@ def test_dmn_pipeline_state_with_llm_config():
         "item": {"id": "test"},
         "litellm_url": "http://localhost:4000",
         "llm_model": "default",
-        "llm_api_key": "sk-test",
         "syntax_retry_count": 0,
     }
     assert state["litellm_url"] == "http://localhost:4000"
+    assert "llm_api_key" not in DMNPipelineState.__annotations__
 
 
 def test_rec_pipeline_state():

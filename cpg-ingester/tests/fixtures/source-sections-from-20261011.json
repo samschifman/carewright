@@ -1,0 +1,86 @@
+{
+  "sections": [
+    {
+      "name": "Monitoring Plan",
+      "section": "3.3, Decision Table 2"
+    },
+    {
+      "name": "Initiate Medication for Stage 2 Hypertension",
+      "section": "3.2, Key principles"
+    },
+    {
+      "name": "Use a Lower Treatment Threshold for Diabetes or Kidney Disease",
+      "section": "2.2; 3.2, Key principles"
+    },
+    {
+      "name": "Lifestyle-First Management for Stage 1 Hypertension Without High-Risk Comorbidities",
+      "section": "3.2, Key principles"
+    },
+    {
+      "name": "Lifestyle Management for Systolic Blood Pressure Below 130 mmHg",
+      "section": "3.2, Key principles"
+    },
+    {
+      "name": "First-Line Lisinopril",
+      "section": "2.2; 3.2"
+    },
+    {
+      "name": "ACE Inhibitor Laboratory Monitoring",
+      "section": "3.3, Key principles"
+    },
+    {
+      "name": "No Routine Laboratory Monitoring for Lifestyle-Only Management",
+      "section": "3.3, Key principles"
+    }
+  ],
+  "section_map": [
+    {
+      "heading": "2.2 Key Comorbidities",
+      "page_start": 2,
+      "page_end": 2,
+      "bbox": [
+        54.96,
+        736.5574216,
+        191.65970270000003,
+        725.5574216
+      ],
+      "classification": "reference"
+    },
+    {
+      "heading": "3.2 Treatment Decision",
+      "page_start": 2,
+      "page_end": 2,
+      "bbox": [
+        54.96,
+        435.5574216,
+        199.77542680000002,
+        424.5574216
+      ],
+      "classification": "both"
+    },
+    {
+      "heading": "3.3 Monitoring Plan",
+      "page_start": 3,
+      "page_end": 3,
+      "bbox": [
+        54.96,
+        642.5574216,
+        177.0127341,
+        631.5574216
+      ],
+      "classification": "both"
+    },
+    {
+      "heading": "5.1 Clinical Workflow Integration",
+      "page_start": 4,
+      "page_end": 4,
+      "bbox": [
+        54.96,
+        272.5574216,
+        259.3515951,
+        261.5574216
+      ],
+      "classification": "recommendation"
+    }
+  ]
+}

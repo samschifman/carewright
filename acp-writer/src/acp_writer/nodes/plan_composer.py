@@ -11,8 +11,9 @@ import time
 from typing import Any
 
 import mlflow
-from cpg_contracts import content_to_text, get_llm
+from cpg_contracts import content_to_text
 
+from acp_writer.llm import get_llm
 from acp_writer.llm_json import loads_json
 from acp_writer.output import write_artifact
 from acp_writer.planning_brief import (

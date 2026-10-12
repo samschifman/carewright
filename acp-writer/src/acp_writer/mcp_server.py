@@ -83,7 +83,6 @@ def generate_careplan(ips_bundle: dict) -> str:
         "ips_bundle": ips_bundle,
         "litellm_url": os.environ.get("LITELLM_URL", "http://localhost:4000"),
         "llm_model": os.environ.get("LLM_MODEL", "default"),
-        "llm_api_key": os.environ.get("LLM_API_KEY", "sk-change-me"),
     })
 
     return json.dumps(result.get("fhir_bundle", {}))

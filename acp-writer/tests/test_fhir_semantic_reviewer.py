@@ -21,7 +21,6 @@ def _make_state(bundle: dict | None = None) -> dict:
         "terminology_issues": [],
         "litellm_url": "http://localhost:4000",
         "llm_model": "default",
-        "llm_api_key": "sk-test",
     }
 
 

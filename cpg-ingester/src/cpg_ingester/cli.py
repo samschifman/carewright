@@ -31,13 +31,11 @@ def _configure_mlflow_experiment() -> None:
 @click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None)
 @click.option("--litellm-url", envvar="LITELLM_URL", default="http://localhost:4000")
 @click.option("--model", envvar="LLM_MODEL", default="default")
-@click.option("--api-key", envvar="LITELLM_API_KEY", default="sk-change-me")
 def main(
     input_pdf: Path,
     output_dir: Path | None,
     litellm_url: str,
     model: str,
-    api_key: str,
 ):
     """Run the cpg-ingester pipeline on a CPG PDF."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -45,8 +43,6 @@ def main(
     # Slice runs use a fresh experiment so its traces are stored through the
     # MLflow artifact proxy rather than the legacy local-path Default experiment.
     _configure_mlflow_experiment()
-    if api_key and api_key != "sk-change-me":
-        os.environ.setdefault("LITELLM_API_KEY", api_key)
 
     run_id = str(uuid.uuid4())[:8]
     if output_dir is None:

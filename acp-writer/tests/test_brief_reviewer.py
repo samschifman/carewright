@@ -54,7 +54,6 @@ def _make_state(brief: dict | None = None) -> dict:
         ],
         "litellm_url": "http://localhost:4000",
         "llm_model": "default",
-        "llm_api_key": "sk-test",
     }
 
 

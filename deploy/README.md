@@ -187,6 +187,8 @@ Non-secret configuration. Template checked in; actual file gitignored.
 
 Secrets are stored in K8s Secrets — never in config files, git, or command-line arguments.
 
+LLM credentials are read from the environment by the LLM client factory in priority order: `LLM_API_KEY` (Helm), `LITELLM_API_KEY` (compose), then `OPENAI_API_KEY` (fallback). They must never be placed in pipeline state, because state is captured by MLflow tracing and LangGraph checkpoints. Keys exposed before this fix should be rotated, and pre-fix MLflow traces should be purged.
+
 ```bash
 # Create/update secrets from a local file
 ./deploy/setup/setup-secrets.sh --from-env deploy/config/secrets.env

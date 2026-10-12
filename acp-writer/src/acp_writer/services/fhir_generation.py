@@ -22,7 +22,6 @@ _phi_store = get_phi_store()
 
 LITELLM_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
 LLM_MODEL = os.environ.get("LLM_MODEL", "default")
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "sk-change-me")
 
 
 @app.get("/health")
@@ -60,7 +59,6 @@ async def generate_bundle(request: Request):
         "fhir_review_feedback": data.get("fhir_review_feedback", ""),
         "litellm_url": LITELLM_URL,
         "llm_model": LLM_MODEL,
-        "llm_api_key": LLM_API_KEY,
     }
     state.update(_resolve_prompts(data))
 
@@ -107,7 +105,6 @@ def _run_generate_background(data: dict, callback_url: str, process_instance_id:
             "fhir_review_feedback": data.get("fhir_review_feedback", ""),
             "litellm_url": LITELLM_URL,
             "llm_model": LLM_MODEL,
-            "llm_api_key": LLM_API_KEY,
         }
         state.update(_resolve_prompts(data))
 

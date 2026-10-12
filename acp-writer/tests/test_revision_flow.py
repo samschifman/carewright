@@ -400,8 +400,7 @@ def _run_live_round(payload: dict) -> dict:
     with patch.object(llm_reasoning, "_store", None), \
          patch.object(llm_reasoning, "_phi_store", None), \
          patch.object(llm_reasoning, "LITELLM_URL", _LLM_URL), \
-         patch.object(llm_reasoning, "LLM_MODEL", os.environ.get("LLM_MODEL", "")), \
-         patch.object(llm_reasoning, "LLM_API_KEY", os.environ.get("LLM_API_KEY", "")):
+         patch.object(llm_reasoning, "LLM_MODEL", os.environ.get("LLM_MODEL", "")):
         return llm_reasoning._compose_pipeline(dict(payload))
 
 

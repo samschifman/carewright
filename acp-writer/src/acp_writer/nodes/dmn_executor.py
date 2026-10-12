@@ -359,7 +359,7 @@ def dmn_executor(state: CarePlanComposerState) -> dict:
 
     llm_client = None
     try:
-        from cpg_contracts import get_llm
+        from acp_writer.llm import get_llm
         llm_client = get_llm(state)
     except Exception as exc:
         logger.warning("LLM client unavailable for DMN extraction — degraded mode: %s", exc)

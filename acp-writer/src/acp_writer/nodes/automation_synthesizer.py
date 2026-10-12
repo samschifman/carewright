@@ -10,7 +10,8 @@ from typing import Any, Callable
 from uuid import uuid4
 
 import mlflow
-from cpg_contracts import content_to_text, get_llm
+from cpg_contracts import content_to_text
+from acp_writer.llm import get_llm
 from cpg_contracts.automation.compiler import compile
 from cpg_contracts.automation.instances import ActivityAutomation, Evidence, ParameterBinding
 from cpg_contracts.automation.ir import ProcessIR, TemplateRef, ir_version

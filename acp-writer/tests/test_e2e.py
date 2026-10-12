@@ -117,7 +117,6 @@ class TestEndToEnd:
             "output_dir": str(tmp_path),
             "litellm_url": LITELLM_URL,
             "llm_model": os.environ.get("LLM_MODEL", "default"),
-            "llm_api_key": os.environ.get("LLM_API_KEY", "sk-change-me"),
         })
 
         assert result["patient_reference"] == "Patient/patient-1"
@@ -178,7 +177,6 @@ class TestEndToEnd:
             "output_dir": str(tmp_path),
             "litellm_url": LITELLM_URL,
             "llm_model": os.environ.get("LLM_MODEL", "default"),
-            "llm_api_key": os.environ.get("LLM_API_KEY", "sk-change-me"),
         })
 
         assert result["patient_reference"] == "Patient/patient-2"
@@ -207,7 +205,6 @@ class TestEndToEnd:
             "output_dir": str(tmp_path),
             "litellm_url": LITELLM_URL,
             "llm_model": os.environ.get("LLM_MODEL", "default"),
-            "llm_api_key": os.environ.get("LLM_API_KEY", "sk-change-me"),
         })
 
         # Both CPGs should match the patient's conditions and be retrieved.
@@ -251,7 +248,6 @@ class TestEndToEnd:
             "output_dir": str(tmp_path),
             "litellm_url": LITELLM_URL,
             "llm_model": os.environ.get("LLM_MODEL", "default"),
-            "llm_api_key": os.environ.get("LLM_API_KEY", "sk-change-me"),
         })
 
         assert result["patient_reference"] == "Patient/patient-1"

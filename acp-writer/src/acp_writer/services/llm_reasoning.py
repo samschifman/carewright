@@ -51,7 +51,6 @@ _phi_store = get_phi_store()
 
 LITELLM_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
 LLM_MODEL = os.environ.get("LLM_MODEL", "default")
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "sk-change-me")
 
 
 @app.get("/health")
@@ -174,7 +173,6 @@ async def execute_dmn(request: Request):
         "dmn_dependency_graph": data.get("dmn_dependency_graph", []),
         "litellm_url": LITELLM_URL,
         "llm_model": LLM_MODEL,
-        "llm_api_key": LLM_API_KEY,
     }
 
     import os
@@ -205,7 +203,6 @@ def _run_execute_dmn_background(data: dict, callback_url: str, process_instance_
             "dmn_dependency_graph": data.get("dmn_dependency_graph", []),
             "litellm_url": LITELLM_URL,
             "llm_model": LLM_MODEL,
-            "llm_api_key": LLM_API_KEY,
         }
 
         import os
@@ -233,7 +230,6 @@ async def resolve(request: Request):
         "condition_codes": data.get("condition_codes", []),
         "litellm_url": LITELLM_URL,
         "llm_model": LLM_MODEL,
-        "llm_api_key": LLM_API_KEY,
     }
     result = _resolve_guidelines(state)
     return {
@@ -259,7 +255,6 @@ def _run_resolve_background(data: dict, callback_url: str, process_instance_id: 
             "condition_codes": data.get("condition_codes", []),
             "litellm_url": LITELLM_URL,
             "llm_model": LLM_MODEL,
-            "llm_api_key": LLM_API_KEY,
         }
         result = _resolve_guidelines(state)
         result = {
@@ -404,7 +399,6 @@ def _compose_pipeline(data: dict, strict_store: bool = False) -> dict:
         "applicable_cpgs": data.get("applicable_cpgs", []),
         "litellm_url": LITELLM_URL,
         "llm_model": LLM_MODEL,
-        "llm_api_key": LLM_API_KEY,
         "brief_review_count": 0,
         # Prior brief drives plan_composer revision mode (F17a) — its
         # goals/activities are the revision base and its conflicts feed the
@@ -528,7 +522,6 @@ async def review_fhir(request: Request):
         "fhir_review_count": data.get("fhir_review_count", 0),
         "litellm_url": LITELLM_URL,
         "llm_model": LLM_MODEL,
-        "llm_api_key": LLM_API_KEY,
     }
     result = fhir_semantic_reviewer(state)
     return {
@@ -557,7 +550,6 @@ def _run_review_fhir_background(data: dict, callback_url: str, process_instance_
             "fhir_review_count": data.get("fhir_review_count", 0),
             "litellm_url": LITELLM_URL,
             "llm_model": LLM_MODEL,
-            "llm_api_key": LLM_API_KEY,
         }
         result_state = fhir_semantic_reviewer(state)
         result = {

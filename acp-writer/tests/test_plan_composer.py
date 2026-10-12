@@ -158,7 +158,6 @@ class TestPlanComposer:
             "applicable_cpgs": [{"cpg_id": "SYN-HTN-2026-001"}],
             "litellm_url": "http://localhost:4000",
             "llm_model": "default",
-            "llm_api_key": "sk-test",
         }
 
     @patch("acp_writer.nodes.plan_composer.get_llm")

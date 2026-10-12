@@ -36,6 +36,7 @@ Set `MLFLOW_TRACKING_URI` to point your services at the MLflow server:
 ### cpg-ingester (CLI tools)
 - `parse_cpg_pdf` — Docling PDF parsing
 - LangGraph pipeline nodes (DMN generation/review, recommendation extraction) via `mlflow.langchain.autolog()`
+- Trace inputs are pipeline state and therefore must never contain credentials.
 - `deploy_dmn` — DMN deployment to acp-writer
 
 ## Viewing traces

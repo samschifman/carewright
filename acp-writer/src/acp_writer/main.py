@@ -19,9 +19,8 @@ from acp_writer import api
 @click.argument("bundle_file", type=click.Path(exists=True))
 @click.option("--litellm-url", default=None, help="LiteLLM proxy URL.")
 @click.option("--model", default=None, help="LLM model name.")
-@click.option("--api-key", default=None, help="LLM API key.")
 @click.option("--output-dir", "-o", type=click.Path(), default=None, help="Output directory for artifacts.")
-def main(bundle_file: str, litellm_url: str, model: str, api_key: str, output_dir: str):
+def main(bundle_file: str, litellm_url: str, model: str, output_dir: str):
     """Generate a FHIR CarePlan from a patient IPS Bundle."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -50,7 +49,6 @@ def main(bundle_file: str, litellm_url: str, model: str, api_key: str, output_di
         "output_dir": output_dir,
         "litellm_url": litellm_url or os.environ.get("LITELLM_URL", "http://localhost:4000"),
         "llm_model": model or os.environ.get("LLM_MODEL", "default"),
-        "llm_api_key": api_key or os.environ.get("LLM_API_KEY", "sk-change-me"),
     })
 
     fhir_bundle = result.get("fhir_bundle", {})

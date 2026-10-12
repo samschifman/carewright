@@ -18,6 +18,7 @@ from typing import Any
 
 from acp_writer.benchmark.backends.current import CurrentImplementationBackend
 from acp_writer.benchmark.models import QAAnswer
+from acp_writer.llm import get_llm
 from acp_writer.tools.concept_resolver import resolve as resolve_concept
 from acp_writer.tools.ips_serializer import serialize_ips
 from acp_writer.tools.query_planner import generate_query_plan
@@ -55,16 +56,11 @@ class LLMAssistedBackend(CurrentImplementationBackend):
 
     def _get_llm(self):
         if self._llm is None:
-            from langchain_openai import ChatOpenAI
-
             base_url = os.environ.get("LLM_BASE_URL", os.environ.get("LITELLM_URL", "http://localhost:4000"))
             model = os.environ.get("LLM_MODEL", "default")
-            api_key = os.environ.get("LLM_API_KEY", "not-set")
-            self._llm = ChatOpenAI(
+            self._llm = get_llm(
                 base_url=base_url,
                 model=model,
-                api_key=api_key,
-                use_responses_api=True,
                 max_retries=3,
                 request_timeout=60,
             )

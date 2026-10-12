@@ -140,7 +140,6 @@ def _state() -> dict:
         "medication_codes": [{"display": "Lisinopril"}],
         "litellm_url": LLM_BASE_URL,
         "llm_model": os.environ.get("LLM_MODEL", "default"),
-        "llm_api_key": os.environ.get("LLM_API_KEY", "sk-change-me"),
     }
 
 

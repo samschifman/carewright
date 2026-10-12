@@ -16,7 +16,6 @@ class CarePlanComposerState(TypedDict, total=False):
     output_dir: str
     litellm_url: str
     llm_model: str
-    llm_api_key: str
 
     # Input
     ips_bundle: dict[str, Any]

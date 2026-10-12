@@ -32,7 +32,7 @@ from cpg_contracts.automation.ir import (
     UserTask,
 )
 from cpg_contracts.automation.validators.results import Finding, Severity
-from cpg_contracts.decisions import DecisionModelSummary
+from cpg_contracts.decisions import DecisionModelSummary, normalize_decision_model_summary
 
 
 BPMN_MODEL_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -403,6 +403,10 @@ def validate_catalog(
     dmn_summaries: dict[str, DecisionModelSummary] | None = None,
 ) -> list[Finding]:
     """Check IR task bindings against a capability catalog and known DMNs."""
+    dmn_summaries = {
+        model_id: normalize_decision_model_summary(summary)
+        for model_id, summary in (dmn_summaries or {}).items()
+    }
     process = ir.process
     properties = {prop.name: prop for prop in process.properties}
     parameters = {param.name: param for param in process.acp.parameters}

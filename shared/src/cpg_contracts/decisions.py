@@ -4,6 +4,7 @@ These types define the API contract. Both components depend on this package;
 neither depends on the other.
 """
 
+from collections.abc import Mapping
 from datetime import datetime
 from enum import Enum
 import re
@@ -114,6 +115,20 @@ class DecisionModelSummary(BaseModel):
     modifies: list[str] | None = None
     source_location: SourceLocation | None = None
     namespace: str | None = None
+
+
+def normalize_decision_model_summary(value: object) -> DecisionModelSummary:
+    """Revalidate a decision summary, including nested variables.
+
+    Model instances can contain unvalidated nested dictionaries when they came
+    from stored or wire data. Extracting the raw field values first makes
+    ``model_validate`` rebuild every nested ``DecisionVariable``.
+    """
+    if isinstance(value, BaseModel):
+        value = dict(value)
+    if not isinstance(value, Mapping):
+        raise TypeError("decision model summary must be a mapping or Pydantic model")
+    return DecisionModelSummary.model_validate(dict(value))
 
 
 class DecisionEvaluationRequest(BaseModel):

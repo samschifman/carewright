@@ -4,11 +4,19 @@ from pathlib import Path
 from types import SimpleNamespace
 import json
 
+import pytest
+import requests
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from unittest.mock import Mock
+
 from cpg_contracts.automation.instances import ActivityAutomation
 from cpg_contracts.automation.ir import Parameter, ProcessIR, TemplateRef, ir_version
 from cpg_contracts.automation.templates import AutomationTemplate
 from acp_writer.nodes.automation_synthesizer import _validation_payload, synthesize_for_activity
 from cpg_contracts.automation.validators.grounding import InstanceContext, validate_instance
+from cpg_contracts.decisions import DecisionVariable
+from acp_writer import api
 
 
 GOLDEN = (
@@ -121,7 +129,15 @@ def _activity():
     }
 
 
-def _synthesize(template, llm, *, reviewer=None, use_llm_reviewer=False, state=None):
+def _synthesize(
+    template,
+    llm,
+    *,
+    reviewer=None,
+    use_llm_reviewer=False,
+    state=None,
+    validator=None,
+):
     return synthesize_for_activity(
         _activity(),
         Registry([template]),
@@ -129,7 +145,7 @@ def _synthesize(template, llm, *, reviewer=None, use_llm_reviewer=False, state=N
         brief={"dmn_audit_trail": []},
         state=state or {"patient_demographics": {"name": "Ada Patient"}},
         llm=llm,
-        validator=lambda payload: {"valid": True, "rungs_passed": ["L6"]},
+        validator=validator or (lambda payload: {"valid": True, "rungs_passed": ["L6"]}),
         reviewer=reviewer if use_llm_reviewer else (reviewer or (lambda **_: (True, ""))),
     )
 
@@ -148,6 +164,116 @@ def test_golden_derived_instance_passes_static_and_semantic_checks():
     assert automation.validation.rungs_passed == ["L0", "L1", "L2", "L3", "L4", "L5a", "L6", "L7"]
     assert len(llm.prompts) == 2
     assert "Ada Patient" not in str(llm.prompts)
+
+
+def test_engine_rejection_with_messages_is_a_repairable_l6_finding():
+    template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
+    llm = ScriptedLLM([_output(template), _output(template)])
+    results = iter([
+        {"valid": False, "messages": [{"severity": "ERROR", "text": "engine rejected BPMN"}]},
+        {"valid": True, "messages": []},
+    ])
+
+    automations = _synthesize(template, llm, validator=lambda _payload: next(results))
+
+    assert automations[0].validation.status == "valid"
+    assert len(llm.prompts) == 2
+    assert "kogito-validation" in str(llm.prompts[1])
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        requests.ConnectionError("engine connection failed"),
+        requests.HTTPError(
+            "engine returned HTTP 503",
+            response=Mock(status_code=503),
+        ),
+        HTTPException(status_code=503, detail="engine returned HTTP 503"),
+    ],
+)
+def test_engine_transport_failure_escalates_without_another_model_call(error):
+    template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
+    llm = ScriptedLLM([_output(template)])
+
+    def unavailable(_payload):
+        raise error
+
+    automations = _synthesize(template, llm, validator=unavailable)
+
+    assert automations[0].validation.status == "escalated"
+    assert automations[0].enabled is False
+    assert any("engine" in warning for warning in automations[0].validation.warnings)
+    assert not automations[0].validation.errors
+    assert len(llm.prompts) == 1
+
+
+def test_unexpected_validator_exception_fails_loudly():
+    template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
+    llm = ScriptedLLM([_output(template)])
+
+    def broken(_payload):
+        raise AttributeError("validator implementation bug")
+
+    with pytest.raises(AttributeError, match="validator implementation bug"):
+        _synthesize(template, llm, validator=broken)
+
+    assert len(llm.prompts) == 1
+
+
+def test_replay_dmn_registration_normalizes_nested_variables_before_instance_validation(monkeypatch):
+    template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
+    models = {}
+    monkeypatch.setattr(api, "_dynamic_models", models)
+    parse_dmn = api._parse_dmn_metadata
+
+    def replay_shaped_summary(dmn_xml):
+        summary = parse_dmn(dmn_xml)
+        # Reproduce a deserialized DecisionModelSummary whose nested variables
+        # were left as dictionaries by the artifact/replay path.
+        summary.inputs = [item.model_dump(mode="python") for item in summary.inputs]
+        summary.outputs = [item.model_dump(mode="python") for item in summary.outputs]
+        return summary
+
+    monkeypatch.setattr(api, "_parse_dmn_metadata", replay_shaped_summary)
+    monkeypatch.setattr(api, "_validate_dmn_with_engine", lambda _xml: None)
+    engine_result = Mock(return_value={"valid": True, "messages": []})
+    monkeypatch.setattr(api, "validate_bpmn", engine_result)
+    client = TestClient(api.app)
+
+    dmn_fixtures = Path(__file__).parent / "fixtures/dmn"
+    for name in (
+        "home-bp-blood-pressure-classification.dmn",
+        "home-bp-treatment-recommendation.dmn",
+        "home-bp-monitoring-plan.dmn",
+    ):
+        response = client.post(
+            "/api/v1/decisions/models?source_cpg=SYN-HTN-2026-002",
+            content=(dmn_fixtures / name).read_text(),
+        )
+        assert response.status_code == 201
+
+    summaries = api._automation_dmn_summaries()
+    assert len(summaries) == 3
+    assert all(
+        isinstance(variable, DecisionVariable)
+        for summary in summaries.values()
+        for variable in (*summary.inputs, *summary.outputs)
+    )
+    assert len(api._automation_dmn_namespaces()) == 3
+
+    llm = ScriptedLLM([_output(template), {"verdict": "APPROVE"}])
+    automations = _synthesize(
+        template,
+        llm,
+        use_llm_reviewer=True,
+        validator=api._automation_validation_result,
+    )
+
+    assert automations[0].validation.status == "valid"
+    assert "L6" in automations[0].validation.rungs_passed
+    assert engine_result.call_count == 1
+    assert len(llm.prompts) == 2
 
 
 def test_wrong_model_template_versions_are_replaced_from_selected_snapshot():

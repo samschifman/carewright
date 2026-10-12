@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="blood-pressure-classification"
+             name="Blood Pressure Classification"
+             namespace="https://redhat.com/cpg-to-acp/dmn/blood-pressure-classification">
+  <itemDefinition id="type_blood_pressure_classification" name="tBloodPressureClassification">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["Normal", "Elevated", "Stage 1 Hypertension", "Stage 2 Hypertension"]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <inputData id="input_systolic_bp" name="Systolic BP">
+    <variable id="var_systolic_bp" name="Systolic BP" typeRef="number"/>
+  </inputData>
+  <inputData id="input_diastolic_bp" name="Diastolic BP">
+    <variable id="var_diastolic_bp" name="Diastolic BP" typeRef="number"/>
+  </inputData>
+
+  <decision id="decision_blood_pressure_classification" name="Blood Pressure Classification">
+    <description>Classifies blood pressure using the systolic and diastolic ranges in the guideline's classification table.</description>
+    <variable id="var_blood_pressure_classification" name="Blood Pressure Classification" typeRef="tBloodPressureClassification"/>
+    <informationRequirement id="ir_systolic_bp">
+      <requiredInput href="#input_systolic_bp"/>
+    </informationRequirement>
+    <informationRequirement id="ir_diastolic_bp">
+      <requiredInput href="#input_diastolic_bp"/>
+    </informationRequirement>
+    <decisionTable id="dt_blood_pressure_classification" hitPolicy="UNIQUE" preferredOrientation="Rule-as-Row">
+      <input id="inp_systolic_bp">
+        <inputExpression id="ie_systolic_bp" typeRef="number">
+          <text><![CDATA[Systolic BP]]></text>
+        </inputExpression>
+      </input>
+      <input id="inp_diastolic_bp">
+        <inputExpression id="ie_diastolic_bp" typeRef="number">
+          <text><![CDATA[Diastolic BP]]></text>
+        </inputExpression>
+      </input>
+      <output id="out_classification" name="Classification" typeRef="tBloodPressureClassification"/>
+      <rule id="rule_normal">
+        <description>Normal: systolic below 120 mmHg and diastolic below 80 mmHg.</description>
+        <inputEntry id="ie_normal_systolic"><text><![CDATA[< 120]]></text></inputEntry>
+        <inputEntry id="ie_normal_diastolic"><text><![CDATA[< 80]]></text></inputEntry>
+        <outputEntry id="oe_normal"><text><![CDATA["Normal"]]></text></outputEntry>
+      </rule>
+      <rule id="rule_elevated">
+        <description>Elevated: systolic from 120 through 129 mmHg and diastolic below 80 mmHg.</description>
+        <inputEntry id="ie_elevated_systolic"><text><![CDATA[[120..129]]]></text></inputEntry>
+        <inputEntry id="ie_elevated_diastolic"><text><![CDATA[< 80]]></text></inputEntry>
+        <outputEntry id="oe_elevated"><text><![CDATA["Elevated"]]></text></outputEntry>
+      </rule>
+      <rule id="rule_stage1">
+        <description>Stage 1 Hypertension: systolic from 130 through 139 mmHg and diastolic from 80 through 89 mmHg.</description>
+        <inputEntry id="ie_stage1_systolic"><text><![CDATA[[130..139]]]></text></inputEntry>
+        <inputEntry id="ie_stage1_diastolic"><text><![CDATA[[80..89]]]></text></inputEntry>
+        <outputEntry id="oe_stage1"><text><![CDATA["Stage 1 Hypertension"]]></text></outputEntry>
+      </rule>
+      <rule id="rule_stage2">
+        <description>Stage 2 Hypertension: systolic at least 140 mmHg and diastolic at least 90 mmHg.</description>
+        <inputEntry id="ie_stage2_systolic"><text><![CDATA[>= 140]]></text></inputEntry>
+        <inputEntry id="ie_stage2_diastolic"><text><![CDATA[>= 90]]></text></inputEntry>
+        <outputEntry id="oe_stage2"><text><![CDATA["Stage 2 Hypertension"]]></text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

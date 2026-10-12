@@ -42,7 +42,7 @@ from cpg_contracts.automation.validators.phi import scan_phi
 from cpg_contracts.automation.validators.preflight import validate_preflight
 from cpg_contracts.automation.validators.results import Finding, LadderResult
 from cpg_contracts.automation.validators.xsd import validate_xsd
-from cpg_contracts.decisions import DecisionModelSummary
+from cpg_contracts.decisions import DecisionModelSummary, normalize_decision_model_summary
 
 
 Stage = Literal["template", "instance"]
@@ -281,6 +281,12 @@ def run_static_ladder(
     """Run L0–L5 in order, stopping after the first rung with an error."""
     xml: str | None = None
     preflight_findings: list[Finding] | None = None
+    if dmn_summaries is not None:
+        dmn_summaries = {
+            model_id: normalize_decision_model_summary(summary)
+            for model_id, summary in dmn_summaries.items()
+        }
+
     if isinstance(ir, str):
         xml = ir
         preflight_findings = validate_preflight(xml)

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             id="monitoring-plan"
+             name="Monitoring Plan"
+             namespace="https://redhat.com/cpg-to-acp/dmn/monitoring-plan">
+
+  <inputData id="input_treatment_action" name="Treatment Action">
+    <variable id="var_treatment_action" name="Treatment Action" typeRef="string"/>
+  </inputData>
+
+  <inputData id="input_has_kidney_disease" name="Has Kidney Disease">
+    <variable id="var_has_kidney_disease" name="Has Kidney Disease" typeRef="boolean"/>
+  </inputData>
+
+  <decision id="decision_monitoring_plan" name="Monitoring Plan">
+    <variable id="var_decision_monitoring" name="Monitoring Plan" typeRef="Any"/>
+    <informationRequirement id="ir1">
+      <requiredInput href="#input_treatment_action"/>
+    </informationRequirement>
+    <informationRequirement id="ir2">
+      <requiredInput href="#input_has_kidney_disease"/>
+    </informationRequirement>
+    <decisionTable id="dt_monitoring_plan" hitPolicy="FIRST" preferredOrientation="Rule-as-Row">
+      <input id="input_col_treatment" label="Treatment Action">
+        <inputExpression id="ie_treatment" typeRef="string">
+          <text><![CDATA[Treatment Action]]></text>
+        </inputExpression>
+      </input>
+      <input id="input_col_kidney" label="Has Kidney Disease">
+        <inputExpression id="ie_kidney" typeRef="boolean">
+          <text><![CDATA[Has Kidney Disease]]></text>
+        </inputExpression>
+      </input>
+      <output id="output_lab_order" name="Lab Order" typeRef="string"/>
+      <output id="output_lab_timing_weeks" name="Lab Timing Weeks" typeRef="number"/>
+
+      <!-- Rule 1: Start medication with kidney disease -->
+      <rule id="rule_1">
+        <description>Medication initiated with kidney disease - early lab monitoring</description>
+        <inputEntry id="r1_ie1"><text><![CDATA["Start medication"]]></text></inputEntry>
+        <inputEntry id="r1_ie2"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="r1_oe1"><text><![CDATA["Basic Metabolic Panel"]]></text></outputEntry>
+        <outputEntry id="r1_oe2"><text><![CDATA[2]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 2: Start medication without kidney disease -->
+      <rule id="rule_2">
+        <description>Medication initiated without kidney disease - standard lab monitoring</description>
+        <inputEntry id="r2_ie1"><text><![CDATA["Start medication"]]></text></inputEntry>
+        <inputEntry id="r2_ie2"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r2_oe1"><text><![CDATA["Basic Metabolic Panel"]]></text></outputEntry>
+        <outputEntry id="r2_oe2"><text><![CDATA[4]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 3: Lifestyle modification with kidney disease -->
+      <rule id="rule_3">
+        <description>Lifestyle modification only with kidney disease - no routine labs</description>
+        <inputEntry id="r3_ie1"><text><![CDATA["Lifestyle modification only"]]></text></inputEntry>
+        <inputEntry id="r3_ie2"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="r3_oe1"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r3_oe2"><text><![CDATA[null]]></text></outputEntry>
+      </rule>
+
+      <!-- Rule 4: Lifestyle modification without kidney disease -->
+      <rule id="rule_4">
+        <description>Lifestyle modification only without kidney disease - no routine labs</description>
+        <inputEntry id="r4_ie1"><text><![CDATA["Lifestyle modification only"]]></text></inputEntry>
+        <inputEntry id="r4_ie2"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r4_oe1"><text><![CDATA["-"]]></text></outputEntry>
+        <outputEntry id="r4_oe2"><text><![CDATA[null]]></text></outputEntry>
+      </rule>
+
+    </decisionTable>
+  </decision>
+
+</definitions>

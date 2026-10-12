@@ -11,6 +11,8 @@ from typing import Any, Callable
 from uuid import uuid4
 
 import mlflow
+import requests
+from fastapi import HTTPException
 from cpg_contracts import content_to_text
 from acp_writer.llm import get_llm
 from cpg_contracts.automation.compiler import compile
@@ -458,6 +460,7 @@ def synthesize_for_activity(
         rungs: list[str] = []
         repair_feedback = ""
         static_exhausted = False
+        engine_unavailable = False
 
         # Initial attempt plus at most three static repair rounds.
         for attempt in range(_STATIC_REPAIR_LIMIT + 1):
@@ -511,8 +514,24 @@ def synthesize_for_activity(
             if ladder.ok:
                 try:
                     engine = validator(_validation_payload(candidate, [template_ir], context))
-                except Exception as exc:
-                    engine = {"valid": False, "errors": [f"Kogito validation unavailable: {exc}"]}
+                except requests.RequestException as exc:
+                    final_findings.append(Finding(
+                        rung="L6", severity="WARNING", code="engine-unavailable",
+                        message=f"Kogito validation unavailable: {exc}",
+                    ))
+                    engine_unavailable = True
+                    static_exhausted = True
+                    break
+                except HTTPException as exc:
+                    if not 500 <= exc.status_code < 600:
+                        raise
+                    final_findings.append(Finding(
+                        rung="L6", severity="WARNING", code="engine-unavailable",
+                        message=f"Kogito validation unavailable: {exc.detail}",
+                    ))
+                    engine_unavailable = True
+                    static_exhausted = True
+                    break
                 if engine.get("valid"):
                     if "L6" not in rungs:
                         rungs.append("L6")
@@ -543,7 +562,10 @@ def synthesize_for_activity(
             static_exhausted = True
 
         has_incomplete = any(item.code == "incomplete-binding" for item in final_findings)
-        status = "incomplete" if has_incomplete else ("escalated" if static_exhausted else "valid")
+        status = (
+            "escalated" if engine_unavailable
+            else ("incomplete" if has_incomplete else ("escalated" if static_exhausted else "valid"))
+        )
         review_notes: list[str] = []
 
         if status == "valid":

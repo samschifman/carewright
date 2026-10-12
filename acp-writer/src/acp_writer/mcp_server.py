@@ -12,6 +12,7 @@ from cpg_contracts import (
     RecommendationBundle,
     RecommendationSearchRequest,
 )
+from cpg_contracts.decisions import normalize_decision_model_summary
 
 from acp_writer.api import (
     _automation_registry,
@@ -32,7 +33,7 @@ KOGITO_URL = os.environ.get("KOGITO_URL", "http://localhost:8081")
 @mlflow.trace(name="mcp_deploy_decision_model")
 def deploy_decision_model(dmn_xml: str) -> str:
     """Deploy a DMN decision model to the care plan writer's internal decision engine."""
-    summary = _parse_dmn_metadata(dmn_xml)
+    summary = normalize_decision_model_summary(_parse_dmn_metadata(dmn_xml))
     _dynamic_models[summary.id] = {"summary": summary, "dmn_xml": dmn_xml}
     return json.dumps(summary.model_dump(mode="json"))
 

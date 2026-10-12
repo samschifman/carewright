@@ -333,6 +333,22 @@ def test_dmn_task_names_match_the_supplied_model_summary() -> None:
     assert findings == []
 
 
+@pytest.mark.parametrize("as_model", [True, False])
+def test_dmn_summary_with_nested_dict_variables_is_revalidated(as_model: bool) -> None:
+    summary = dmn_summary()
+    summary.inputs = [item.model_dump(mode="python") for item in summary.inputs]
+    summary.outputs = [item.model_dump(mode="python") for item in summary.outputs]
+    summary_value = summary if as_model else summary.model_dump(mode="python", warnings=False)
+
+    findings = validate_catalog(
+        ir_with_dmn_task(),
+        load_catalog(),
+        {"monitoring-plan": summary_value},
+    )
+
+    assert findings == []
+
+
 def test_dmn_task_model_must_resolve_when_summaries_are_supplied() -> None:
     findings = validate_catalog(ir_with_dmn_task(), load_catalog(), {})
 

@@ -21,8 +21,10 @@ from cpg_contracts import (
     RecommendationBundle,
     RecommendationSearchRequest,
 )
+from cpg_contracts.decisions import normalize_decision_model_summary
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.automation.ir import ProcessIR
+from cpg_contracts.automation.instances import Evidence, ParameterBinding
 from cpg_contracts.automation.validators.grounding import InstanceContext
 from cpg_contracts.automation.validators.ladder import run_static_ladder
 from cpg_contracts.automation.compiler import (
@@ -325,16 +327,17 @@ def validate_bpmn(bpmn_xml: str) -> dict | None:
 
 
 def _automation_dmn_namespaces() -> dict[str, str]:
-    return {
-        model_id: model["summary"].namespace
-        for model_id, model in _dynamic_models.items()
-        if model["summary"].namespace is not None
-    }
+    namespaces: dict[str, str] = {}
+    for model_id, model in _dynamic_models.items():
+        summary = normalize_decision_model_summary(model["summary"])
+        if summary.namespace is not None:
+            namespaces[model_id] = summary.namespace
+    return namespaces
 
 
 def _automation_dmn_summaries() -> dict[str, DecisionModelSummary]:
     return {
-        model_id: model["summary"]
+        model_id: normalize_decision_model_summary(model["summary"])
         for model_id, model in _dynamic_models.items()
     }
 
@@ -359,16 +362,27 @@ def _automation_validation_result(payload: dict) -> dict:
     stage = "template" if process_ir.process.kind == "template" else "instance"
     templates = [ProcessIR.model_validate(item) for item in payload.get("templates", [])]
     context_data = payload.get("context", {})
-    context = InstanceContext(**context_data) if stage == "instance" else None
+    context = None
+    if stage == "instance":
+        context = InstanceContext(
+            bindings=[
+                ParameterBinding.model_validate(item)
+                for item in context_data.get("bindings", [])
+            ],
+            evidence={
+                key: Evidence.model_validate(item)
+                for key, item in context_data.get("evidence", {}).items()
+            },
+            dmn_audit_trail=context_data.get("dmn_audit_trail", []),
+            careplan_feedback=context_data.get("careplan_feedback", ""),
+        )
     result = run_static_ladder(
         xml if xml is not None else process_ir,
         catalog=load_catalog(),
         stage=stage,
         templates=templates if stage == "instance" else None,
         context=context,
-        dmn_summaries={
-            model_id: model["summary"] for model_id, model in _dynamic_models.items()
-        },
+        dmn_summaries=_automation_dmn_summaries(),
         phi_known_values=payload.get("phi_known_values", ()),
     )
     if not result.ok:
@@ -568,7 +582,7 @@ async def deploy_decision_model(
     dmn_xml = body.decode("utf-8")
 
     try:
-        summary = _parse_dmn_metadata(dmn_xml)
+        summary = normalize_decision_model_summary(_parse_dmn_metadata(dmn_xml))
     except ET.ParseError as e:
         raise HTTPException(status_code=400, detail=f"Invalid DMN XML: {e}")
 

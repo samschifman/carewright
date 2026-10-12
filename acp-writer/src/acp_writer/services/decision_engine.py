@@ -27,6 +27,7 @@ from acp_writer.api import (
 )
 from acp_writer.services.automation_registry import router as automation_registry_router
 from acp_writer.tools.dmn_evaluation import DmnEngineError
+from cpg_contracts.decisions import normalize_decision_model_summary
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ async def deploy_decision_model(
 ):
     body = await request.body()
     dmn_xml = body.decode("utf-8")
-    summary = _parse_dmn_metadata(dmn_xml)
+    summary = normalize_decision_model_summary(_parse_dmn_metadata(dmn_xml))
     validation = _validate_dmn_with_engine(dmn_xml)
     if validation is not None and not validation.get("valid", False):
         return _validation_failure_response(validation)

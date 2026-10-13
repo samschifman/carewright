@@ -21,8 +21,8 @@ from cpg_ingester.reference.bpmn_error_patterns import format_bpmn_error_pattern
 logger = logging.getLogger(__name__)
 
 
-def _ensure_template_identity_and_timeout(raw_ir: dict, state: dict) -> dict:
-    """Set stable template identity and add omitted reserved timeout records."""
+def _normalize_template_ir(raw_ir: dict, state: dict) -> dict:
+    """Apply system-owned template fields and deterministic graph repairs."""
     process = raw_ir.get("process")
     if not isinstance(process, dict):
         return raw_ir
@@ -81,6 +81,74 @@ def _ensure_template_identity_and_timeout(raw_ir: dict, state: dict) -> dict:
                 }
             },
         })
+
+    # Make every non-gateway merge explicit before the ProcessIR validator
+    # runs. The ids are reserved by the IR contract so this transformation is
+    # deterministic and cannot collide with authored element ids.
+    nodes = {
+        element.get("id"): element
+        for element in elements
+        if isinstance(element, dict)
+        and element.get("type") != "sequenceFlow"
+        and isinstance(element.get("id"), str)
+    }
+    incoming: dict[str, list[dict]] = {}
+    existing_ids = {
+        element.get("id")
+        for element in elements
+        if isinstance(element, dict) and isinstance(element.get("id"), str)
+    }
+    for element in elements:
+        if isinstance(element, dict) and element.get("type") == "sequenceFlow":
+            target = element.get("targetRef")
+            if isinstance(target, str):
+                incoming.setdefault(target, []).append(element)
+
+    joins: list[dict] = []
+    for node_id, node in sorted(nodes.items()):
+        flows = sorted(incoming.get(node_id, []), key=lambda flow: str(flow.get("id", "")))
+        if len(flows) <= 1 or (
+            node.get("type") == "exclusiveGateway"
+            and node.get("gatewayDirection") == "Converging"
+        ):
+            continue
+
+        gateway_id = f"{node_id}_join"
+        flow_id = f"{node_id}_join_in"
+        collisions = sorted({gateway_id, flow_id}.intersection(existing_ids))
+        if collisions:
+            raise ValueError(
+                f"cannot insert explicit join before {node_id!r}; generated id collision: "
+                + ", ".join(collisions)
+            )
+
+        supports = sorted(flow["sourceRef"] for flow in flows if isinstance(flow.get("sourceRef"), str))
+        for flow in flows:
+            flow["targetRef"] = gateway_id
+        provenance = {
+            "kind": "structural",
+            "derivation_rule": "exclusive-join",
+            "supports": supports,
+        }
+        joins.extend([
+            {
+                "id": gateway_id,
+                "name": f"Join before {node.get('name') or node_id}",
+                "type": "exclusiveGateway",
+                "gatewayDirection": "Converging",
+                "acp": {"provenance": provenance},
+            },
+            {
+                "id": flow_id,
+                "name": "",
+                "type": "sequenceFlow",
+                "sourceRef": gateway_id,
+                "targetRef": node_id,
+            },
+        ])
+        existing_ids.update((gateway_id, flow_id))
+
+    elements.extend(joins)
     return raw_ir
 
 
@@ -181,7 +249,7 @@ def bpmn_ir_creator(state: dict) -> dict:
         raw_ir = _parse_llm_json(content_to_text(response.content))
         if not isinstance(raw_ir, dict):
             raise ValueError("ProcessIR response must be a JSON object")
-        raw_ir = _ensure_template_identity_and_timeout(raw_ir, state)
+        raw_ir = _normalize_template_ir(raw_ir, state)
     except (json.JSONDecodeError, ValueError, TypeError) as exc:
         logger.warning("ProcessIR creator returned invalid JSON for %s: %s", name, exc)
         raw_ir = {}

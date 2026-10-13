@@ -49,6 +49,8 @@ RESERVED_ELEMENT_IDS = frozenset(
         "f_completed",
     }
 )
+RESERVED_ELEMENT_SUBSTRINGS = ("_counter", "_reset", "_outcome", "_route")
+RESERVED_GENERATED_ELEMENT_SUFFIXES = ("_join", "_join_in")
 RESERVED_PARAMETERS = ("max_duration",)
 
 
@@ -321,6 +323,20 @@ FlowElement: TypeAlias = Annotated[
 ]
 
 
+def _is_generated_join_gateway(element: FlowElement) -> bool:
+    provenance = element.acp.provenance
+    if not (
+        isinstance(provenance, StructuralProvenance)
+        and provenance.derivation_rule == "exclusive-join"
+    ):
+        return False
+    return (
+        isinstance(element, ExclusiveGateway)
+        and element.gatewayDirection == "Converging"
+        and element.id.endswith("_join")
+    )
+
+
 class Trigger(StrictModel):
     kind: Literal["dmn-output", "recommendation"]
     model_id: str | None = None
@@ -427,6 +443,31 @@ class Process(StrictModel):
         flow_by_id = {flow.id: flow for flow in flows}
         incoming: dict[str, list[SequenceFlow]] = {}
         outgoing: dict[str, list[SequenceFlow]] = {}
+
+        join_elements = [
+            element for element in elements
+            if element.id.endswith(RESERVED_GENERATED_ELEMENT_SUFFIXES)
+            and not (
+                isinstance(element, SequenceFlow)
+                and element.id.endswith("_join")
+            )
+        ]
+        invalid_join_elements = [
+            element for element in join_elements
+            if (
+                element.id.endswith("_join")
+                and not _is_generated_join_gateway(element)
+            ) or (
+                element.id.endswith("_join_in")
+                and not isinstance(element, SequenceFlow)
+            )
+        ]
+        if invalid_join_elements:
+            element = invalid_join_elements[0]
+            raise ValueError(
+                f"element id {element.id!r} contains compiler-reserved sequence '_join'"
+            )
+
         for flow in flows:
             if flow.sourceRef not in node_by_id:
                 raise ValueError(
@@ -438,6 +479,42 @@ class Process(StrictModel):
                 )
             outgoing.setdefault(flow.sourceRef, []).append(flow)
             incoming.setdefault(flow.targetRef, []).append(flow)
+
+        join_gateways = [
+            element for element in join_elements
+            if isinstance(element, ExclusiveGateway) and element.id.endswith("_join")
+        ]
+        expected_join_flow_ids: set[str] = set()
+        for gateway in join_gateways:
+            target_id = gateway.id.removesuffix("_join")
+            flow_id = f"{target_id}_join_in"
+            generated_flow = flow_by_id.get(flow_id)
+            gateway_incoming = incoming.get(gateway.id, [])
+            supports = sorted(flow.sourceRef for flow in gateway_incoming)
+            if (
+                not target_id
+                or "_join" in target_id
+                or target_id not in node_by_id
+                or generated_flow is None
+                or generated_flow.sourceRef != gateway.id
+                or generated_flow.targetRef != target_id
+                or len(gateway_incoming) <= 1
+                or gateway.acp.provenance.supports != supports
+            ):
+                raise ValueError(
+                    f"generated join {gateway.id!r} must merge the incoming flows to "
+                    f"{target_id!r} through {flow_id!r} with matching structural provenance"
+                )
+            expected_join_flow_ids.add(flow_id)
+
+        actual_join_flow_ids = {
+            element.id
+            for element in elements
+            if isinstance(element, SequenceFlow) and element.id.endswith("_join_in")
+        }
+        if actual_join_flow_ids != expected_join_flow_ids:
+            unmatched = sorted(actual_join_flow_ids.symmetric_difference(expected_join_flow_ids))
+            raise ValueError(f"generated join flow id(s) do not match their gateways: {', '.join(unmatched)}")
 
         for node in nodes:
             if not node.name.strip():
@@ -546,11 +623,25 @@ class Process(StrictModel):
                 raise ValueError(
                     f"element id {element.id!r} uses compiler-reserved prefix 'main_'"
                 )
-            for marker in ("_counter", "_reset", "_outcome", "_route"):
+            for marker in RESERVED_ELEMENT_SUBSTRINGS:
                 if marker in element.id:
                     raise ValueError(
                         f"element id {element.id!r} contains compiler-reserved sequence {marker!r}"
                     )
+            if element.id.endswith(RESERVED_GENERATED_ELEMENT_SUFFIXES):
+                if isinstance(element, SequenceFlow) and element.id.endswith("_join"):
+                    # Appendix B uses this legacy ordinary flow id; it is not
+                    # either of the normalizer's generated ID forms.
+                    continue
+                if element.id.endswith("_join") and _is_generated_join_gateway(element):
+                    continue
+                if element.id.endswith("_join_in") and isinstance(element, SequenceFlow):
+                    # validate_structure checks that this is the generated
+                    # edge for a matching converging gateway.
+                    continue
+                raise ValueError(
+                    f"element id {element.id!r} contains compiler-reserved sequence '_join'"
+                )
         for prop in self.properties:
             self._check_identifier(prop.name, "property name")
             if prop.name == "outcome":

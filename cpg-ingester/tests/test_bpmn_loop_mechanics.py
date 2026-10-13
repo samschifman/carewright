@@ -6,6 +6,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.ir import ProcessIR
+from cpg_contracts.automation.validators.ladder import run_static_ladder
 from cpg_ingester.generation import (
     _build_bpmn_subgraph,
     _bpmn_escalate,
@@ -14,7 +17,7 @@ from cpg_ingester.generation import (
     bpmn_engine_preflight,
     generate_all,
 )
-from cpg_ingester.nodes.bpmn_ir_creator import _ensure_template_identity_and_timeout
+from cpg_ingester.nodes.bpmn_ir_creator import _normalize_template_ir
 from cpg_ingester.nodes.dmn_creator import dmn_creator
 from cpg_ingester.nodes.rec_extractor import rec_extractor
 
@@ -50,6 +53,19 @@ def _implicit_join(ir):
         "sourceRef": start["id"],
         "targetRef": task["id"],
     })
+    return changed
+
+
+def _reserved_join_id(ir):
+    changed = deepcopy(ir)
+    old_id = "request_readings"
+    new_id = "request_readings_join"
+    for element in changed["process"]["flowElements"]:
+        if element.get("id") == old_id:
+            element["id"] = new_id
+        for field in ("sourceRef", "targetRef", "attachedToRef"):
+            if element.get(field) == old_id:
+                element[field] = new_id
     return changed
 
 
@@ -127,23 +143,28 @@ def test_golden_is_accepted_on_first_creation_attempt(tmp_path, monkeypatch):
     assert (response_dir / "reviewer-001.json").is_file()
 
 
-def test_implicit_join_repair_receives_l0_finding(tmp_path, monkeypatch):
-    llm = ScriptedLLM([
-        json.dumps(_implicit_join(_ir())),
-        json.dumps(_ir()),
-        _review(),
-    ])
+def test_implicit_join_is_normalized_before_l0(tmp_path):
+    normalized = _normalize_template_ir(
+        _implicit_join(_ir()),
+        _state(tmp_path),
+    )
+    ir = ProcessIR.model_validate(normalized)
+    result = run_static_ladder(
+        ir,
+        catalog=load_catalog(),
+        stage="template",
+        section_text=SOURCE_TEXT,
+    )
+    elements = {element["id"]: element for element in normalized["process"]["flowElements"]}
 
-    result = _invoke(llm, tmp_path, monkeypatch)
-
-    assert result["escalated"] is False
-    assert len(llm.calls) == 3
-    assert "L0" in llm.calls[1][1]["content"]
-    assert "implicit join" in llm.calls[1][1]["content"]
+    assert result.rungs_passed and result.rungs_passed[0] == "L0"
+    assert elements["request_readings_join"]["gatewayDirection"] == "Converging"
+    assert elements["request_readings_join_in"]["sourceRef"] == "request_readings_join"
+    assert elements["request_readings_join_in"]["targetRef"] == "request_readings"
 
 
 def test_three_invalid_irs_exhaust_static_budget(tmp_path, monkeypatch):
-    invalid = _implicit_join(_ir())
+    invalid = _reserved_join_id(_ir())
     llm = ScriptedLLM([json.dumps(invalid)] * 3)
 
     result = _invoke(llm, tmp_path, monkeypatch)
@@ -169,7 +190,7 @@ def test_two_critical_reviews_exhaust_semantic_budget(tmp_path, monkeypatch):
 def test_static_failures_after_semantic_review_retry_and_escalate_at_l0(
     tmp_path, monkeypatch
 ):
-    invalid = _implicit_join(_ir())
+    invalid = _reserved_join_id(_ir())
     creator = ScriptedLLM([
         json.dumps(invalid),
         json.dumps(_ir()),
@@ -186,7 +207,7 @@ def test_static_failures_after_semantic_review_retry_and_escalate_at_l0(
     assert result["static_retry_count"] == 3
     assert result["escalated"] is True
     assert result["escalation_reason"] == "static-budget-exhausted"
-    assert any("implicit join" in error for error in result["escalation_errors"])
+    assert any("compiler-reserved sequence '_join'" in error for error in result["escalation_errors"])
     assert any(
         finding.get("rung") == "L0"
         for finding in result["static_findings"]
@@ -320,7 +341,7 @@ def test_creator_adds_omitted_reserved_timeout_and_boundary():
         if not (value["type"] == "boundaryEvent" and value["attachedToRef"] == "main")
     ]
 
-    result = _ensure_template_identity_and_timeout(raw_ir, _state(Path("/tmp")))
+    result = _normalize_template_ir(raw_ir, _state(Path("/tmp")))
     parameters = result["process"]["acp"]["parameters"]
     boundary = next(
         value for value in result["process"]["flowElements"]
@@ -335,6 +356,70 @@ def test_creator_adds_omitted_reserved_timeout_and_boundary():
     assert boundary["id"] == "period_elapsed"
     assert boundary["timerEventDefinition"]["timeDuration"] == {"param": "max_duration"}
     assert set(boundary["acp"]["provenance"]["supports"]) == task_ids
+
+
+def test_saved_home_bp_implicit_join_is_normalized_before_l0(tmp_path):
+    saved_ir = Path(__file__).resolve().parents[2] / "working" / "slice-run" / "ingester" / "20261012T130810Z-28693" / "bpmn" / "home-blood-pressure-monitoring.ir.json"
+    raw_ir = json.loads(saved_ir.read_text())
+
+    normalized = _normalize_template_ir(raw_ir, _state(tmp_path))
+    ir = ProcessIR.model_validate(normalized)
+    result = run_static_ladder(
+        ir,
+        catalog=load_catalog(),
+        stage="template",
+        section_text=SOURCE_TEXT,
+    )
+
+    elements = {element["id"]: element for element in normalized["process"]["flowElements"]}
+    join = elements["end_reviewed_join"]
+    join_flow = elements["end_reviewed_join_in"]
+    assert result.rungs_passed and result.rungs_passed[0] == "L0"
+    assert join["type"] == "exclusiveGateway"
+    assert join["gatewayDirection"] == "Converging"
+    assert join["acp"]["provenance"] == {
+        "kind": "structural",
+        "derivation_rule": "exclusive-join",
+        "supports": ["gw_notify", "period_elapsed"],
+    }
+    assert join_flow["sourceRef"] == "end_reviewed_join"
+    assert join_flow["targetRef"] == "end_reviewed"
+    assert elements["f_no_notification"]["targetRef"] == "end_reviewed_join"
+    assert elements["f_timeout"]["targetRef"] == "end_reviewed_join"
+
+
+def test_existing_converging_gateway_is_not_rewritten(tmp_path):
+    raw_ir = _ir()
+    original_elements = {element["id"]: deepcopy(element) for element in raw_ir["process"]["flowElements"]}
+    original_gateway = original_elements["loop_entry"]
+    original_incoming = {
+        element_id: element
+        for element_id, element in original_elements.items()
+        if element.get("type") == "sequenceFlow" and element.get("targetRef") == "loop_entry"
+    }
+
+    normalized = _normalize_template_ir(raw_ir, _state(tmp_path))
+    normalized_elements = {
+        element["id"]: element for element in normalized["process"]["flowElements"]
+    }
+
+    assert normalized_elements["loop_entry"] == original_gateway
+    assert {
+        element_id: normalized_elements[element_id]
+        for element_id in original_incoming
+    } == original_incoming
+
+
+def test_appendix_b_fixture_is_unchanged_by_join_normalization(tmp_path):
+    fixture = Path(__file__).resolve().parents[2] / "shared" / "tests" / "fixtures" / "automation" / "home-bp-monitoring.ir.json"
+    raw_ir = json.loads(fixture.read_text())
+    state = _state(tmp_path)
+    state["item"]["template_id"] = raw_ir["process"]["id"]
+    state["item"]["name"] = raw_ir["process"]["name"]
+
+    normalized = _normalize_template_ir(raw_ir, state)
+
+    assert normalized == raw_ir
 
 
 def test_generate_all_passes_linked_dmn_namespace_and_recommendation():

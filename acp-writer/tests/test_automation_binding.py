@@ -59,12 +59,14 @@ def test_resolves_concepts_to_codes_and_plan_derived_bindings():
     )
 
     query = next(element for element in result.process.flowElements if element.id == "query_systolic")
-    assert query.inputs["code"].literal == "http://loinc.org|8480-6"
+    source_query = next(element for element in template.process.flowElements if element.id == "query_systolic")
+    assert query.inputs == source_query.inputs
     request = next(element for element in result.process.flowElements if element.id == "request_readings")
-    assert request.inputs["code"].literal == "http://loinc.org|85354-9"
+    source_request = next(element for element in template.process.flowElements if element.id == "request_readings")
+    assert request.inputs == source_request.inputs
     code_binding = next(binding for binding in bindings if binding.name == "query_systolic__code")
     assert code_binding.source == "plan-derived"
-    assert code_binding.value == query.inputs["code"].literal
+    assert code_binding.value == "http://loinc.org|8480-6"
     assert next(binding for binding in bindings if binding.name == "max_duration").value == "P90D"
     assert evidence["ev-monitoring-period"].payload["value"] == "P90D"
     assert not [finding for finding in findings if finding.code == "invalid-binding"]

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import { renderWithRouter } from "@app/test/renderWithRouter";
+import { sliceCarePlanDetail } from "@app/mocks/fixtures";
 import { CarePlanDetail } from "../CarePlanDetail";
 
 vi.mock("@cpg-to-acp/ui-shared", async (importOriginal) => {
@@ -18,10 +19,12 @@ describe("slice care-plan fixture", () => {
       initialPath: "/careplans/slice-careplan-example",
     });
     expect(await screen.findByRole("heading", { level: 1, name: "Care Plan — Ada Lovelace" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Activities (1)" }));
+    fireEvent.click(screen.getByRole("tab", {
+      name: `Activities (${sliceCarePlanDetail.view.activities.length})`,
+    }));
     fireEvent.click(screen.getByRole("button", { name: /automations \(1\)/i }));
     expect(screen.getByText("home-bp-monitoring")).toBeInTheDocument();
-    expect(screen.getByText("SYN-HTN-2026-002")).toBeInTheDocument();
+    expect(screen.getAllByText("SYN-HTN-2026-002").length).toBeGreaterThan(0);
     expect(screen.getByRole("switch", { name: /enable automation/i })).toBeDisabled();
     expect(screen.getByLabelText("home-bp-monitoring BPMN")).toBeInTheDocument();
   });

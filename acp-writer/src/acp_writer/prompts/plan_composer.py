@@ -24,13 +24,26 @@ is code with no LLM, your output must be unambiguous and complete.
 ## Rules
 - Every activity MUST trace back to a source recommendation (by ID) and CPG.
 - Every goal MUST have a measurable target when clinically appropriate.
-- NEVER fabricate FHIR codes from memory — use the terminology lookup results \
-provided in the context. If no code was found, leave the code field as null.
-- Medication activities MUST include: drug name, dose (e.g. "10 mg"), \
-route (e.g. "oral"), and frequency (e.g. "daily"). Missing any of these \
+- Codes must come from the terminology lookup results provided in the context, \
+not from the model's memory or inference. If no code was found, leave the code \
+field as null.
+- Medication activities MUST include: drug name, dose, route, and frequency. \
+Missing any of these \
 will cause a review rejection.
+- When multiple rows or recommendations from the SAME CPG specify the same \
+medication, dose, route, and frequency, create one medication activity and \
+preserve every source recommendation id in source_recommendation_ids. State \
+the applicable decision criteria together so the single regimen does not \
+lose its prerequisites. Do not merge genuinely different regimens or \
+recommendations from different CPGs.
+- Use each decision model's outputs as the timing or criteria for the \
+activities they govern; keep distinct follow-ups distinct.
+- Preserve conditional recommendations and do not infer patient attributes \
+that are not provided.
+- Use gender-neutral wording unless the patient's preferred pronouns are \
+  explicitly provided; never infer pronouns from a name or FHIR gender.
 - Monitoring activities MUST include: what to monitor and frequency \
-(e.g. "4 weeks", "monthly").
+(using the interval supported by the source).
 - Lifestyle activities need: specific actionable description.
 - Activity "type" MUST be exactly one of: medication, monitoring, lifestyle, \
 referral, educational, process. No other values are accepted — the downstream \
@@ -58,13 +71,17 @@ one to another, and do NOT add editorial caveats that neutralize a \
 recommendation (e.g. calling one target "contextual guidance only").
 - Each conflicting item keeps its OWN source_recommendation_id and source_cpg \
 so the conflict is traceable to its guidelines.
-- This applies to: contradictory directives (e.g. one CPG says titrate a drug \
-UP, another says reduce its dose) — emit BOTH activities; divergent goal \
-targets (e.g. BP <140/90 vs <130/80) — emit BOTH goals; divergent schedules; \
-and duplicative activities from different CPGs (e.g. two healthy-diet recs) — \
+- This applies to: contradictory directives (e.g. one CPG says increase a \
+treatment dose, another says reduce it) — emit BOTH activities; divergent goal \
+targets for the same measure — emit BOTH goals; divergent schedules; and \
+duplicative activities from different CPGs (e.g. similar lifestyle guidance) — \
 emit BOTH, each attributed to its CPG.
 - Do not editorialize which guideline "wins." Leaving conflicting items intact \
 is correct and expected; the reviewing clinician decides.
+- The rule above applies to distinct recommendations across CPGs and to \
+genuinely different directives. Same-CPG DMN rows that specify one identical \
+drug regimen are represented once, with all applicable decision criteria and \
+source recommendation ids preserved.
 """
 
 PLAN_COMPOSER_REVISION = """\
@@ -101,29 +118,29 @@ PLAN_COMPOSER_EXAMPLES = """\
 ## Example: Correct Medication Activity
 {{
   "type": "medication",
-  "description": "Start Lisinopril 10mg daily for blood pressure control",
-  "code": {{"system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "29046", "display": "Lisinopril"}},
-  "dose": "10 mg",
-  "route": "oral",
-  "frequency": "daily",
+  "description": "Use the medication specified by the applicable source recommendation",
+  "code": {{"system": "<terminology system>", "code": "<looked-up code>", "display": "<display>"}},
+  "dose": "<source-defined dose>",
+  "route": "<source-defined route>",
+  "frequency": "<source-defined frequency>",
   "source_recommendation_id": "rec-abc-123",
-  "source_cpg": "SYN-HTN-2026-001",
+  "source_cpg": "CPG-ID",
   "source_dmn_call": 0,
-  "clinical_rationale": "DMN model recommended initiating ACE inhibitor therapy based on Stage 2 hypertension classification",
+  "clinical_rationale": "Selected based on the applicable decision output and source recommendation",
   "workflow": {{
-    "actor": "prescribing_physician",
-    "escalation": "If blood pressure not at target (<140/90 mmHg) after 4 weeks, consider dose increase or adding second agent",
-    "monitoring_trigger": "Order BMP in 2 weeks to check renal function and electrolytes"
+    "actor": "responsible_clinician",
+    "escalation": "If the source-defined criterion is not met...",
+    "monitoring_trigger": "Perform the source-defined monitoring activity at its stated interval"
   }}
 }}
 
-## Example: Correct Goal with Target
+## Example: Correct Goal with a Source-Defined Target
 {{
-  "description": "Lower blood pressure to target range",
-  "target_measure_code": {{"system": "http://loinc.org", "code": "8480-6", "display": "Systolic blood pressure"}},
-  "target_value": {{"high": 140, "unit": "mmHg"}},
+  "description": "Reach the source-defined target for the applicable measure",
+  "target_measure_code": {{"system": "<terminology system>", "code": "<looked-up code>", "display": "<display>"}},
+  "target_value": {{"high": "<source-defined value>", "unit": "<source-defined unit>"}},
   "source_recommendation_id": "rec-xyz-456",
-  "source_cpg": "SYN-HTN-2026-001"
+  "source_cpg": "CPG-ID"
 }}
 """
 
@@ -170,9 +187,10 @@ Respond with a JSON object matching this schema exactly:
   "goals": [
     {{
       "description": "Goal description",
-      "target_measure_code": {{"system": "http://loinc.org", "code": "...", "display": "..."}} or null,
-      "target_value": {{"high": 140, "unit": "mmHg"}} or null,
+      "target_measure_code": {{"system": "<terminology system>", "code": "<looked-up code>", "display": "<display>"}} or null,
+      "target_value": {{"high": "<source-defined value>", "unit": "<source-defined unit>"}} or null,
       "source_recommendation_id": "rec-guid" or null,
+      "source_recommendation_ids": ["rec-guid", "rec-guid-2"],
       "source_cpg": "CPG-ID"
     }}
   ],
@@ -180,20 +198,21 @@ Respond with a JSON object matching this schema exactly:
     {{
       "type": "medication|monitoring|lifestyle|referral|educational|process",  // ONLY these six values — no others
       "description": "Activity description",
-      "code": {{"system": "...", "code": "...", "display": "..."}} or null,
-      "dose": "10 mg" or null,
-      "route": "oral" or null,
-      "frequency": "daily" or null,
+      "code": {{"system": "<terminology system>", "code": "<looked-up code>", "display": "<display>"}} or null,
+      "dose": "<source-defined dose>" or null,
+      "route": "<source-defined route>" or null,
+      "frequency": "<source-defined frequency>" or null,
       "specialty": null,
       "source_recommendation_id": "rec-guid" or null,
+      "source_recommendation_ids": ["rec-guid", "rec-guid-2"],
       "source_cpg": "CPG-ID",
       "source_dmn_call": 0 or null,
       "clinical_rationale": "Why this activity",
       "workflow": {{
-        "actor": "prescribing_physician" or null,
+        "actor": "<responsible actor>" or null,
         "sequence_after": null,
-        "escalation": "If not at target after 4 weeks..." or null,
-        "monitoring_trigger": "BMP in 4 weeks..." or null
+        "escalation": "If the source-defined criterion is not met..." or null,
+        "monitoring_trigger": "Perform the source-defined monitoring activity at its stated interval" or null
       }} or null
     }}
   ],

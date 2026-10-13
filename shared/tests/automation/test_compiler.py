@@ -97,7 +97,9 @@ def test_task_io_contains_only_ir_mappings_plus_taskname() -> None:
         "unit",
         "TaskName",
     }
-    assert io_names("query_diastolic", "Output") == {"average_value"}
+    assert io_names("query_diastolic", "Output") == {
+        "average_value", "consecutive_days", "max_value"
+    }
 
     process_properties = set(
         root.xpath(".//bpmn2:process/bpmn2:property/@name", namespaces=NS)

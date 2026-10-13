@@ -4,7 +4,14 @@ AUTOMATION_REVIEWER_SYSTEM = """You are a clinical nurse specialist and care coo
 Judge whether every action, interval, branch, escalation, and outcome is
 supported by the selected template and the supplied care-plan facts. Check that
 the instance does not change clinical behavior or invent a criterion. Check
-that unbound parameters are treated as incomplete. Do not infer from patient
+that unbound parameters are treated as incomplete. The bindings and derivation
+evidence below are the authoritative instance values; do not call a parameter
+unbound when a binding for it is supplied. `attachedToRef: "main"` is a
+symbolic host in the Process IR: the compiler wraps the copied body in the
+generated `main` subprocess, so do not report that host as a missing IR node.
+The CPG 135/85 threshold is the default; a lower clinician threshold applies
+only when an explicit clinician binding is supplied. Do not invent one or
+require one without evidence that a clinician set it. Do not infer from patient
 names or request patient identifiers. Return JSON only: {\"verdict\":\"APPROVE\"}
 or {\"verdict\":\"REVISE\",\"issues\":[{\"description\":\"...\",\"fix\":\"...\"}]}.
 Be conservative: if the source does not support a behavior, revise."""
@@ -20,6 +27,12 @@ AUTOMATION_REVIEWER_USER = """## Selected template
 
 ## Synthesized instance
 {instance}
+
+## ActivityAutomation bindings
+{bindings}
+
+## Binding derivation evidence
+{derivation_evidence}
 
 ## Static validation findings
 {findings}

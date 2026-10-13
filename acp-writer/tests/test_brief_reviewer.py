@@ -29,6 +29,7 @@ def _valid_brief() -> dict:
             {
                 "type": "medication",
                 "description": "Lisinopril 10mg daily",
+                "code": {"system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "314076", "display": "lisinopril 10 MG Oral Tablet"},
                 "dose": "10 mg",
                 "route": "oral",
                 "frequency": "daily",
@@ -82,6 +83,12 @@ class TestSchemaValidation:
         del brief["activities"][0]["dose"]
         errors = _schema_validate(brief)
         assert any("dose" in e.lower() for e in errors)
+
+    def test_medication_without_code_is_rejected(self):
+        brief = _valid_brief()
+        brief["activities"][0]["code"] = None
+        errors = _schema_validate(brief)
+        assert any("coded medication concept" in e.lower() for e in errors)
 
 
 class TestBriefReviewer:

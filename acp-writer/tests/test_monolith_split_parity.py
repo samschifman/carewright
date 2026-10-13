@@ -17,7 +17,6 @@ from pathlib import Path
 from types import SimpleNamespace
 import json
 
-from cpg_contracts.automation.ir import TemplateRef
 from cpg_contracts.automation.templates import AutomationTemplate
 from acp_writer.nodes.automation_synthesizer import synthesize_automations_for_brief
 from .pipeline_helpers import build_pipeline
@@ -81,15 +80,7 @@ def test_monolith_and_split_compose_share_automation_synthesis_result(monkeypatc
     )
     golden = Path(__file__).parent / "fixtures/home-bp-monitoring.template.json"
     template = AutomationTemplate.model_validate_json(golden.read_text())
-    instance = template.ir.model_copy(deep=True)
-    instance.process.id = "instance_home_bp"
-    instance.process.kind = "instance"
-    instance.process.acp.template_refs = [TemplateRef(
-        template_id=template.summary.id,
-        version=template.summary.version,
-        source_cpg=template.summary.source_cpg,
-    )]
-    response = {"ir": instance.model_dump(mode="json", exclude_none=True), "bindings": []}
+    response = {"bindings": []}
     brief = {
         "patient_reference": "Patient/example",
         "applicable_cpgs": [template.summary.source_cpg],

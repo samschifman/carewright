@@ -34,6 +34,7 @@ def _automation(*, enabled: bool = True) -> ActivityAutomation:
     bpmn = compile(ir)
     bindings = [
         ParameterBinding(name="reporting_interval", value="P1W", source="cpg-default"),
+        ParameterBinding(name="repeat_due", value="PT5M", source="cpg-default"),
         ParameterBinding(name="notify_systolic_threshold", value=135, source="clinician", unit="mm[Hg]"),
         ParameterBinding(name="max_reminder_attempts", value=3, source="cpg-default"),
         ParameterBinding(name="max_duration", value="P90D", source="plan-derived"),
@@ -133,6 +134,12 @@ def test_enabled_automation_has_exact_document_reference_task_extension_and_prov
     assert inputs[0]["valueReference"]["reference"] == f"urn:uuid:{docref['id']}"
     values = {item["type"].get("text"): item for item in inputs[1:]}
     assert values["reporting_interval"]["valueDuration"]["value"] == 7
+    assert values["repeat_due"]["valueDuration"] == {
+        "value": 5,
+        "unit": "minute",
+        "system": "http://unitsofmeasure.org",
+        "code": "min",
+    }
     assert values["notify_systolic_threshold"]["valueQuantity"]["code"] == "mm[Hg]"
     assert values["max_reminder_attempts"]["valueInteger"] == 3
     assert values["reminder_text"]["valueString"] == "Submit home readings."

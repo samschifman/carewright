@@ -2,14 +2,21 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from acp_writer.nodes.plan_composer import (
+    _ensure_clinical_follow_up,
     _format_conditions,
     _format_demographics,
     _format_recommendations,
+    _merge_goals_for_merged_regimens,
+    _merge_same_cpg_medication_regimens,
+    _resolve_missing_medication_codes,
+    _neutralize_unprovided_pronouns,
+    _normalize_source_bound_safety_text,
     _parse_brief_from_response,
     _sanitize_provenance,
     plan_composer,
@@ -134,6 +141,97 @@ class TestSanitizeProvenance:
         data = {"goals": [{"description": "g", "source_cpg": "SYN-HTN-2026-001"}], "activities": []}
         _sanitize_provenance(data, "AHA-HTN-2023")
         assert data["goals"][0]["source_cpg"] == "SYN-HTN-2026-001"
+
+
+class TestDeterministicClinicalNormalization:
+    def _duplicate_regimen_brief(self):
+        return {
+            "goals": [
+                {"description": "Initiate lisinopril for confirmed high BP.", "source_recommendation_id": "rec-a", "source_cpg": "SYN-HTN-2026-002"},
+                {"description": "Initiate lisinopril for high BP with diabetes.", "source_recommendation_id": "rec-b", "source_cpg": "SYN-HTN-2026-002"},
+            ],
+            "activities": [
+                {"type": "medication", "description": "Start lisinopril 10 mg after confirmed BP.", "dose": "10 mg", "route": "oral", "frequency": "daily", "source_recommendation_id": "rec-a", "source_cpg": "SYN-HTN-2026-002"},
+                {"type": "medication", "description": "Start lisinopril 10 mg when BP and diabetes criteria are met.", "dose": "10 mg", "route": "oral", "frequency": "daily", "source_recommendation_id": "rec-b", "source_cpg": "SYN-HTN-2026-002"},
+                {"type": "lifestyle", "description": "DASH diet", "source_recommendation_id": "rec-c", "source_cpg": "SYN-HTN-2026-002"},
+            ],
+        }
+
+    @patch("acp_writer.nodes.plan_composer.resolve")
+    def test_same_cpg_rows_use_resolver_and_preserve_sources(self, resolver):
+        resolver.return_value = SimpleNamespace(
+            action="extract_medication", system="resolver-system", code="resolver-code"
+        )
+        brief = self._duplicate_regimen_brief()
+        _resolve_missing_medication_codes(brief)
+        assert resolver.call_count == 2
+        groups = _merge_same_cpg_medication_regimens(brief)
+        _merge_goals_for_merged_regimens(brief, groups)
+
+        meds = [a for a in brief["activities"] if a["type"] == "medication"]
+        assert len(meds) == 1
+        assert meds[0]["code"] == {"system": "resolver-system", "code": "resolver-code"}
+        assert meds[0]["source_recommendation_ids"] == ["rec-a", "rec-b"]
+        assert "either applicable same-CPG decision condition" in meds[0]["description"]
+        assert len(brief["goals"]) == 1
+        assert brief["goals"][0]["source_recommendation_ids"] == ["rec-a", "rec-b"]
+
+    def test_treatment_dmn_adds_clinical_visit_separate_from_home_review(self):
+        brief = self._duplicate_regimen_brief()
+        _resolve_missing_medication_codes(brief)
+        _merge_same_cpg_medication_regimens(brief)
+        _ensure_clinical_follow_up(brief, [{
+            "model_id": "treatment-recommendation",
+            "outputs": {"Treatment Recommendation": {"Action": "Start medication", "Follow Up Weeks": 2}},
+        }])
+        followups = [a for a in brief["activities"] if "clinical follow-up visit" in a["description"]]
+        assert len(followups) == 1
+        assert followups[0]["frequency"] == "2 weeks"
+        assert "separate from home-average review" in followups[0]["description"]
+
+    @patch("acp_writer.nodes.plan_composer.resolve", return_value=None)
+    def test_unresolved_medication_code_is_left_absent(self, resolver):
+        brief = {"activities": [{"type": "medication", "description": "Unrecognized medicine"}]}
+        _resolve_missing_medication_codes(brief)
+        resolver.assert_called_once_with("Unrecognized medicine")
+        assert "code" not in brief["activities"][0]
+
+    def test_sex_specific_alcohol_and_severe_bp_safety_text_are_explicit(self):
+        brief = {"activities": [
+            {"type": "lifestyle", "description": "Limit alcohol intake to no more than 2 drinks per day.", "source_recommendation_id": "alc", "source_cpg": "SYN"},
+            {"type": "monitoring", "description": "Notify on a single reading above 180/120 mmHg.", "source_recommendation_id": "bp", "source_cpg": "SYN"},
+        ]}
+        recs = [
+            {"id": "alc", "content": "Limit alcohol to 2 drinks per day for men and 1 for women."},
+            {"id": "bp", "content": "A single reading above 180/120 mmHg requires a repeat."},
+        ]
+        _normalize_source_bound_safety_text(brief, recs)
+        alcohol, severe_bp = brief["activities"]
+        assert "2 drinks per day for men and 1 drink per day for women" in alcohol["description"]
+        assert "confirm which limit applies" in alcohol["description"]
+        assert "emergency services immediately" in severe_bp["description"]
+        assert "repeat the reading after five minutes" in severe_bp["description"]
+        assert "American Heart Association" in severe_bp["clinical_rationale"]
+
+    def test_unknown_patient_pronouns_are_neutralized(self):
+        brief = {
+            "goals": [],
+            "activities": [{
+                "description": "Inform the patient and involve him in shared decisions.",
+                "clinical_rationale": "His preferences should guide the discussion.",
+                "workflow": {"escalation": "Ask him to contact the clinic."},
+            }],
+        }
+        _neutralize_unprovided_pronouns(brief, {})
+        activity = brief["activities"][0]
+        assert "involve the patient" in activity["description"]
+        assert "the patient's preferences" in activity["clinical_rationale"]
+        assert "Ask the patient" in activity["workflow"]["escalation"]
+
+    def test_explicit_patient_pronouns_are_preserved(self):
+        brief = {"goals": [], "activities": [{"description": "Involve him in decisions."}]}
+        _neutralize_unprovided_pronouns(brief, {"pronouns": "he/him"})
+        assert brief["activities"][0]["description"] == "Involve him in decisions."
 
 
 class TestPlanComposer:

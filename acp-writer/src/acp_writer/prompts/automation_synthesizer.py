@@ -1,23 +1,20 @@
-"""Prompt for deriving a one-template automation instance."""
+"""Prompt for binding values to a deterministic one-template instance."""
 
-AUTOMATION_SYNTHESIZER_SYSTEM = """You synthesize one patient-plan automation from a pinned BPMN template.
-Return one JSON object with keys `ir` (the process structure and elements) and
-`bindings` (an array of ParameterBinding objects). The IR is a definition;
-patient-specific values belong only in bindings. Preserve the selected template's
-clinical behavior and exact element names, task capabilities, input/output
-shape, properties, and source-authored text. Copy all retained elements and
-copy each retained element's id and original template element id. For each
-element, record `acp.template_ref` with `template_id` and `element_id` only;
-omit its `version` and `source_cpg`. Do not produce process `id`, `kind`,
-`acp.provenance.source_cpg`, or process-level `acp.template_refs`: the
-synthesizer fills those from the selected template snapshot. The instance must
-retain the reserved `max_duration` parameter and its plan-bound main boundary.
-Do not add clinical steps, conditions, thresholds, names, or free-text values.
-Never request or include the patient's IPS, name,
-identifier, or date of birth. Use only the provided activity summary and
-decision facts. Do not compose multiple templates or prune/consolidate fragments
-in this slice. If repair feedback is present, correct only the listed defects.
-Output JSON only."""
+AUTOMATION_SYNTHESIZER_SYSTEM = """You propose patient-plan parameter bindings for an automation whose complete
+structure is constructed by code from a pinned template. You do not create or
+return an IR. Return only one JSON object shaped as
+{"bindings":[{"name":"parameter_name","value":...,"reason":"brief evidence-based reason"}]}.
+Propose values only for parameters listed under Requested bindings. Do not
+propose authored string parameters, even if they appear in the template. Do not
+return process or element ids, names, descriptions, tasks, literals, timers,
+properties, I/O maps, template references, provenance, or any other structure.
+Use the supplied activity and decision facts only. A reason must state which
+provided plan fact supports each proposed value; never invent a fact. Leave a
+binding out if the supplied facts do not support it. The code supplies template
+defaults, resolves concepts, and applies the reserved max_duration precedence.
+Never request or include the patient's IPS, name, identifier, or date of birth.
+Do not compose multiple templates or prune/consolidate fragments in this slice.
+If repair feedback is present, revise only the listed bindings. Output JSON only."""
 
 AUTOMATION_SYNTHESIZER_USER = """## Selected template (pinned)
 {template}
@@ -31,12 +28,15 @@ AUTOMATION_SYNTHESIZER_USER = """## Selected template (pinned)
 ## Care-plan feedback and history
 {feedback}
 
-## Prior parameter bindings
+## Requested bindings
+{requested_bindings}
+
+## Prior clinician parameter bindings
 {prior_bindings}
 
 ## Static or semantic repair feedback
 {repair_feedback}
 
-Return JSON with this shape:
-{{"ir": {{...ProcessIR...}}, "bindings": [{{"name":"...","value":"...","source":"plan-derived"}}]}}
+Return only JSON with this shape:
+{{"bindings": [{{"name":"...","value":"...","reason":"..."}}]}}
 """

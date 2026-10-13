@@ -70,6 +70,32 @@ def test_cpg_default_value_must_appear_in_its_citation() -> None:
     assert "T2" in codes(findings_for(ir))
 
 
+def test_five_minute_parameter_default_matches_written_out_cpg_duration() -> None:
+    ir = fixture_ir()
+    parameter = next(
+        item for item in ir.process.acp.parameters if item.name == "repeat_due"
+    )
+    assert parameter.default == "PT5M"
+
+    findings = findings_for(ir)
+    assert not any(
+        finding.code == "T2" and finding.element_id == parameter.name
+        for finding in findings
+    )
+
+
+def test_catalog_enum_input_is_not_required_to_appear_in_cpg_text() -> None:
+    ir = fixture_ir()
+    remind = next(item for item in ir.process.flowElements if item.id == "remind")
+    remind.inputs["kind"] = Literal_(literal="result", type="enum")
+
+    findings = findings_for(ir)
+    assert not any(
+        finding.code == "T4" and "literal 'result'" in finding.message
+        for finding in findings
+    )
+
+
 def test_authored_defaults_are_only_allowed_for_string_parameters() -> None:
     ir = fixture_ir()
     parameter = next(item for item in ir.process.acp.parameters if item.name == "max_reminder_attempts")

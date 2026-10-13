@@ -212,6 +212,7 @@ def _post_bundle(bundle: dict) -> dict:
                 return {
                     "fhir_server_response": {},
                     "delivery_status": "stored_locally",
+                    "server_status_code": r.status_code,
                     "server_ids": {},
                     "error": "FHIR transaction response was not valid JSON",
                 }
@@ -238,6 +239,7 @@ def _post_bundle(bundle: dict) -> dict:
             return {
                 "fhir_server_response": response_data,
                 "delivery_status": "delivered",
+                "server_status_code": r.status_code,
                 "server_ids": server_ids,
             }
         elif r.status_code in (401, 403):
@@ -249,6 +251,7 @@ def _post_bundle(bundle: dict) -> dict:
             return {
                 "fhir_server_response": response_data,
                 "delivery_status": "stored_locally",
+                "server_status_code": r.status_code,
                 "server_ids": {},
             }
         else:
@@ -256,6 +259,7 @@ def _post_bundle(bundle: dict) -> dict:
             return {
                 "fhir_server_response": response_data,
                 "delivery_status": "error",
+                "server_status_code": r.status_code,
                 "error": r.text[:500],
                 "server_ids": {},
             }
@@ -516,6 +520,7 @@ def approve_care_plan(
         "id": careplan_id,
         "status": "active",
         "delivery_status": delivery["delivery_status"],
+        "fhir_server_status": delivery.get("server_status_code"),
         "automation_publication": publication,
     }
 

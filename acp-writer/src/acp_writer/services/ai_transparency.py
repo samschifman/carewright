@@ -133,8 +133,10 @@ def _binding_value(parameter: Any, binding: Any) -> tuple[str, Any]:
             amount, unit, code = seconds // 86400, "day", "d"
         elif seconds % 3600 == 0:
             amount, unit, code = seconds // 3600, "hour", "h"
+        elif seconds % 60 == 0:
+            amount, unit, code = seconds // 60, "minute", "min"
         else:
-            raise ValueError(f"duration binding {name!r} must be a whole number of days or hours")
+            amount, unit, code = seconds, "second", "s"
         return "valueDuration", {
             "value": amount,
             "unit": unit,

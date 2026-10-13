@@ -162,14 +162,22 @@ def _activity_facts(activity: Any, known_values: Sequence[str]) -> dict[str, Any
 
 def _audit_facts(audit: Sequence[Any], activity: Any, known_values: Sequence[str]) -> list[dict[str, Any]]:
     index = _field(activity, "source_dmn_call")
-    if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(audit):
-        return []
-    entry = audit[index]
-    return [_safe_text({
-        "model_id": _field(entry, "model_id"),
-        "model_name": _field(entry, "model_name"),
-        "outputs": _field(entry, "outputs", {}),
-    }, known_values)]
+    if isinstance(index, int) and not isinstance(index, bool) and 0 <= index < len(audit):
+        relevant = [audit[index]]
+    else:
+        # Some planning paths omit source_dmn_call on an activity. Preserve the
+        # complete decision context rather than presenting the reviewer with
+        # no evidence about patient-category decisions.
+        relevant = list(audit)
+    return [
+        _safe_text({
+            "model_id": _field(entry, "model_id"),
+            "model_name": _field(entry, "model_name"),
+            "inputs": _field(entry, "inputs", {}),
+            "outputs": _field(entry, "outputs", {}),
+        }, known_values)
+        for entry in relevant
+    ]
 
 
 def _prior_bindings(activity: Any, brief: Any) -> list[dict[str, Any]]:
@@ -190,32 +198,20 @@ def _source_cpg(template_ir: ProcessIR) -> str:
     return template_ir.process.acp.provenance.source_cpg
 
 
-def _keep_instance_provenance(element: Any) -> None:
-    provenance = _field(_field(element, "acp"), "provenance")
-    allowed = {
-        "fragment-boundary", "fragment-merge", "exclusive-join",
-        "start-event", "end-event", "parameter-binding", "plan-bound",
-    }
-    if _field(provenance, "kind") == "structural" and _field(provenance, "derivation_rule") not in allowed:
-        element.acp.provenance = None
-
-
-def _instance_from_template(template: Any) -> ProcessIR:
-    """Conservative single-template fallback retained as a disabled artifact."""
+def _instance_from_template(template: Any, automation_id: str) -> ProcessIR:
+    """Construct instance structure exclusively from the pinned template snapshot."""
     template_ir = _template_ir(template)
-    summary = _summary(template)
     template_id = template_ir.process.id
     version = _template_version(template, template_ir)
     instance = template_ir.model_copy(deep=True)
     process = instance.process
-    process.id = f"instance_{uuid4().hex}"
+    process.id = automation_id
     process.kind = "instance"
     process.acp.template_refs = [TemplateRef(
         template_id=template_id,
         version=version,
         source_cpg=_source_cpg(template_ir),
     )]
-    process.acp.provenance.template_snapshots = [template_ir.process.model_copy(deep=True)]
     for element in process.flowElements:
         element.acp.template_ref = TemplateRef(
             template_id=template_id,
@@ -223,59 +219,93 @@ def _instance_from_template(template: Any) -> ProcessIR:
             source_cpg=_source_cpg(template_ir),
             element_id=element.id,
         )
-        _keep_instance_provenance(element)
     return instance
 
 
-def _normalize_instance_metadata(
-    raw_ir: Mapping[str, Any],
-    template: Any,
-    process_id: str,
-) -> ProcessIR:
-    """Overwrite model-authored instance metadata from the selected snapshot."""
-    result = json.loads(json.dumps(raw_ir))
-    template_ir = _template_ir(template)
-    template_id = template_ir.process.id
-    version = ir_version(template_ir)
-    process = result.get("process")
-    if not isinstance(process, dict):
-        raise ValueError("synthesized IR must contain a process object")
-    process["id"] = process_id
-    process["kind"] = "instance"
-    acp = process.setdefault("acp", {})
-    if not isinstance(acp, dict):
-        raise ValueError("synthesized process acp must be an object")
-    provenance = acp.get("provenance")
-    if not isinstance(provenance, dict):
-        provenance = {}
-    provenance["source_cpg"] = _source_cpg(template_ir)
-    acp["provenance"] = provenance
-    acp["template_refs"] = [{"template_id": template_id, "version": version}]
+def _dmn_output_names(plan_facts: Sequence[Mapping[str, Any]]) -> set[str]:
+    names: set[str] = set()
+    for fact in plan_facts:
+        outputs = fact.get("outputs")
+        if isinstance(outputs, Mapping):
+            names.update(str(name) for name in outputs)
+    return names
 
-    if acp.get("pruned") or acp.get("consolidated_boundaries") or acp.get("unify"):
-        raise ValueError("I9-not-supported: pruning, boundary consolidation, and fragment records are deferred")
-    acp["provenance"]["template_snapshots"] = [
-        template_ir.process.model_dump(mode="json", exclude_none=True)
-    ]
-    snapshots = {template_id: template_ir}
-    for element in process.get("flowElements", []):
-        if not isinstance(element, dict):
-            continue
-        element_acp = element.get("acp")
-        if not isinstance(element_acp, dict):
-            continue
-        ref = element_acp.get("template_ref")
-        if not isinstance(ref, dict):
-            continue
-        snapshot = snapshots.get(ref.get("template_id"))
-        if snapshot is not None:
-            ref["version"] = ir_version(snapshot)
-            ref["source_cpg"] = _source_cpg(snapshot)
 
-    instance = ProcessIR.model_validate(result)
-    for element in instance.process.flowElements:
-        _keep_instance_provenance(element)
-    return instance
+def _model_bindings(
+    response: Mapping[str, Any],
+    template_ir: ProcessIR,
+    plan_facts: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Accept only binding proposals for parameters that require plan-specific values."""
+    raw_bindings = response.get("bindings", [])
+    if not isinstance(raw_bindings, list):
+        raise ValueError("synthesizer response bindings must be an array")
+    parameters = {item.name: item for item in template_ir.process.acp.parameters}
+    dmn_outputs = _dmn_output_names(plan_facts)
+    allowed = {
+        name
+        for name, parameter in parameters.items()
+        if (parameter.default is None or name in dmn_outputs) and not (
+            parameter.type == "string"
+            and parameter.source is not None
+            and parameter.source.kind == "authored"
+        )
+    }
+    # max_duration is reserved and intentionally has no template default.
+    allowed.add("max_duration")
+    normalized: list[dict[str, Any]] = []
+    for item in raw_bindings:
+        if not isinstance(item, Mapping):
+            raise ValueError("each synthesizer binding must be an object")
+        name = item.get("name")
+        if not isinstance(name, str) or name not in allowed:
+            # In particular, model proposals for authored strings are discarded.
+            continue
+        reason = item.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(f"binding {name!r} requires a non-empty reason")
+        parameter = parameters.get(name)
+        normalized.append({
+            "name": name,
+            "value": item.get("value"),
+            "source": "plan-derived",
+            "unit": parameter.unit if parameter is not None else None,
+            "note": reason.strip(),
+        })
+    return normalized
+
+
+def _binding_requests(
+    template_ir: ProcessIR,
+    plan_facts: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Describe only parameters for which synthesis may propose patient-plan values."""
+    dmn_outputs = _dmn_output_names(plan_facts)
+    requested = []
+    for parameter in template_ir.process.acp.parameters:
+        authored_string = (
+            parameter.type == "string"
+            and parameter.source is not None
+            and parameter.source.kind == "authored"
+        )
+        if (parameter.default is not None and parameter.name not in dmn_outputs) or authored_string:
+            continue
+        requested.append({
+            "name": parameter.name,
+            "type": parameter.type,
+            "unit": parameter.unit,
+            "required": parameter.required,
+            "description": parameter.description,
+        })
+    if "max_duration" not in {item["name"] for item in requested}:
+        requested.append({
+            "name": "max_duration",
+            "type": "duration",
+            "unit": None,
+            "required": True,
+            "description": "Reserved monitoring period; bind according to the supplied plan facts and §12 precedence.",
+        })
+    return requested
 
 
 def _slice_findings(exc: Exception) -> list[Finding]:
@@ -343,6 +373,8 @@ def _review(
     activity: Any,
     plan_facts: Any,
     ir: ProcessIR,
+    bindings: Sequence[Mapping[str, Any]],
+    derivation_evidence: Mapping[str, Any],
     findings: Sequence[Finding],
     attempt_recorder: Callable[[str, str], Callable[[str], None]] | None = None,
 ) -> tuple[bool, str]:
@@ -355,6 +387,8 @@ def _review(
             activity=_json(activity),
             plan_facts=_json(plan_facts),
             instance=_json(ir),
+            bindings=_json(bindings),
+            derivation_evidence=_json(derivation_evidence),
             findings=_json([item.__dict__ for item in findings]),
         ),
         attempt_recorder=attempt_recorder,
@@ -447,16 +481,22 @@ def synthesize_for_activity(
         template_ir = _template_ir(template)
         template_json = _json(template_ir)
         automation_id = _new_automation_id()
+        instance_base = _instance_from_template(template, automation_id)
+        candidate, candidate_bindings, evidence, initial_binding_findings = bind_instance(
+            instance_base,
+            [template_ir],
+            activity=activity,
+            brief=brief,
+            policy=_field(state, "automation_policy", {}) or {},
+        )
+        requested_bindings_json = _json(_binding_requests(template_ir, plan_facts))
         record_attempt = _artifact_response_recorder(
             str(_field(state, "output_dir", "") or ""),
             _field(state, "run_id"),
             _field(activity, "id"),
             known_values,
         )
-        candidate: ProcessIR | None = None
-        candidate_bindings: list[ParameterBinding] = []
-        evidence: dict[str, Evidence] = {}
-        final_findings: list[Finding] = []
+        final_findings: list[Finding] = list(initial_binding_findings)
         rungs: list[str] = []
         repair_feedback = ""
         static_exhausted = False
@@ -470,6 +510,7 @@ def synthesize_for_activity(
                 plan_facts=_json(plan_facts),
                 feedback=_json(feedback),
                 prior_bindings=_json(prior_bindings),
+                requested_bindings=requested_bindings_json,
                 repair_feedback=repair_feedback or "None",
             )
             if prompt_sink is not None:
@@ -482,9 +523,7 @@ def synthesize_for_activity(
                     prompt,
                     attempt_recorder=record_attempt("synthesizer") if record_attempt else None,
                 )
-                raw_ir = generated.get("ir", generated)
-                candidate = _normalize_instance_metadata(raw_ir, template, automation_id)
-                raw_bindings = generated.get("bindings", [])
+                raw_bindings = _model_bindings(generated, template_ir, plan_facts)
             except Exception as exc:
                 final_findings = _slice_findings(exc)
                 repair_feedback = _json([item.__dict__ for item in final_findings])
@@ -493,7 +532,7 @@ def synthesize_for_activity(
                 continue
 
             candidate, candidate_bindings, evidence, binding_findings = bind_instance(
-                candidate,
+                instance_base,
                 [template_ir],
                 activity=activity,
                 brief=brief,
@@ -548,19 +587,6 @@ def synthesize_for_activity(
                 static_exhausted = True
             repair_feedback = _json([item.__dict__ for item in final_findings])
 
-        if candidate is None:
-            candidate = _instance_from_template(template)
-            candidate.process.id = automation_id
-            candidate, candidate_bindings, evidence, binding_findings = bind_instance(
-                candidate,
-                [template_ir],
-                activity=activity,
-                brief=brief,
-                policy=_field(state, "automation_policy", {}) or {},
-            )
-            final_findings.extend(binding_findings)
-            static_exhausted = True
-
         has_incomplete = any(item.code == "incomplete-binding" for item in final_findings)
         status = (
             "escalated" if engine_unavailable
@@ -580,6 +606,14 @@ def synthesize_for_activity(
                             activity=activity_data,
                             plan_facts=plan_facts,
                             ir=candidate,
+                            bindings=_safe_text(
+                                [item.model_dump(mode="json", exclude_none=True) for item in candidate_bindings],
+                                known_values,
+                            ),
+                            derivation_evidence=_safe_text(
+                                {key: value.model_dump(mode="json", exclude_none=True) for key, value in evidence.items()},
+                                known_values,
+                            ),
                             findings=final_findings,
                             attempt_recorder=record_attempt("reviewer") if record_attempt else None,
                         )
@@ -614,6 +648,7 @@ def synthesize_for_activity(
                         plan_facts=_json(plan_facts),
                         feedback=_json(feedback),
                         prior_bindings=_json(prior_bindings),
+                        requested_bindings=requested_bindings_json,
                         repair_feedback=repair_feedback,
                     )
                     if prompt_sink is not None:
@@ -625,16 +660,14 @@ def synthesize_for_activity(
                         repair_prompt,
                         attempt_recorder=record_attempt("synthesizer") if record_attempt else None,
                     )
-                    candidate = _normalize_instance_metadata(
-                        generated.get("ir", generated), template, automation_id
-                    )
+                    raw_bindings = _model_bindings(generated, template_ir, plan_facts)
                     candidate, candidate_bindings, evidence, binding_findings = bind_instance(
-                        candidate,
+                        instance_base,
                         [template_ir],
                         activity=activity,
                         brief=brief,
                         policy=_field(state, "automation_policy", {}) or {},
-                        initial_bindings=generated.get("bindings", []),
+                        initial_bindings=raw_bindings,
                     )
                     context = _context(candidate_bindings, evidence, brief, activity)
                     ladder = run_static_ladder(

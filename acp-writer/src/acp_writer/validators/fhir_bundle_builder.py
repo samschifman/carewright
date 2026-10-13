@@ -292,8 +292,10 @@ def build_fhir_bundle(
                 if focus_ref:
                     record["task"]["focus"] = {"reference": focus_ref}
             record["activity_indices"].append(i)
-            if activity.source_recommendation_id:
-                record["recommendation_ids"].add(activity.source_recommendation_id)
+            record["recommendation_ids"].update(
+                activity.source_recommendation_ids
+                or ([activity.source_recommendation_id] if activity.source_recommendation_id else [])
+            )
             activity_ref.setdefault("extension", []).append(
                 ait.activity_automation_extension(
                     record["docref_ref"], record["task_ref"], status="enabled"
@@ -398,10 +400,14 @@ def build_fhir_bundle(
         model_card_urn = _urn(mc_uid)
 
     # ── Bundle-level AI-Provenance ───────────────────────────────────────────
-    all_targets = [{"reference": careplan_urn}]
+    # The Patient and captured prompt DocumentReferences carry AIAST labels too,
+    # so include them in the aggregate provenance rather than leaving those
+    # labels without a traceable attribution target.
+    all_targets = [{"reference": careplan_urn}, {"reference": patient_urn}]
     all_targets.extend({"reference": _urn(uid)} for uid in goal_uids)
     for _idx, uid in activity_uid_map.items():
         all_targets.append({"reference": _urn(uid)})
+    all_targets.extend({"reference": ref} for ref in input_prompt_urns)
 
     prov_entities: list[dict] = []
     for cpg_id in brief.applicable_cpgs:
@@ -427,8 +433,6 @@ def build_fhir_bundle(
 
     # ── Per-activity source Provenances ──────────────────────────────────────
     for i, activity in enumerate(brief.activities):
-        if not activity.source_recommendation_id:
-            continue
         uid = activity_uid_map.get(i)
         if uid:
             prov_target: dict[str, Any] = {"reference": _urn(uid)}
@@ -438,22 +442,51 @@ def build_fhir_bundle(
                 "extension": [ait.targetPath_ext(f"CarePlan.activity[{i}].detail")],
             }
 
-        act_prov_uid = _uuid()
-        act_provenance = ait.build_ai_provenance(
-            prov_uid=act_prov_uid,
-            targets=[prov_target],
-            device_urn=device_urn,
-            recorded=now,
-            occurred=now,
-            entities=[{
-                "role": "source",
-                "what": {
-                    "display": f"Recommendation: {activity.source_recommendation_id}",
-                    "identifier": {"value": activity.source_recommendation_id},
-                },
-            }],
-        )
-        entries.append(_entry(act_provenance, act_prov_uid))
+        recommendation_ids = list(dict.fromkeys(
+            activity.source_recommendation_ids
+            or ([activity.source_recommendation_id] if activity.source_recommendation_id else [])
+        ))
+        for recommendation_id in recommendation_ids:
+            act_prov_uid = _uuid()
+            act_provenance = ait.build_ai_provenance(
+                prov_uid=act_prov_uid,
+                targets=[prov_target],
+                device_urn=device_urn,
+                recorded=now,
+                occurred=now,
+                entities=[{
+                    "role": "source",
+                    "what": {
+                        "display": f"Recommendation: {recommendation_id}",
+                        "identifier": {"value": recommendation_id},
+                    },
+                }],
+            )
+            entries.append(_entry(act_provenance, act_prov_uid))
+
+    # ── Per-goal source Provenances ──────────────────────────────────────────
+    for index, goal in enumerate(brief.goals):
+        recommendation_ids = list(dict.fromkeys(
+            goal.source_recommendation_ids
+            or ([goal.source_recommendation_id] if goal.source_recommendation_id else [])
+        ))
+        for recommendation_id in recommendation_ids:
+            goal_prov_uid = _uuid()
+            goal_provenance = ait.build_ai_provenance(
+                prov_uid=goal_prov_uid,
+                targets=[{"reference": _urn(goal_uids[index])}],
+                device_urn=device_urn,
+                recorded=now,
+                occurred=now,
+                entities=[{
+                    "role": "source",
+                    "what": {
+                        "display": f"Recommendation: {recommendation_id}",
+                        "identifier": {"value": recommendation_id},
+                    },
+                }],
+            )
+            entries.append(_entry(goal_provenance, goal_prov_uid))
 
     # ── Conflict Provenances (WS4) ───────────────────────────────────────────
     goal_urns = [_urn(uid) for uid in goal_uids]

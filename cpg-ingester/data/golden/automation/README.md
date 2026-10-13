@@ -29,6 +29,17 @@ laboratory follow-up, medication follow-up visit scheduling, and lifestyle
 reassessment. Together they exercise every capability in catalog v1, as well
 as one DMN decision task and one clinician user task.
 
+The home-BP template tells patients to use a validated upper-arm device and
+collect readings over at least three, preferably seven, consecutive days. Its
+EHR queries expose the longest consecutive-day run for each pressure code, and
+the process waits for at least three days of both systolic and diastolic
+readings before reviewing the averages. When any single reading exceeds
+180/120 mmHg, it requests a repeat after five minutes, waits for that interval,
+and checks the latest systolic and diastolic values; only a repeat that remains
+above threshold directs the patient to contact the clinic the same day. A
+partial week with fewer than three consecutive reading days continues to the
+next monitoring cycle; the reminder is reserved for a week with no readings.
+
 The ACEi template is triggered by Treatment Recommendation `Action = Start
 medication`. Its required `treatment_action` and `has_kidney_disease` parameters
 are bound from the approved plan at synthesis. The Monitoring Plan then returns

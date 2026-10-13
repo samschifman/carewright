@@ -23,6 +23,38 @@
       {
         "name": "reminder_attempts",
         "type": "integer"
+      },
+      {
+        "name": "systolic_consecutive_days",
+        "type": "integer"
+      },
+      {
+        "name": "diastolic_consecutive_days",
+        "type": "integer"
+      },
+      {
+        "name": "max_systolic",
+        "type": "quantity",
+        "unit": "mm[Hg]"
+      },
+      {
+        "name": "max_diastolic",
+        "type": "quantity",
+        "unit": "mm[Hg]"
+      },
+      {
+        "name": "repeat_request_id",
+        "type": "string"
+      },
+      {
+        "name": "repeat_systolic",
+        "type": "quantity",
+        "unit": "mm[Hg]"
+      },
+      {
+        "name": "repeat_diastolic",
+        "type": "quantity",
+        "unit": "mm[Hg]"
       }
     ],
     "acp": {
@@ -103,9 +135,10 @@
         {
           "name": "instructions_text",
           "type": "string",
-          "default": "Measure twice in the morning before medications and twice in the evening, one minute apart.",
+          "default": "All patients in whom a treatment decision has been made under Table 1 should perform home blood pressure monitoring using a validated upper-arm device. Patients should take two readings one minute apart in the morning before medications and two readings one minute apart in the evening, on at least three and preferably seven consecutive days, and transmit their readings to the care team weekly through the patient portal, secure messaging, or telephone.",
           "source": {
-            "kind": "authored"
+            "kind": "cpg",
+            "source_text": "All patients in whom a treatment decision has been made under Table 1 should perform home blood pressure monitoring using a validated upper-arm device. Patients should take two readings one minute apart in the morning before medications and two readings one minute apart in the evening, on at least three and preferably seven consecutive days, and transmit their readings to the care team weekly through the patient portal, secure messaging, or telephone."
           }
         },
         {
@@ -137,6 +170,56 @@
           "type": "duration",
           "required": true,
           "reserved": true
+        },
+        {
+          "name": "severe_systolic_threshold",
+          "type": "quantity",
+          "unit": "mm[Hg]",
+          "default": 180,
+          "source": {
+            "kind": "cpg",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        },
+        {
+          "name": "severe_diastolic_threshold",
+          "type": "quantity",
+          "unit": "mm[Hg]",
+          "default": 120,
+          "source": {
+            "kind": "cpg",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        },
+        {
+          "name": "repeat_due",
+          "type": "duration",
+          "default": "PT5M",
+          "required": true,
+          "source": {
+            "kind": "cpg",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        },
+        {
+          "name": "repeat_instructions_text",
+          "type": "string",
+          "default": "Any single reading above 180/120 mmHg should be repeated after five minutes.",
+          "required": true,
+          "source": {
+            "kind": "cpg",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        },
+        {
+          "name": "same_day_contact_text",
+          "type": "string",
+          "default": "If it remains above 180/120 mmHg the patient should contact the clinic the same day.",
+          "required": true,
+          "source": {
+            "kind": "cpg",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
         }
       ],
       "invariants": [
@@ -172,7 +255,8 @@
               "request_readings",
               "notify",
               "gw_threshold",
-              "gw_attempts"
+              "gw_attempts",
+              "gw_adequate"
             ]
           }
         }
@@ -236,7 +320,9 @@
         },
         "outputs": {
           "count": "reading_count",
-          "average_value": "avg_systolic"
+          "average_value": "avg_systolic",
+          "consecutive_days": "systolic_consecutive_days",
+          "max_value": "max_systolic"
         },
         "acp": {
           "provenance": {
@@ -263,7 +349,9 @@
           }
         },
         "outputs": {
-          "average_value": "avg_diastolic"
+          "average_value": "avg_diastolic",
+          "consecutive_days": "diastolic_consecutive_days",
+          "max_value": "max_diastolic"
         },
         "acp": {
           "provenance": {
@@ -433,7 +521,13 @@
             "kind": "structural",
             "derivation_rule": "plan-bound",
             "supports": [
-              "request_readings"
+              "request_readings",
+              "notify",
+              "gw_threshold",
+              "gw_attempts",
+              "request_repeat",
+              "notify_patient",
+              "gw_repeat"
             ]
           }
         }
@@ -479,17 +573,17 @@
         "id": "f_some",
         "name": "yes",
         "sourceRef": "gw_received",
-        "targetRef": "gw_threshold",
+        "targetRef": "gw_severe",
         "conditionExpression": "defined(reading_count) and reading_count > 0",
         "acp": {
-          "structural_constant": true,
           "resets": [
             "reminder_attempts"
           ],
           "provenance": {
             "kind": "source",
-            "source_text": "The care team reviews the weekly average systolic and diastolic readings"
-          }
+            "source_text": "The care team reviews the weekly average systolic and diastolic readings."
+          },
+          "structural_constant": true
         }
       },
       {
@@ -497,7 +591,13 @@
         "id": "f_none",
         "name": "no",
         "sourceRef": "gw_received",
-        "targetRef": "remind"
+        "targetRef": "remind",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "If a week passes without readings, a reminder should be sent to the patient."
+          }
+        }
       },
       {
         "type": "sequenceFlow",
@@ -564,6 +664,332 @@
         "id": "f_period",
         "sourceRef": "period_elapsed",
         "targetRef": "end_period"
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_severe",
+        "name": "Any severe individual reading?",
+        "gatewayDirection": "Diverging",
+        "default": "f_not_severe",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-split",
+            "supports": [
+              "f_severe"
+            ]
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_adequate",
+        "name": "At least three consecutive reading days?",
+        "gatewayDirection": "Diverging",
+        "default": "f_insufficient",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-split",
+            "supports": [
+              "f_adequate"
+            ]
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_severe",
+        "sourceRef": "gw_severe",
+        "targetRef": "request_repeat",
+        "name": "severe individual reading",
+        "conditionExpression": "(defined(max_systolic) and max_systolic > severe_systolic_threshold) or (defined(max_diastolic) and max_diastolic > severe_diastolic_threshold)",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_not_severe",
+        "sourceRef": "gw_severe",
+        "targetRef": "gw_after_severe",
+        "name": "no severe individual reading",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "The responsible clinician should be notified when the weekly home average is 135/85 mmHg or higher, or exceeds a lower threshold set by the clinician for patients with diabetes or chronic kidney disease; this is a routine notification unless readings indicate a hypertensive crisis."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_adequate",
+        "sourceRef": "gw_adequate",
+        "targetRef": "gw_threshold",
+        "name": "at least three consecutive days",
+        "conditionExpression": "defined(systolic_consecutive_days) and systolic_consecutive_days >= 3 and defined(diastolic_consecutive_days) and diastolic_consecutive_days >= 3",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "on at least three and preferably seven consecutive days"
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_insufficient",
+        "sourceRef": "gw_adequate",
+        "targetRef": "loop_entry",
+        "name": "fewer than three consecutive days",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "on at least three and preferably seven consecutive days"
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "request_repeat",
+        "name": "Request a five-minute repeat reading",
+        "taskName": "patient.request_observation",
+        "inputs": {
+          "code": {
+            "concept": "blood pressure"
+          },
+          "instructions": {
+            "param": "repeat_instructions_text"
+          },
+          "due": {
+            "param": "repeat_due"
+          }
+        },
+        "outputs": {
+          "request_id": "repeat_request_id"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
+      },
+      {
+        "type": "intermediateCatchEvent",
+        "id": "wait_repeat",
+        "name": "Five-minute repeat interval elapsed",
+        "timerEventDefinition": {
+          "timeDuration": {
+            "param": "repeat_due"
+          }
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "query_repeat_systolic",
+        "name": "Read repeat systolic pressure",
+        "taskName": "ehr.query_observations",
+        "inputs": {
+          "code": {
+            "concept": "systolic blood pressure"
+          },
+          "window": {
+            "param": "repeat_due"
+          },
+          "unit": {
+            "literal": "mm[Hg]",
+            "type": "unit"
+          }
+        },
+        "outputs": {
+          "latest_value": "repeat_systolic"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "query_repeat_diastolic",
+        "name": "Read repeat diastolic pressure",
+        "taskName": "ehr.query_observations",
+        "inputs": {
+          "code": {
+            "concept": "diastolic blood pressure"
+          },
+          "window": {
+            "param": "repeat_due"
+          },
+          "unit": {
+            "literal": "mm[Hg]",
+            "type": "unit"
+          }
+        },
+        "outputs": {
+          "latest_value": "repeat_diastolic"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_repeat",
+        "name": "Repeat still above 180/120?",
+        "gatewayDirection": "Diverging",
+        "default": "f_repeat_not_severe",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-split",
+            "supports": [
+              "f_repeat_severe"
+            ]
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "notify_patient",
+        "name": "Direct patient to contact clinic today",
+        "taskName": "patient.send_message",
+        "inputs": {
+          "kind": {
+            "literal": "result",
+            "type": "enum"
+          },
+          "message": {
+            "param": "same_day_contact_text"
+          }
+        },
+        "outputs": {},
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_severe",
+        "name": "Patient directed to contact clinic today",
+        "acp": {
+          "outcome": "escalated",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "notify_patient"
+            ]
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_repeat_request",
+        "sourceRef": "request_repeat",
+        "targetRef": "wait_repeat"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_repeat_wait",
+        "sourceRef": "wait_repeat",
+        "targetRef": "query_repeat_systolic"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_repeat_query_systolic",
+        "sourceRef": "query_repeat_systolic",
+        "targetRef": "query_repeat_diastolic"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_repeat_query_diastolic",
+        "sourceRef": "query_repeat_diastolic",
+        "targetRef": "gw_repeat"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_repeat_severe",
+        "name": "repeat remains severe",
+        "sourceRef": "gw_repeat",
+        "targetRef": "notify_patient",
+        "conditionExpression": "(defined(repeat_systolic) and repeat_systolic > severe_systolic_threshold) or (defined(repeat_diastolic) and repeat_diastolic > severe_diastolic_threshold)",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_repeat_not_severe",
+        "name": "repeat at or below threshold",
+        "sourceRef": "gw_repeat",
+        "targetRef": "gw_after_severe",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_repeat_contact",
+        "sourceRef": "notify_patient",
+        "targetRef": "end_severe",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_after_severe",
+        "name": "Continue after severe-reading check",
+        "gatewayDirection": "Converging",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-join",
+            "supports": [
+              "gw_severe",
+              "gw_repeat"
+            ]
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_after_severe_join",
+        "sourceRef": "gw_after_severe",
+        "targetRef": "gw_adequate",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "Any single reading above 180/120 mmHg should be repeated after five minutes; if it remains above 180/120 mmHg the patient should contact the clinic the same day."
+          }
+        }
       }
     ]
   }

@@ -40,6 +40,16 @@ def invalid(mutator, message: str | None = None) -> None:
         assert message in str(exc_info.value)
 
 
+def remove_end_events(data: dict[str, Any]) -> None:
+    elements = data["process"]["flowElements"]
+    end_ids = {item["id"] for item in elements if item.get("type") == "endEvent"}
+    elements[:] = [
+        item for item in elements
+        if item.get("type") != "endEvent"
+        and not (item.get("type") == "sequenceFlow" and item.get("targetRef") in end_ids)
+    ]
+
+
 def flow(data: dict[str, Any], element_id: str) -> dict[str, Any]:
     return next(
         item for item in data["process"]["flowElements"] if item["id"] == element_id
@@ -61,7 +71,7 @@ def test_appendix_b_fixture_round_trips_through_canonical_json() -> None:
     assert [element.id for element in parsed.process.flowElements] == sorted(
         element.id for element in parsed.process.flowElements
     )
-    assert len(ir.process.flowElements) == 31
+    assert len(ir.process.flowElements) == 53
 
 
 def test_canonical_json_and_hash_ignore_object_key_order() -> None:
@@ -109,8 +119,7 @@ def test_template_id_uses_the_decision_model_slug_rule() -> None:
             "exactly one startEvent",
         ),
         (
-            lambda d: d["process"]["flowElements"].remove(flow(d, "end_escalated"))
-            or d["process"]["flowElements"].remove(flow(d, "end_period")),
+            remove_end_events,
             "at least one endEvent",
         ),
         (

@@ -57,8 +57,7 @@ services:
       - LLM_MODEL=${SLICE_LLM_MODEL:-default}
       - LLM_MAX_RETRIES=${SLICE_LLM_MAX_RETRIES:-0}
       - MLFLOW_EXPERIMENT_NAME=${SLICE_MLFLOW_EXPERIMENT_NAME:-slice-local}
-      - LITELLM_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LITELLM_API_KEY=${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY must be set}
     volumes:
       - ./working/slice-run:/slice-run
 

@@ -151,7 +151,7 @@ def test_well_formed_uncached_unit_literal_is_a_warning() -> None:
         Property(
             name=prop.name,
             type=prop.type,
-            unit="kg/L" if prop.name == "avg_diastolic" else prop.unit,
+            unit="kg/L" if prop.name in {"avg_diastolic", "max_diastolic"} else prop.unit,
         )
         for prop in ir.process.properties
     ]

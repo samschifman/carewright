@@ -1,0 +1,9 @@
+{
+  "bindings": [
+    {
+      "name": "max_duration",
+      "value": "P4W",
+      "reason": "Projected from saved plan facts under the reserved monitoring-period rule."
+    }
+  ]
+}

@@ -48,6 +48,8 @@ def _schema_validate(brief_dict: dict) -> list[str]:
             errors.append(f"Activity {i} missing source_cpg — provenance required.")
         if act.get("type") == "medication" and not act.get("dose"):
             errors.append(f"Activity {i} is medication type but missing dose.")
+        if act.get("type") == "medication" and not act.get("code"):
+            errors.append(f"Activity {i} is medication type but missing a coded medication concept.")
 
     return errors
 
@@ -92,7 +94,8 @@ def brief_reviewer(state: CarePlanComposerState) -> dict:
         planning_brief=json.dumps(brief_dict, indent=2, default=str),
         recommendations=json.dumps(
             [{"id": r.get("id"), "title": r.get("title"), "type": r.get("recommendation_type"),
-              "strength": (r.get("certainty") or {}).get("strength", "ungraded")}
+              "strength": (r.get("certainty") or {}).get("strength", "ungraded"),
+              "content": r.get("content"), "source_cpg": r.get("source_cpg")}
              for r in recommendations],
             indent=2,
         ),

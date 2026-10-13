@@ -127,7 +127,9 @@ def test_observation_catalog_shape_defaults_and_get() -> None:
     assert request_observation_inputs["channel_policy"].required is False
     assert {item.name: item.type for item in observation.outputs} == {
         "count": "integer",
+        "consecutive_days": "integer",
         "latest_value": "quantity",
+        "max_value": "quantity",
         "latest_date": "string",
         "average_value": "quantity",
     }

@@ -7,13 +7,34 @@
       "direction": "patient",
       "description": "Ask the patient to report a measurement; channel/consent handled by the binding",
       "inputs": [
-        {"name": "code", "type": "code", "required": true},
-        {"name": "instructions", "type": "string", "required": true, "free_text": true},
-        {"name": "due", "type": "duration", "required": true},
-        {"name": "channel_policy", "type": "string", "required": false, "default": "preferred"}
+        {
+          "name": "code",
+          "type": "code",
+          "required": true
+        },
+        {
+          "name": "instructions",
+          "type": "string",
+          "required": true,
+          "free_text": true
+        },
+        {
+          "name": "due",
+          "type": "duration",
+          "required": true
+        },
+        {
+          "name": "channel_policy",
+          "type": "string",
+          "required": false,
+          "default": "preferred"
+        }
       ],
       "outputs": [
-        {"name": "request_id", "type": "string"}
+        {
+          "name": "request_id",
+          "type": "string"
+        }
       ],
       "human_in_loop": true
     },
@@ -23,11 +44,28 @@
       "direction": "patient",
       "description": "One message; the binding enforces frequency limits and opt-out",
       "inputs": [
-        {"name": "message", "type": "string", "required": true, "free_text": true},
-        {"name": "kind", "type": "enum", "required": true, "values": ["reminder", "education", "result"]}
+        {
+          "name": "message",
+          "type": "string",
+          "required": true,
+          "free_text": true
+        },
+        {
+          "name": "kind",
+          "type": "enum",
+          "required": true,
+          "values": [
+            "reminder",
+            "education",
+            "result"
+          ]
+        }
       ],
       "outputs": [
-        {"name": "delivered", "type": "boolean"}
+        {
+          "name": "delivered",
+          "type": "boolean"
+        }
       ],
       "human_in_loop": true
     },
@@ -35,18 +73,55 @@
       "id": "ehr.query_observations",
       "version": "1.0",
       "direction": "system",
-      "description": "Look up patient observations for one code; the binding converts to unit",
+      "description": "Look up patient observations for one code; the binding converts to unit. Return consecutive_days as the longest consecutive calendar-day run with matching observations.",
       "inputs": [
-        {"name": "code", "type": "code", "required": true},
-        {"name": "window", "type": "duration", "required": true},
-        {"name": "unit", "type": "unit", "required": true},
-        {"name": "min_count", "type": "integer", "required": false, "default": 1}
+        {
+          "name": "code",
+          "type": "code",
+          "required": true
+        },
+        {
+          "name": "window",
+          "type": "duration",
+          "required": true
+        },
+        {
+          "name": "unit",
+          "type": "unit",
+          "required": true
+        },
+        {
+          "name": "min_count",
+          "type": "integer",
+          "required": false,
+          "default": 1
+        }
       ],
       "outputs": [
-        {"name": "count", "type": "integer"},
-        {"name": "latest_value", "type": "quantity"},
-        {"name": "latest_date", "type": "string"},
-        {"name": "average_value", "type": "quantity"}
+        {
+          "name": "count",
+          "type": "integer"
+        },
+        {
+          "name": "consecutive_days",
+          "type": "integer"
+        },
+        {
+          "name": "latest_value",
+          "type": "quantity"
+        },
+        {
+          "name": "max_value",
+          "type": "quantity"
+        },
+        {
+          "name": "latest_date",
+          "type": "string"
+        },
+        {
+          "name": "average_value",
+          "type": "quantity"
+        }
       ],
       "human_in_loop": false
     },
@@ -56,12 +131,26 @@
       "direction": "system",
       "description": "Lab/diagnostic result present?",
       "inputs": [
-        {"name": "code", "type": "code", "required": true},
-        {"name": "window", "type": "duration", "required": true}
+        {
+          "name": "code",
+          "type": "code",
+          "required": true
+        },
+        {
+          "name": "window",
+          "type": "duration",
+          "required": true
+        }
       ],
       "outputs": [
-        {"name": "found", "type": "boolean"},
-        {"name": "result_ref", "type": "string"}
+        {
+          "name": "found",
+          "type": "boolean"
+        },
+        {
+          "name": "result_ref",
+          "type": "string"
+        }
       ],
       "human_in_loop": false
     },
@@ -71,12 +160,26 @@
       "direction": "system",
       "description": "Open orders/referrals",
       "inputs": [
-        {"name": "code", "type": "code", "required": true},
-        {"name": "window", "type": "duration", "required": true}
+        {
+          "name": "code",
+          "type": "code",
+          "required": true
+        },
+        {
+          "name": "window",
+          "type": "duration",
+          "required": true
+        }
       ],
       "outputs": [
-        {"name": "found", "type": "boolean"},
-        {"name": "order_ref", "type": "string"}
+        {
+          "name": "found",
+          "type": "boolean"
+        },
+        {
+          "name": "order_ref",
+          "type": "string"
+        }
       ],
       "human_in_loop": false
     },
@@ -86,12 +189,34 @@
       "direction": "clinician",
       "description": "Notify the responsible clinician",
       "inputs": [
-        {"name": "urgency", "type": "enum", "required": true, "values": ["routine", "urgent", "emergency"]},
-        {"name": "reason", "type": "string", "required": true, "free_text": true},
-        {"name": "context", "type": "string", "required": false, "free_text": true}
+        {
+          "name": "urgency",
+          "type": "enum",
+          "required": true,
+          "values": [
+            "routine",
+            "urgent",
+            "emergency"
+          ]
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "free_text": true
+        },
+        {
+          "name": "context",
+          "type": "string",
+          "required": false,
+          "free_text": true
+        }
       ],
       "outputs": [
-        {"name": "notification_id", "type": "string"}
+        {
+          "name": "notification_id",
+          "type": "string"
+        }
       ],
       "human_in_loop": true
     },
@@ -101,11 +226,23 @@
       "direction": "clinician",
       "description": "Hand to a human after automated outreach fails",
       "inputs": [
-        {"name": "reason", "type": "string", "required": true, "free_text": true},
-        {"name": "attempts", "type": "integer", "required": true}
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "free_text": true
+        },
+        {
+          "name": "attempts",
+          "type": "integer",
+          "required": true
+        }
       ],
       "outputs": [
-        {"name": "escalation_id", "type": "string"}
+        {
+          "name": "escalation_id",
+          "type": "string"
+        }
       ],
       "human_in_loop": true
     },
@@ -115,11 +252,23 @@
       "direction": "system",
       "description": "Request an appointment",
       "inputs": [
-        {"name": "reason", "type": "string", "required": true, "free_text": true},
-        {"name": "within", "type": "duration", "required": true}
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "free_text": true
+        },
+        {
+          "name": "within",
+          "type": "duration",
+          "required": true
+        }
       ],
       "outputs": [
-        {"name": "request_id", "type": "string"}
+        {
+          "name": "request_id",
+          "type": "string"
+        }
       ],
       "human_in_loop": false
     }

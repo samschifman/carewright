@@ -56,6 +56,7 @@ def _hypertension_brief() -> PlanningBrief:
                 route="oral",
                 frequency="daily",
                 source_recommendation_id="rec-456",
+                source_recommendation_ids=["rec-456", "rec-456-row-2"],
                 source_cpg="SYN-HTN-2026-001",
                 source_dmn_call=0,
                 workflow=ActivityWorkflow(actor="prescribing_physician"),
@@ -237,11 +238,36 @@ def _bundle_level_prov(bundle: dict) -> dict:
 
 def _activity_source_provs(bundle: dict) -> list[dict]:
     """Per-activity source provenances (entity role 'source', not conflicts)."""
+    activity_refs = {
+        f"urn:uuid:{entry['resource']['id']}"
+        for entry in bundle.get("entry", [])
+        if entry.get("resource", {}).get("resourceType") in {"MedicationRequest", "ServiceRequest"}
+    }
     return [
         p for p in _provenances(bundle)
         if not _is_conflict_prov(p)
         and p.get("entity")
         and all(e.get("role") == "source" for e in p["entity"])
+        and any(
+            target.get("reference") in activity_refs
+            or any("targetPath" in str(extension.get("url", "")) for extension in target.get("extension", []))
+            for target in p.get("target", [])
+        )
+    ]
+
+
+def _goal_source_provs(bundle: dict) -> list[dict]:
+    goal_refs = {
+        f"urn:uuid:{entry['resource']['id']}"
+        for entry in bundle.get("entry", [])
+        if entry.get("resource", {}).get("resourceType") == "Goal"
+    }
+    return [
+        p for p in _provenances(bundle)
+        if not _is_conflict_prov(p)
+        and p.get("entity")
+        and all(e.get("role") == "source" for e in p["entity"])
+        and any(target.get("reference") in goal_refs for target in p.get("target", []))
     ]
 
 
@@ -289,6 +315,13 @@ class TestAITransparency:
         assert role["code"] == "Artificial-Intelligence"
         assert len(ai_prov["target"]) >= 3
 
+    def test_bundle_provenance_targets_ai_asserted_patient(self):
+        bundle = build_fhir_bundle(_hypertension_brief())
+        patient = _get_resources(bundle, "Patient")[0]
+        patient_ref = f"urn:uuid:{patient['id']}"
+        ai_prov = _bundle_level_prov(bundle)
+        assert patient_ref in {item["reference"] for item in ai_prov["target"]}
+
     def test_all_provenances_conform(self):
         bundle = build_fhir_bundle(_hypertension_brief())
         for p in _provenances(bundle):
@@ -301,7 +334,7 @@ class TestAITransparency:
     def test_per_activity_provenance(self):
         bundle = build_fhir_bundle(_hypertension_brief())
         activity_provs = _activity_source_provs(bundle)
-        assert len(activity_provs) == 3
+        assert len(activity_provs) == 4
         for prov in activity_provs:
             entities = prov.get("entity", [])
             assert len(entities) >= 1
@@ -328,7 +361,7 @@ class TestAITransparency:
             p for p in activity_provs
             if not any(t.get("extension") for t in p.get("target", []))
         ]
-        assert len(standalone_provs) == 2
+        assert len(standalone_provs) == 3
         for prov in standalone_provs:
             assert prov["target"][0]["reference"].startswith("urn:uuid:")
 
@@ -383,6 +416,19 @@ class TestInputPromptCapture:
         ai_prov = _bundle_level_prov(bundle)
         refs = [e["what"].get("reference") for e in ai_prov["entity"]]
         assert f"urn:uuid:{docref['id']}" in refs
+
+    def test_input_prompt_is_provenance_target(self):
+        bundle = build_fhir_bundle(
+            _hypertension_brief(), prompts={"plan_composer": "Compose"}
+        )
+        docref = [
+            d for d in _get_resources(bundle, "DocumentReference")
+            if d["type"]["coding"][0]["code"] == "AIInputPrompt"
+        ][0]
+        ai_prov = _bundle_level_prov(bundle)
+        assert f"urn:uuid:{docref['id']}" in {
+            item["reference"] for item in ai_prov["target"]
+        }
 
     def test_capture_disabled_via_env(self, monkeypatch):
         monkeypatch.setenv("ACP_CAPTURE_PROMPTS", "false")
@@ -487,6 +533,26 @@ class TestConflictProvenance:
         assert source_provs  # the med activity has a source_recommendation_id
         for p in source_provs:
             assert all(e.get("url") != aiconf_url for e in p.get("extension", []))
+
+    def test_merged_activity_preserves_each_recommendation_in_provenance(self):
+        bundle = build_fhir_bundle(_hypertension_brief())
+        recommendation_ids = {
+            entity.get("what", {}).get("identifier", {}).get("value")
+            for provenance in _activity_source_provs(bundle)
+            for entity in provenance.get("entity", [])
+        }
+        assert {"rec-456", "rec-456-row-2"} <= recommendation_ids
+
+    def test_merged_goal_preserves_each_recommendation_in_provenance(self):
+        brief = _hypertension_brief()
+        brief.goals[0].source_recommendation_ids = ["goal-rec-1", "goal-rec-2"]
+        bundle = build_fhir_bundle(brief)
+        recommendation_ids = {
+            entity.get("what", {}).get("identifier", {}).get("value")
+            for provenance in _goal_source_provs(bundle)
+            for entity in provenance.get("entity", [])
+        }
+        assert {"goal-rec-1", "goal-rec-2"} <= recommendation_ids
 
     def test_conflict_targets_resolve(self):
         bundle = build_fhir_bundle(_brief_with_conflict())

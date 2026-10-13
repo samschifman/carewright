@@ -12,14 +12,10 @@ import mlflow
 from cpg_contracts.automation.compiler.kogito_profile import normalize_duration
 from cpg_contracts.automation.instances import Evidence, ParameterBinding
 from cpg_contracts.automation.ir import (
-    BoundaryEvent,
     ConceptRef,
-    Literal_,
     Parameter,
-    ParamRef,
     Process,
     ProcessIR,
-    SourceProvenance,
     Task,
 )
 from cpg_contracts.automation.validators.results import Finding
@@ -137,10 +133,14 @@ def _prior_clinician_bindings(activity: Any, brief: Any) -> list[ParameterBindin
     return result
 
 
-def _concept_binding(element: Task, input_name: str, concept: ConceptRef) -> tuple[Literal_ | None, ParameterBinding | None, Finding | None]:
+def _concept_binding(
+    element: Task,
+    input_name: str,
+    concept: ConceptRef,
+) -> tuple[ParameterBinding | None, Finding | None]:
     resolved = resolve_concept(concept.concept)
     if resolved is None or not resolved.system or not resolved.code:
-        return None, None, Finding(
+        return None, Finding(
             rung="L5a",
             severity="WARNING",
             code="incomplete-binding",
@@ -149,7 +149,6 @@ def _concept_binding(element: Task, input_name: str, concept: ConceptRef) -> tup
         )
     code = f"{resolved.system}|{resolved.code}"
     return (
-        Literal_(literal=code, type="code"),
         ParameterBinding(
             name=f"{element.id}__{input_name}",
             value=code,
@@ -199,23 +198,20 @@ def bind_instance(
         if binding.name in {parameter.name for parameter in process.acp.parameters}:
             bindings[binding.name] = binding
 
-    # A resolved code is recorded both in the instance definition and in the
-    # plan-derived binding so L5 can prove that the template concept was kept.
+    # Concept references are part of the pinned template's I/O map. Resolve
+    # them into separate plan-derived bindings without rewriting that map.
     for element in process.flowElements:
         if not isinstance(element, Task):
             continue
-        updated_inputs = dict(element.inputs)
         for input_name, value in element.inputs.items():
             if not isinstance(value, ConceptRef):
                 continue
-            literal, binding, finding = _concept_binding(element, input_name, value)
+            binding, finding = _concept_binding(element, input_name, value)
             if finding is not None:
                 findings.append(finding)
                 continue
-            assert literal is not None and binding is not None
-            updated_inputs[input_name] = literal
+            assert binding is not None
             bindings[binding.name] = binding
-        element.inputs = updated_inputs
 
     template_parameters: dict[str, Parameter] = {}
     for template in template_processes.values():
@@ -232,7 +228,9 @@ def bind_instance(
         source_kind = parameter.source.kind if parameter.source is not None else None
         source = {
             "cpg": "cpg-default",
-            "authored": "authored",
+            # Authored string content remains a pinned template default unless
+            # a clinician binding explicitly replaces it.
+            "authored": "cpg-default" if parameter.type == "string" else "authored",
             "reviewer": "reviewer",
             "policy": "plan-derived",
         }.get(source_kind)

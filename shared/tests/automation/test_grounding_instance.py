@@ -10,6 +10,7 @@ import pytest
 
 from cpg_contracts.automation.ir import (
     BoundaryEvent,
+    ConceptRef,
     Justification,
     Literal_,
     PruneRecord,
@@ -17,6 +18,7 @@ from cpg_contracts.automation.ir import (
     ProcessIR,
     Property,
     StructuralProvenance,
+    Task,
     TemplateRef,
     Trigger,
     UnifyRecord,
@@ -64,6 +66,16 @@ def bindings_for(ir: ProcessIR, *, max_duration: str = "P28D") -> list[Parameter
             else "cpg-default"
         )
         result.append(ParameterBinding(name=parameter.name, value=value, source=source))
+    for element in ir.process.flowElements:
+        if not isinstance(element, Task):
+            continue
+        for input_name, value_ref in element.inputs.items():
+            if isinstance(value_ref, ConceptRef):
+                result.append(ParameterBinding(
+                    name=f"{element.id}__{input_name}",
+                    value="http://loinc.org|85354-9",
+                    source="plan-derived",
+                ))
     return result
 
 
@@ -641,19 +653,23 @@ def test_renamed_template_node_is_rejected() -> None:
 def test_concept_resolution_requires_plan_derived_binding() -> None:
     instance, template, context = make_instance()
     task = next(item for item in instance.process.flowElements if item.id == "request_readings")
-    task.inputs["code"] = Literal_(
-        literal="http://loinc.org|85354-9", type="code"
-    )
+    assert isinstance(task.inputs["code"], ConceptRef)
+    context.bindings = [
+        item for item in context.bindings if item.name != "request_readings__code"
+    ]
 
-    assert "I1" in codes(validate_instance(instance, [template], context))
+    findings = validate_instance(instance, [template], context)
+
+    assert any(finding.code == "incomplete-binding" for finding in findings)
 
 
 def test_concept_resolution_accepts_a_plan_derived_code_binding() -> None:
     instance, template, context = make_instance()
     task = next(item for item in instance.process.flowElements if item.id == "request_readings")
-    task.inputs["code"] = Literal_(
-        literal="http://loinc.org|85354-9", type="code"
-    )
+    assert isinstance(task.inputs["code"], ConceptRef)
+    context.bindings = [
+        item for item in context.bindings if item.name != "request_readings__code"
+    ]
     context.bindings.append(
         ParameterBinding(
             name="request_readings__code",
@@ -663,6 +679,7 @@ def test_concept_resolution_accepts_a_plan_derived_code_binding() -> None:
     )
 
     assert "I1" not in codes(validate_instance(instance, [template], context))
+    assert "incomplete-binding" not in codes(validate_instance(instance, [template], context))
 
 
 def test_dot_code_binding_is_not_an_exempt_instance_binding() -> None:
@@ -711,6 +728,22 @@ def test_structural_instance_provenance_uses_the_closed_rule_set() -> None:
     )
 
     assert "I2" in codes(validate_instance(instance, [template], context))
+
+
+def test_template_exclusive_split_provenance_is_preserved_verbatim() -> None:
+    instance, template, context = make_instance()
+    gateway = next(
+        element
+        for element in instance.process.flowElements
+        if getattr(element, "type", None) == "exclusiveGateway"
+        and getattr(element.acp.provenance, "derivation_rule", None) is None
+        and next(source for source in template.process.flowElements if source.id == element.id)
+        .acp.provenance.derivation_rule == "exclusive-split"
+    )
+    source = next(element for element in template.process.flowElements if element.id == gateway.id)
+    gateway.acp.provenance = deepcopy(source.acp.provenance)
+
+    assert "I2" not in codes(validate_instance(instance, [template], context))
 
 
 def test_fragment_induced_subgraph_must_preserve_edges() -> None:

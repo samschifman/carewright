@@ -6,8 +6,31 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT_DIR"
 
+# Load only the Medplum setup values needed by the one-shot loader. In
+# particular, do not source the whole secrets file into the loader container.
+SLICE_SECRETS_ENV_FILE="${SLICE_SECRETS_ENV_FILE:-$ROOT_DIR/deploy/config/secrets.env}"
+if [ -f "$SLICE_SECRETS_ENV_FILE" ]; then
+  while IFS= read -r entry || [ -n "$entry" ]; do
+    case "$entry" in
+      MEDPLUM_ADMIN_EMAIL=*) export MEDPLUM_ADMIN_EMAIL="${entry#*=}" ;;
+      MEDPLUM_ADMIN_PASSWORD=*) export MEDPLUM_ADMIN_PASSWORD="${entry#*=}" ;;
+      MEDPLUM_PRACTITIONER_PASSWORD=*) export MEDPLUM_PRACTITIONER_PASSWORD="${entry#*=}" ;;
+      MEDPLUM_SUPERADMIN_PASSWORD=*) export MEDPLUM_SUPERADMIN_PASSWORD="${entry#*=}" ;;
+    esac
+  done < "$SLICE_SECRETS_ENV_FILE"
+fi
+SLICE_LITELLM_ENV_FILE="${SLICE_LITELLM_ENV_FILE:-$ROOT_DIR/platform/litellm/deploy/.env}"
+if [ -f "$SLICE_LITELLM_ENV_FILE" ]; then
+  while IFS= read -r entry || [ -n "$entry" ]; do
+    case "$entry" in
+      LITELLM_MASTER_KEY=*) export LITELLM_MASTER_KEY="${entry#*=}" ;;
+    esac
+  done < "$SLICE_LITELLM_ENV_FILE"
+fi
+
 INGESTER_CLI="$ROOT_DIR/cpg-ingester/.venv/bin/cpg-ingest"
 INGESTER_PYTHON="$ROOT_DIR/cpg-ingester/.venv/bin/python"
+ACP_WRITER_PYTHON="$ROOT_DIR/acp-writer/.venv/bin/python"
 PDF="$ROOT_DIR/cpg-ingester/data/synthetic-hypertension-cpg-v2.pdf"
 PATIENT="$ROOT_DIR/mock-EHR/data/patient-bundle-medication.json"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
@@ -68,6 +91,9 @@ PLAN_ROOT="$RUN_ROOT/careplans"
 DELIVERY_DIR="$INGESTER_RUN_DIR/deploy"
 ACP_WRITER_URL="${ACP_WRITER_URL:-http://localhost:8082}"
 FHIR_URL="${FHIR_URL:-http://localhost:8103/fhir/R4}"
+# FHIR reads performed inside acp-writer must use the Compose service name;
+# localhost there points back to the acp-writer container.
+FHIR_CONTAINER_URL="${FHIR_CONTAINER_URL:-http://medplum-server:8103/fhir/R4}"
 AUTOMATION_URL="${AUTOMATION_URL:-http://localhost:8096}"
 MLFLOW_URL="${MLFLOW_URL:-http://localhost:5000}"
 SLICE_S3_ACCESS_KEY="${SLICE_S3_ACCESS_KEY:-slice-access}"
@@ -79,7 +105,7 @@ export BPMN_EVIDENCE_DIR
 CPG_ID="SYN-HTN-2026-002"
 CAREPLAN_SYSTEM="https://github.com/samschifman/cpg-to-acp/fhir/CodeSystem/careplan-id"
 
-REQUIRED_INPUTS=("$INGESTER_PYTHON" "$PATIENT")
+REQUIRED_INPUTS=("$INGESTER_PYTHON" "$ACP_WRITER_PYTHON" "$PATIENT")
 if [ "$FROM_GOLDEN" != "1" ]; then
   REQUIRED_INPUTS+=("$INGESTER_CLI" "$PDF")
 fi
@@ -177,7 +203,7 @@ fi
 
 echo "Building and starting the isolated compose stack ($PROJECT)."
 if [ "${SLICE_SKIP_BUILD:-0}" = "1" ]; then
-  for service in litellm kogito automation acp-writer; do
+  for service in litellm kogito automation acp-writer medplum-loader; do
     image="localhost/${PROJECT}_${service}:latest"
     if ! podman image exists "$image"; then
       echo "Required cached slice image is missing: $image" >&2
@@ -186,13 +212,11 @@ if [ "${SLICE_SKIP_BUILD:-0}" = "1" ]; then
   done
   echo "Using existing slice-local service images."
 else
-  for service in litellm kogito automation acp-writer; do
+  for service in litellm kogito automation acp-writer medplum-loader; do
     echo "Building $service"
     podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" build "$service"
   done
 fi
-podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" up -d --no-build \
-  litellm artifact-store medplum-server medplum-loader acp-writer
 
 wait_for() {
   local url="$1"
@@ -209,10 +233,98 @@ wait_for() {
   return 1
 }
 
+podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" up -d --no-build \
+  litellm artifact-store medplum-server
+
+wait_for "${FHIR_URL%/fhir/R4}/healthcheck" "Medplum FHIR server"
+
+# The loader creates a project and SMART client, so rerunning it against an
+# existing database is not idempotent. Bootstrap only when no writer
+# credentials exist, and finish before acp-writer reads the env file.
+if [ ! -s "$ROOT_DIR/.medplum/medplum-fhir.env" ]; then
+  if [ -z "${MEDPLUM_ADMIN_PASSWORD:-}" ] || [ -z "${MEDPLUM_PRACTITIONER_PASSWORD:-}" ]; then
+    echo "Medplum loader requires MEDPLUM_ADMIN_PASSWORD and MEDPLUM_PRACTITIONER_PASSWORD from the local secrets environment." >&2
+    exit 1
+  fi
+  if ! podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" run --rm medplum-loader; then
+    echo "Medplum initialization failed; inspect the sanitized loader diagnostics above." >&2
+    exit 1
+  fi
+  if [ ! -s "$ROOT_DIR/.medplum/medplum-fhir.env" ]; then
+    echo "Medplum initialization did not create the FHIR client environment file." >&2
+    exit 1
+  fi
+else
+  echo "Reusing the existing Medplum client; the authenticated FHIR preflight will verify it."
+fi
+podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" up -d --no-build acp-writer
+
 wait_for "$ACP_WRITER_URL/health" "acp-writer"
 wait_for "$AUTOMATION_URL/health" "automation service"
 wait_for "$MLFLOW_URL/health" "MLflow"
 wait_for "http://localhost:9333/cluster/status" "S3-compatible artifact store"
+
+echo "Checking authenticated FHIR access from acp-writer."
+if ! podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" exec -T acp-writer python - <<'PY'
+import json
+import logging
+import os
+
+logging.disable(logging.CRITICAL)
+try:
+    from acp_writer.nodes.fhir_server_writer import FHIR_SERVER_URL, _get_auth_headers
+    import requests
+
+    headers = _get_auth_headers()
+    response = requests.get(
+        f"{FHIR_SERVER_URL.rstrip('/')}/metadata",
+        headers={"Accept": "application/fhir+json", **headers},
+        timeout=10,
+    )
+    result = {
+        "client_id_configured": bool(os.environ.get("FHIR_CLIENT_ID")),
+        "client_secret_configured": bool(os.environ.get("FHIR_CLIENT_SECRET")),
+        "authorization_header": "Authorization" in headers,
+        "metadata_status": response.status_code,
+    }
+    print(json.dumps(result, sort_keys=True))
+    raise SystemExit(0 if response.status_code == 200 else 1)
+except Exception as exc:
+    print(json.dumps({"preflight_error_type": type(exc).__name__}, sort_keys=True))
+    raise SystemExit(1)
+PY
+then
+  echo "Authenticated FHIR preflight failed; stopping before care-plan generation." >&2
+  exit 1
+fi
+
+echo "Checking LiteLLM gateway authentication and model alias."
+if ! podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" exec -T acp-writer python - <<'PY'
+import json
+import os
+
+import requests
+
+try:
+    response = requests.get(
+        f"{os.environ['LITELLM_URL'].rstrip('/')}/v1/models",
+        headers={"Authorization": f"Bearer {os.environ['LITELLM_API_KEY']}"},
+        timeout=10,
+    )
+    model = os.environ.get("LLM_MODEL", "default")
+    available = response.status_code == 200 and any(
+        item.get("id") == model for item in response.json().get("data", [])
+    )
+    print(json.dumps({"models_status": response.status_code, "selected_model_available": available}))
+    raise SystemExit(0 if available else 1)
+except Exception as exc:
+    print(json.dumps({"preflight_error_type": type(exc).__name__}))
+    raise SystemExit(1)
+PY
+then
+  echo "LiteLLM gateway preflight failed; stopping before care-plan generation." >&2
+  exit 1
+fi
 
 if [ -n "$RESUME_BPMN_RUN_DIR" ]; then
   echo "Resuming only the BPMN subgraph from $INGESTER_RUN_DIR."
@@ -240,7 +352,7 @@ else
     LITELLM_URL="${SLICE_LITELLM_URL:-http://localhost:4000}" \
     LLM_MODEL="${SLICE_LLM_MODEL:-${LLM_MODEL:-default}}" \
     LLM_MAX_RETRIES="${SLICE_LLM_MAX_RETRIES:-0}" \
-    LITELLM_API_KEY="sk-change-me" \
+    LITELLM_API_KEY="${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY must be set}" \
     MLFLOW_TRACKING_URI="$MLFLOW_URL" \
     MLFLOW_EXPERIMENT_NAME="$SLICE_MLFLOW_EXPERIMENT_NAME" \
       "$INGESTER_CLI" "$PDF" --output-dir "$INGESTER_RUN_DIR" \
@@ -413,6 +525,16 @@ if from_golden:
         }
         for template in templates
     ]
+    # The copied upstream run may contain stale BPMN escalations from the
+    # extraction attempt. The checked-in goldens replace those BPMN results;
+    # retain independent decision-item escalations only.
+    generation["escalated_items"] = [
+        item for item in generation.get("escalated_items", [])
+        if item.get("type") != "automation"
+    ]
+    (run_dir / "escalated-items.json").write_text(
+        json.dumps(generation["escalated_items"], indent=2) + "\n"
+    )
     (run_dir / "generation-result.json").write_text(json.dumps(generation, indent=2) + "\n")
 print(f"Manifest processes: {len(processes)}; DMNs: {dmn_count}; templates: {len(templates)}")
 PY
@@ -511,18 +633,43 @@ curl --silent --show-error --fail --output "$CAREPLAN_ARTIFACT_DIR/approval-resp
   --data '{"status":"active","reviewer":{"display":"Slice test clinician"}}' \
   "$ACP_WRITER_URL/api/v1/careplans/$CAREPLAN_ID/status"
 
+"$INGESTER_PYTHON" - "$CAREPLAN_ARTIFACT_DIR/approval-response.json" <<'PY'
+import json
+import sys
+
+result = json.load(open(sys.argv[1]))
+if result.get("delivery_status") != "delivered":
+    raise SystemExit(
+        "FHIR approval write was not delivered "
+        f"(status={result.get('delivery_status')}, http={result.get('fhir_server_status')})"
+    )
+PY
+
 echo "Checking the FHIR server transaction result."
-curl --silent --show-error --fail --retry 20 --retry-delay 2 \
-  --get -H 'Accept: application/fhir+json' \
-  --data-urlencode "identifier=$CAREPLAN_SYSTEM|$CAREPLAN_ID" \
-  "$FHIR_URL/CarePlan" > "$CAREPLAN_ARTIFACT_DIR/careplan-search.json"
-"$INGESTER_PYTHON" - "$CAREPLAN_ARTIFACT_DIR/careplan-search.json" "$CAREPLAN_ARTIFACT_DIR" <<'PY'
+podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" exec -T acp-writer python - \
+  "$CAREPLAN_SYSTEM" "$CAREPLAN_ID" "/slice-run/careplans/$CAREPLAN_ID" "$FHIR_CONTAINER_URL" <<'PY'
 import json
 import sys
 from pathlib import Path
+import requests
 
-search_path, out_dir = Path(sys.argv[1]), Path(sys.argv[2])
-search = json.loads(search_path.read_text())
+from acp_writer.nodes.fhir_server_writer import _get_auth_headers
+
+system, careplan_id, output_dir, fhir_url = sys.argv[1:]
+out_dir = Path(output_dir)
+out_dir.mkdir(parents=True, exist_ok=True)
+headers = {"Accept": "application/fhir+json", **_get_auth_headers()}
+response = requests.get(
+    f"{fhir_url.rstrip('/')}/CarePlan",
+    params={"identifier": f"{system}|{careplan_id}"},
+    headers=headers,
+    timeout=30,
+)
+if response.status_code != 200:
+    raise SystemExit(f"Authenticated FHIR CarePlan search returned HTTP {response.status_code}")
+search = response.json()
+search_path = out_dir / "careplan-search.json"
+search_path.write_text(json.dumps(search, indent=2) + "\n")
 careplan = next(
     item.get("resource", {}) for item in search.get("entry", [])
     if item.get("resource", {}).get("resourceType") == "CarePlan"
@@ -543,13 +690,19 @@ for activity in careplan.get("activity", []):
 if set(references) != {"Task", "DocumentReference"}:
     raise SystemExit("Persisted CarePlan automation links do not include Task and DocumentReference")
 (out_dir / "automation-resource-refs.json").write_text(json.dumps(references, indent=2) + "\n")
+print(json.dumps({"careplan_search_status": response.status_code, "careplan_found": True}))
+for resource_type, reference in references.items():
+    resource_response = requests.get(f"{fhir_url.rstrip('/')}/{reference}", headers=headers, timeout=30)
+    if resource_response.status_code != 200:
+        raise SystemExit(
+            f"Authenticated FHIR {resource_type} read returned HTTP {resource_response.status_code}"
+        )
+    resource = resource_response.json()
+    if resource.get("resourceType") != resource_type:
+        raise SystemExit(f"FHIR {resource_type} read returned the wrong resource type")
+    (out_dir / f"{resource_type}.json").write_text(json.dumps(resource, indent=2) + "\n")
+    print(json.dumps({"resource_type": resource_type, "status": resource_response.status_code}))
 PY
-while IFS= read -r resource_ref; do
-  resource_type="${resource_ref%%/*}"
-  resource_id="${resource_ref#*/}"
-  curl --silent --show-error --fail -H 'Accept: application/fhir+json' \
-    "$FHIR_URL/$resource_type/$resource_id" > "$CAREPLAN_ARTIFACT_DIR/$resource_type.json"
-done < <("$INGESTER_PYTHON" -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1])).values()))' "$CAREPLAN_ARTIFACT_DIR/automation-resource-refs.json")
 
 curl --silent --show-error --fail --get \
   --data-urlencode "careplan_id=$CAREPLAN_ID" \
@@ -564,7 +717,8 @@ if not records:
 print(f"Automation service stored {len(records)} automation record(s).")
 PY
 
-"$INGESTER_PYTHON" acp-writer/scripts/export_ui_fixture.py \
+PYTHONPATH="$ROOT_DIR/acp-writer/src:$ROOT_DIR/shared/src${PYTHONPATH:+:$PYTHONPATH}" \
+  "$ACP_WRITER_PYTHON" acp-writer/scripts/export_ui_fixture.py \
   --brief "$CAREPLAN_ARTIFACT_DIR/planning-brief.json" \
   --bundle "$RUN_ROOT/generated-careplan-bundle.json"
 

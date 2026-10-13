@@ -7,6 +7,7 @@ context for future BPMN generation.
 
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -17,6 +18,9 @@ from acp_writer.llm import get_llm
 from acp_writer.llm_json import loads_json
 from acp_writer.output import write_artifact
 from acp_writer.planning_brief import (
+    ActivityType,
+    FHIRCode,
+    PlanActivity,
     PlanningBrief,
     coerce_conflicts,
     normalize_review_history,
@@ -29,8 +33,272 @@ from acp_writer.prompts.plan_composer import (
     compose_system_prompt,
 )
 from acp_writer.state import CarePlanComposerState
+from acp_writer.tools.concept_resolver import resolve
 
 logger = logging.getLogger(__name__)
+
+def _source_recommendation_ids(item: dict) -> list[str]:
+    values = [item.get("source_recommendation_id"), *(item.get("source_recommendation_ids") or [])]
+    return list(dict.fromkeys(value for value in values if isinstance(value, str) and value.strip()))
+
+
+@mlflow.trace(name="resolve_missing_medication_codes")
+def _resolve_missing_medication_codes(brief_data: dict[str, Any]) -> None:
+    """Resolve missing medication coding through the shared concept path."""
+    for activity in brief_data.get("activities") or []:
+        if activity.get("type") != "medication" or activity.get("code"):
+            continue
+        concept = resolve(str(activity.get("description") or ""))
+        if (
+            concept is None
+            or concept.action != "extract_medication"
+            or not concept.system
+            or not concept.code
+        ):
+            continue
+        activity["code"] = {"system": concept.system, "code": concept.code}
+
+
+def _merge_same_cpg_medication_regimens(brief_data: dict[str, Any]) -> dict[tuple[str, str, str, str, str], list[str]]:
+    """Collapse duplicate same-CPG rows that prescribe the same regimen.
+
+    The returned keys map each regimen to all source recommendation ids so
+    related goals can be consolidated without losing provenance.
+    """
+    activities = brief_data.get("activities") or []
+    groups: dict[tuple[str, str, str, str, str], list[dict]] = {}
+    first_indices: dict[tuple[str, str, str, str, str], int] = {}
+    activity_keys: dict[int, tuple[str, str, str, str, str]] = {}
+    for index, activity in enumerate(activities):
+        if activity.get("type") != "medication" or not activity.get("code"):
+            continue
+        code = activity["code"]
+        key = (
+            str(activity.get("source_cpg") or ""),
+            str(code.get("system") or ""),
+            str(code.get("code") or ""),
+            re.sub(r"\s+", "", str(activity.get("dose") or "")).lower(),
+            "|".join(
+                re.sub(r"\s+", " ", str(activity.get(field) or "")).strip().lower()
+                for field in ("route", "frequency")
+            ),
+        )
+        groups.setdefault(key, []).append(activity)
+        first_indices.setdefault(key, index)
+        activity_keys[index] = key
+
+    rec_groups: dict[tuple[str, str, str, str, str], list[str]] = {}
+    merged: list[dict] = []
+    merged_items: dict[tuple[str, str, str, str, str], dict] = {}
+    for key, group in groups.items():
+        rec_ids = list(dict.fromkeys(
+            rec_id for activity in group for rec_id in _source_recommendation_ids(activity)
+        ))
+        rec_groups[key] = rec_ids
+        primary = dict(group[0])
+        primary["source_recommendation_ids"] = rec_ids
+        if rec_ids:
+            primary["source_recommendation_id"] = rec_ids[0]
+        if len(group) > 1:
+            conditions = list(dict.fromkeys(
+                str(activity.get("description") or "").strip().rstrip(".")
+                for activity in group
+                if activity.get("description")
+            ))
+            code = primary["code"]
+            regimen = " ".join(
+                part for part in [
+                    code.get("display"),
+                    primary.get("dose"),
+                    primary.get("route"),
+                    primary.get("frequency"),
+                ] if part
+            )
+            primary["description"] = (
+                f"Use one {regimen} regimen when either applicable same-CPG decision condition is met: "
+                + " OR ".join(f"({condition})" for condition in conditions)
+                + "."
+            )
+            rationales = list(dict.fromkeys(
+                str(activity.get("clinical_rationale") or "").strip()
+                for activity in group
+                if activity.get("clinical_rationale")
+            ))
+            if rationales:
+                primary["clinical_rationale"] = " ".join(rationales)
+            workflows = [activity.get("workflow") or {} for activity in group]
+            for field in ("escalation", "monitoring_trigger"):
+                values = list(dict.fromkeys(
+                    str(workflow.get(field) or "").strip()
+                    for workflow in workflows
+                    if workflow.get(field)
+                ))
+                if values:
+                    primary.setdefault("workflow", {})[field] = " ".join(values)
+        merged_items[key] = primary
+    for index, activity in enumerate(activities):
+        key = activity_keys.get(index)
+        if key is None:
+            merged.append(activity)
+        elif first_indices[key] == index:
+            merged.append(merged_items[key])
+    brief_data["activities"] = merged
+    return rec_groups
+
+
+def _merge_goals_for_merged_regimens(
+    brief_data: dict[str, Any],
+    medication_groups: dict[tuple[str, str, str, str, str], list[str]],
+) -> None:
+    merged_rec_sets = [set(ids) for ids in medication_groups.values() if len(ids) > 1]
+    if not merged_rec_sets:
+        return
+    goals = brief_data.get("goals") or []
+    consumed: set[int] = set()
+    merged_goals: list[dict] = []
+    for rec_ids in merged_rec_sets:
+        matching = [
+            (index, goal) for index, goal in enumerate(goals)
+            if rec_ids.intersection(_source_recommendation_ids(goal))
+        ]
+        if len(matching) < 2:
+            continue
+        first_index, first = matching[0]
+        result = dict(first)
+        all_rec_ids = list(dict.fromkeys(
+            rec_id for _, goal in matching for rec_id in _source_recommendation_ids(goal)
+        ))
+        result["source_recommendation_ids"] = all_rec_ids
+        if all_rec_ids:
+            result["source_recommendation_id"] = all_rec_ids[0]
+        descriptions = list(dict.fromkeys(
+            str(goal.get("description") or "").strip().rstrip(".")
+            for _, goal in matching if goal.get("description")
+        ))
+        result["description"] = "One medication initiation goal covers the applicable criteria: " + " OR ".join(
+            f"({description})" for description in descriptions
+        ) + "."
+        consumed.update(index for index, _ in matching)
+        merged_goals.append(result)
+    if consumed:
+        brief_data["goals"] = [goal for i, goal in enumerate(goals) if i not in consumed] + merged_goals
+
+
+def _dmn_follow_up_weeks(dmn_results: list[dict]) -> tuple[int, int | None] | None:
+    for index, result in enumerate(dmn_results):
+        if result.get("model_id") != "treatment-recommendation":
+            continue
+        outputs = result.get("outputs") or {}
+        decision = outputs.get("Treatment Recommendation") or {}
+        action = str(decision.get("Action") or "").strip().lower()
+        weeks = decision.get("Follow Up Weeks")
+        if action == "start medication" and isinstance(weeks, (int, float)) and weeks > 0:
+            return int(weeks), index
+    return None
+
+
+def _ensure_clinical_follow_up(brief_data: dict[str, Any], dmn_results: list[dict]) -> None:
+    follow_up = _dmn_follow_up_weeks(dmn_results)
+    if not follow_up or not any(a.get("type") == "medication" for a in brief_data.get("activities") or []):
+        return
+    weeks, dmn_index = follow_up
+    activities = brief_data.setdefault("activities", [])
+    if any(
+        "visit" in str(activity.get("description") or "").lower()
+        and "follow" in str(activity.get("description") or "").lower()
+        for activity in activities
+    ):
+        return
+    medication_ids = list(dict.fromkeys(
+        rec_id for activity in activities if activity.get("type") == "medication"
+        for rec_id in _source_recommendation_ids(activity)
+    ))
+    cpg_id = next((a.get("source_cpg") for a in activities if a.get("type") == "medication"), "unspecified")
+    activities.append(PlanActivity(
+        type=ActivityType.MONITORING,
+        description=(
+            f"Schedule a clinical follow-up visit {weeks} weeks after medication initiation "
+            "to review blood pressure response and tolerability; keep this visit separate "
+            "from home-average review and laboratory monitoring."
+        ),
+        frequency=f"{weeks} weeks",
+        source_recommendation_id=medication_ids[0] if medication_ids else None,
+        source_recommendation_ids=medication_ids,
+        source_cpg=cpg_id,
+        source_dmn_call=dmn_index,
+        clinical_rationale="The treatment decision DMN specifies this clinical follow-up interval.",
+    ).model_dump(mode="json", exclude_none=True))
+
+
+def _normalize_source_bound_safety_text(brief_data: dict[str, Any], recommendations: list[dict]) -> None:
+    recommendation_text = " ".join(str(rec.get("content") or "") for rec in recommendations).lower()
+    if "alcohol" in recommendation_text and "women" in recommendation_text and "men" in recommendation_text:
+        for activity in brief_data.get("activities") or []:
+            if "alcohol" in str(activity.get("description") or "").lower():
+                activity["description"] = (
+                    "Limit alcohol intake to no more than 2 drinks per day for men and 1 drink per day "
+                    "for women, as stated in the CPG; confirm which limit applies before counseling."
+                )
+    recommendation_by_id = {rec.get("id"): rec for rec in recommendations if rec.get("id")}
+    for activity in brief_data.get("activities") or []:
+        description = str(activity.get("description") or "")
+        if activity.get("type") == "medication":
+            prerequisites = (
+                "Initiate only after elevated blood pressure is confirmed with at least two measurements "
+                "on separate occasions and a clinician has reviewed baseline BMP renal function and electrolytes."
+            )
+            if "separate occasions" not in description.lower() or "baseline" not in description.lower():
+                activity["description"] = f"{description.rstrip('. ')} {prerequisites}"
+        if "baseline" in description.lower() and "metabolic panel" in description.lower():
+            activity["description"] = (
+                "Obtain a baseline Basic Metabolic Panel and have a clinician review renal function "
+                "and electrolytes before medication initiation."
+            )
+        source_ids = _source_recommendation_ids(activity)
+        source_recommendations = [recommendation_by_id[rec_id] for rec_id in source_ids if rec_id in recommendation_by_id]
+        has_severe_source = any("180/120" in str(rec.get("content") or "") for rec in source_recommendations)
+        if has_severe_source and "180/120" in description:
+            lower = description.lower()
+            if "emergency services" not in lower:
+                activity["description"] = (
+                    f"{description.rstrip('. ')} If a reading is above 180/120 mmHg with chest pain, "
+                    "shortness of breath, back pain, numbness, weakness, a vision change, or difficulty "
+                    "speaking, call emergency services immediately. If those symptoms are absent, repeat "
+                    "the reading after five minutes; if it remains above 180/120 mmHg, contact the clinic "
+                    "the same day."
+                )
+            rationale = str(activity.get("clinical_rationale") or "").strip()
+            supplemental = (
+                "Supplemental emergency-symptom guidance follows the American Heart Association: "
+                "https://www.heart.org/en/health-topics/high-blood-pressure/understanding-blood-pressure-readings/when-to-call-911-for-high-blood-pressure."
+            )
+            if supplemental not in rationale:
+                activity["clinical_rationale"] = f"{rationale} {supplemental}".strip()
+
+
+def _neutralize_unprovided_pronouns(
+    brief_data: dict[str, Any], patient_demographics: dict[str, Any]
+) -> None:
+    """Use neutral patient wording unless explicit pronouns were supplied."""
+    if patient_demographics.get("pronouns"):
+        return
+
+    def normalize(value: str) -> str:
+        value = re.sub(r"\bhimself\b", "the patient", value, flags=re.IGNORECASE)
+        value = re.sub(r"\bhis\b", "the patient's", value, flags=re.IGNORECASE)
+        return re.sub(r"\b(?:he|him)\b", "the patient", value, flags=re.IGNORECASE)
+
+    for key in ("goals", "activities"):
+        for item in brief_data.get(key) or []:
+            for field in ("description", "clinical_rationale"):
+                value = item.get(field)
+                if isinstance(value, str):
+                    item[field] = normalize(value)
+            workflow = item.get("workflow")
+            if isinstance(workflow, dict):
+                for field, value in workflow.items():
+                    if isinstance(value, str):
+                        workflow[field] = normalize(value)
 
 
 def _format_conditions(condition_codes: list[dict]) -> str:
@@ -247,6 +515,12 @@ def plan_composer(state: CarePlanComposerState) -> dict:
         if review_history:
             brief_data["revision_history"] = normalize_review_history(review_history)
         _sanitize_provenance(brief_data, cpg_ids[0] if cpg_ids else "unspecified")
+        _normalize_source_bound_safety_text(brief_data, recommendations)
+        _neutralize_unprovided_pronouns(brief_data, demographics)
+        _resolve_missing_medication_codes(brief_data)
+        merged_medication_groups = _merge_same_cpg_medication_regimens(brief_data)
+        _merge_goals_for_merged_regimens(brief_data, merged_medication_groups)
+        _ensure_clinical_follow_up(brief_data, dmn_results)
         brief = PlanningBrief.model_validate(brief_data)
         brief = stamp_activity_ids(brief, base_brief)
         brief_dict = brief.model_dump(mode="json")

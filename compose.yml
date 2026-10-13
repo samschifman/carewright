@@ -89,7 +89,10 @@ services:
       start_period: 30s
 
   medplum-loader:
-    image: quay.io/cpgtoacp/python:3.12-slim
+    image: localhost/slice-local_medplum-loader:latest
+    build:
+      context: ./mock-EHR
+      dockerfile: deploy/Containerfile.loader
     depends_on:
       medplum-server:
         condition: service_healthy
@@ -98,6 +101,10 @@ services:
       DATA_DIR: "/data"
       SMART_CONFIG_DIR: "/config/acp-writer-ui"
       FHIR_ENV_DIR: "/config"
+      MEDPLUM_ADMIN_EMAIL: ${MEDPLUM_ADMIN_EMAIL:-admin@careview.example}
+      MEDPLUM_ADMIN_PASSWORD: ${MEDPLUM_ADMIN_PASSWORD:-}
+      MEDPLUM_PRACTITIONER_PASSWORD: ${MEDPLUM_PRACTITIONER_PASSWORD:-}
+      MEDPLUM_SUPERADMIN_PASSWORD: ${MEDPLUM_SUPERADMIN_PASSWORD:-}
     volumes:
       - ./mock-EHR/deploy/load-medplum.sh:/load-medplum.sh:ro
       - ./mock-EHR/data:/data:ro

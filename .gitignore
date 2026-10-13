@@ -204,3 +204,4 @@ mock-EHR/deploy/.env
 deploy/config/*.env
 !deploy/config/*.env.template
 deploy/.rendered/
+/acp-writer/ui/public/smart-config.json

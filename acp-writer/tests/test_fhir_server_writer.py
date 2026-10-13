@@ -147,8 +147,27 @@ class TestFHIRServerWriter:
         result = _post_bundle(_sample_bundle())
 
         assert result["delivery_status"] == "stored_locally"
+        assert result["server_status_code"] == 201
         assert result["server_ids"] == {}
         assert "valid JSON" in result["error"]
+
+    def test_auth_failure_preserves_http_status_without_response_text(self, monkeypatch):
+        monkeypatch.setattr(
+            writer_module.requests,
+            "post",
+            lambda *args, **kwargs: SimpleNamespace(
+                status_code=401,
+                content=b'{"resourceType":"OperationOutcome"}',
+                text='{"resourceType":"OperationOutcome"}',
+                json=lambda: {"resourceType": "OperationOutcome"},
+            ),
+        )
+
+        result = _post_bundle(_sample_bundle())
+
+        assert result["delivery_status"] == "stored_locally"
+        assert result["server_status_code"] == 401
+        assert "error" not in result
 
     def test_stores_locally_when_server_unavailable(self):
         state = {
@@ -268,6 +287,7 @@ class TestApprovalWorkflow:
         cp_id = self._store_care_plan()
         result = approve_care_plan(cp_id, reviewer=ReviewerContext(display="Dr. Smith"))
         assert result["status"] == "active"
+        assert result["fhir_server_status"] == 201
 
         cp = get_care_plan(cp_id)
         assert cp["status"] == "active"

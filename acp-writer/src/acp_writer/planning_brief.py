@@ -81,6 +81,7 @@ class PlanGoal(BaseModel):
     target_measure_code: FHIRCode | None = None
     target_value: TargetValue | None = None
     source_recommendation_id: str | None = None
+    source_recommendation_ids: list[str] = Field(default_factory=list)
     source_cpg: str
 
 
@@ -99,6 +100,7 @@ class PlanActivity(BaseModel):
     specialty: str | None = None
 
     source_recommendation_id: str | None = None
+    source_recommendation_ids: list[str] = Field(default_factory=list)
     source_cpg: str
     source_dmn_call: int | None = Field(
         default=None,

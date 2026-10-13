@@ -91,6 +91,56 @@ def test_rendered_template_json_and_bpmn_are_current() -> None:
         assert (AUTOMATION_DIR / filename).read_text(encoding="utf-8") == content
 
 
+def test_home_bp_checks_any_severe_reading_before_average_review() -> None:
+    ir = _load_golden(AUTOMATION_DIR / "home-bp-monitoring.ir.json")
+    elements = {element.id: element for element in ir.process.flowElements}
+    parameters = {parameter.name: parameter for parameter in ir.process.acp.parameters}
+    observation = load_catalog().get("ehr.query_observations")
+    output_names = {item.name for item in observation.outputs}
+
+    assert "consecutive_days" in output_names
+    assert "max_value" in output_names
+    assert elements["query_systolic"].outputs["consecutive_days"] == "systolic_consecutive_days"
+    assert elements["query_diastolic"].outputs["consecutive_days"] == "diastolic_consecutive_days"
+    assert elements["query_systolic"].outputs["max_value"] == "max_systolic"
+    assert elements["query_diastolic"].outputs["max_value"] == "max_diastolic"
+    assert "reading_count > 0" in elements["f_some"].conditionExpression
+    condition = elements["f_adequate"].conditionExpression
+    assert "systolic_consecutive_days >= 3" in condition
+    assert "diastolic_consecutive_days >= 3" in condition
+    assert "consecutive days" in elements["f_adequate"].acp.provenance.source_text
+    severe_condition = elements["f_severe"].conditionExpression
+    assert "max_systolic > severe_systolic_threshold" in severe_condition
+    assert "max_diastolic > severe_diastolic_threshold" in severe_condition
+    assert elements["f_severe"].targetRef == "request_repeat"
+    assert elements["request_repeat"].taskName == "patient.request_observation"
+    assert elements["request_repeat"].inputs["due"].param == "repeat_due"
+    assert elements["request_repeat"].inputs["instructions"].param == "repeat_instructions_text"
+    assert elements["wait_repeat"].timerEventDefinition.timeDuration.param == "repeat_due"
+    assert elements["query_repeat_systolic"].outputs["latest_value"] == "repeat_systolic"
+    assert elements["query_repeat_diastolic"].outputs["latest_value"] == "repeat_diastolic"
+    repeat_condition = elements["f_repeat_severe"].conditionExpression
+    assert "repeat_systolic > severe_systolic_threshold" in repeat_condition
+    assert "repeat_diastolic > severe_diastolic_threshold" in repeat_condition
+    assert elements["f_repeat_severe"].targetRef == "notify_patient"
+    assert elements["notify_patient"].taskName == "patient.send_message"
+    assert elements["f_repeat_contact"].targetRef == "end_severe"
+    assert elements["f_repeat_not_severe"].targetRef == "gw_after_severe"
+    assert elements["f_none"].targetRef == "remind"
+    assert elements["f_insufficient"].targetRef == "loop_entry"
+    assert "remind_join" not in elements
+    assert "escalate_severe" not in elements
+    instructions = parameters["instructions_text"].default
+    assert "validated upper-arm device" in instructions
+    assert "at least three and preferably seven consecutive days" in instructions
+    repeat_due = parameters["repeat_due"].default
+    assert repeat_due == "PT5M"
+    repeat_instructions = parameters["repeat_instructions_text"].default
+    assert "should be repeated after five minutes" in repeat_instructions
+    same_day_contact = parameters["same_day_contact_text"].default
+    assert "contact the clinic the same day" in same_day_contact
+
+
 def test_acei_template_has_no_phi_warnings() -> None:
     template = AutomationTemplate.model_validate_json(
         (AUTOMATION_DIR / "acei-lab-follow-up.template.json").read_text(encoding="utf-8")

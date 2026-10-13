@@ -259,6 +259,18 @@ def _duration_alias_groups(value: Any) -> list[list[str]]:
         aliases.append([str(count), noun])
         if count in _SIMPLE_NUMBER_WORDS:
             aliases.append([_SIMPLE_NUMBER_WORDS[count], noun])
+    elif seconds % 60 == 0:
+        count = seconds // 60
+        noun = "minute" if count == 1 else "minutes"
+        aliases.append([str(count), noun])
+        if count in _SIMPLE_NUMBER_WORDS:
+            aliases.append([_SIMPLE_NUMBER_WORDS[count], noun])
+    else:
+        count = seconds
+        noun = "second" if count == 1 else "seconds"
+        aliases.append([str(count), noun])
+        if count in _SIMPLE_NUMBER_WORDS:
+            aliases.append([_SIMPLE_NUMBER_WORDS[count], noun])
     return aliases
 
 
@@ -732,9 +744,9 @@ def _text_literal_checks(
                     if value.type == "unit":
                         continue
                     if value.type == "enum":
-                        cited = contains(
-                            source_text, str(value.literal), abbreviations=abbreviations
-                        ) or in_sections(str(value.literal))
+                        # The catalog defines these control labels; they are
+                        # not clinical values that must appear in CPG prose.
+                        cited = True
                     elif value.type in _NUMERIC_TYPES:
                         cited = _contains_any(
                             source_text,
@@ -1381,11 +1393,35 @@ def _check_instance_data_shapes(
     return findings
 
 
-def _check_instance_provenance(process: Process) -> list[Finding]:
+def _check_instance_provenance(
+    process: Process,
+    templates: Mapping[str, Process],
+) -> list[Finding]:
     findings: list[Finding] = []
     for element in process.flowElements:
         provenance = element.acp.provenance
-        if isinstance(provenance, StructuralProvenance) and provenance.derivation_rule not in _INSTANCE_STRUCTURAL_RULES:
+        ref = element.acp.template_ref
+        source_template = templates.get(ref.template_id) if ref is not None else None
+        source_element = next(
+            (
+                source
+                for source in source_template.flowElements
+                if source.id == ref.element_id
+            ),
+            None,
+        ) if source_template is not None and ref is not None else None
+        copied_template_rule = (
+            isinstance(element, ExclusiveGateway)
+            and isinstance(provenance, StructuralProvenance)
+            and provenance.derivation_rule == "exclusive-split"
+            and source_element is not None
+            and source_element.acp.provenance == provenance
+        )
+        if (
+            isinstance(provenance, StructuralProvenance)
+            and provenance.derivation_rule not in _INSTANCE_STRUCTURAL_RULES
+            and not copied_template_rule
+        ):
             findings.append(
                 _finding(
                     "I2",
@@ -1397,6 +1433,7 @@ def _check_instance_provenance(process: Process) -> list[Finding]:
             "fragment-boundary": (SequenceFlow,),
             "fragment-merge": (SequenceFlow,),
             "exclusive-join": (ExclusiveGateway,),
+            "exclusive-split": (ExclusiveGateway,),
             "start-event": (StartEvent,),
             "end-event": (EndEvent,),
             "parameter-binding": (SequenceFlow,),
@@ -1626,6 +1663,48 @@ def _check_bindings_and_invariants(
             )
 
     values: dict[str, Any] = {}
+    expected_code_bindings: set[str] = set()
+    for element in process.flowElements:
+        if not isinstance(element, Task):
+            continue
+        for input_name, value in element.inputs.items():
+            if isinstance(value, ConceptRef):
+                expected_code_bindings.add(f"{element.id}__{input_name}")
+
+    for binding_name in indexed:
+        if binding_name.endswith("__code") and binding_name not in expected_code_bindings:
+            findings.append(
+                _finding("I4", f"code binding {binding_name!r} does not resolve a template concept input")
+            )
+
+    for binding_name in expected_code_bindings:
+        bindings = indexed.get(binding_name, [])
+        if not bindings:
+            findings.append(
+                _finding(
+                    "incomplete-binding",
+                    f"concept input binding {binding_name!r} is unresolved; the instance is incomplete",
+                    element_id=binding_name,
+                    severity="WARNING",
+                )
+            )
+            continue
+        if len(bindings) != 1:
+            findings.append(
+                _finding("I4", f"concept input binding {binding_name!r} must appear exactly once", element_id=binding_name)
+            )
+            continue
+        binding = bindings[0]
+        value = _field(binding, "value")
+        if _field(binding, "source") != "plan-derived" or not isinstance(value, str) or "|" not in value:
+            findings.append(
+                _finding(
+                    "I4",
+                    f"concept input binding {binding_name!r} must be a plan-derived system|code token",
+                    element_id=binding_name,
+                )
+            )
+
     for parameter in process.acp.parameters:
         bindings = indexed.get(parameter.name, [])
         if len(bindings) != 1:
@@ -2396,7 +2475,7 @@ def validate_instance(
         process, template_processes, context
     )
     findings.extend(_check_instance_data_shapes(process, template_processes))
-    findings.extend(_check_instance_provenance(process))
+    findings.extend(_check_instance_provenance(process, template_processes))
     findings.extend(_check_fragment_integrity(process, template_processes, retained))
     findings.extend(_check_bindings_and_invariants(process, context))
     findings.extend(_check_main_boundary(process))

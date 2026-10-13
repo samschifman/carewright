@@ -98,7 +98,7 @@ def test_resets_on_a_flow_insert_a_script_after_the_condition() -> None:
     assert flows["f_some"].target_ref == "f_some_reset"
     assert flows["f_some"].condition_expression is not None
     assert flows["f_some_reset_out"].source_ref == "f_some_reset"
-    assert flows["f_some_reset_out"].target_ref == "gw_threshold"
+    assert flows["f_some_reset_out"].target_ref == "gw_severe"
 
 
 def test_main_wraps_one_and_two_outcomes() -> None:
@@ -207,7 +207,7 @@ def test_custom_task_io_contains_exactly_ir_inputs_and_mapped_outputs() -> None:
     outputs = {io.name for io in task.io if io.direction == "output"}
 
     assert inputs == {"code", "window", "unit", "TaskName"}
-    assert outputs == {"average_value"}
+    assert outputs == {"average_value", "consecutive_days", "max_value"}
 
 
 def test_dmn_variable_names_keep_exact_labels_and_get_xml_safe_generated_ids() -> None:

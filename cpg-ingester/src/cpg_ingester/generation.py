@@ -259,6 +259,61 @@ def _bpmn_source_sections(item: dict, state: dict, manifest: list[dict]) -> str:
     return "\n\n".join(excerpts)
 
 
+def _process_sections(item: dict, manifest: list[dict] | None = None) -> set[str]:
+    sections: set[str] = set()
+    related = [item]
+    linked_names = {
+        str(value).strip().casefold()
+        for key in ("linked_recommendations", "linked_decisions", "cross_references")
+        for value in item.get(key, []) or []
+        if str(value).strip()
+    }
+    if linked_names and manifest:
+        related.extend(
+            candidate for candidate in manifest
+            if any(
+                str(candidate.get(field, "")).strip().casefold() in linked_names
+                for field in ("id", "model_id", "name", "title")
+            )
+        )
+    for candidate in related:
+        for key in ("section", "sections", "source_sections"):
+            value = candidate.get(key)
+            values = value if isinstance(value, (list, tuple, set)) else [value]
+            for section in values:
+                if not isinstance(section, str):
+                    continue
+                for part in re.split(r"[;,]", section):
+                    normalized = part.strip().casefold()
+                    if not normalized:
+                        continue
+                    sections.add(normalized)
+                    heading = re.match(r"^(\d+(?:\.\d+)*)\b", normalized)
+                    if heading:
+                        sections.add(heading.group(1))
+    return sections
+
+
+def _sibling_process_items(
+    item: dict,
+    process_items: list[dict],
+    manifest: list[dict] | None = None,
+) -> list[dict]:
+    """Return process items whose sections overlap this item's source scope."""
+    sections = _process_sections(item, manifest)
+    if not sections:
+        return []
+    return [
+        {
+            "name": candidate.get("name", ""),
+            "steps": candidate.get("steps", []) or [],
+        }
+        for candidate in process_items
+        if candidate is not item
+        and sections.intersection(_process_sections(candidate, manifest))
+    ]
+
+
 def _linked_dmn_summaries(item: dict, dmn_results: list[dict]) -> list[dict]:
     """Return summaries for decisions named by this process manifest item."""
     names = {str(value).casefold() for value in item.get("linked_decisions", []) or []}
@@ -539,11 +594,18 @@ def _bpmn_escalate(state: BPMNPipelineState) -> dict:
             reason = "engine-validation-failed"
         else:
             reason = "static-budget-exhausted"
-    errors = (
-        state.get("semantic_discrepancies")
-        or state.get("engine_errors")
-        or [finding.get("message", str(finding)) for finding in state.get("static_findings", [])]
-    )
+    static_findings = state.get("static_findings", []) or []
+    errors = state.get("semantic_discrepancies") or state.get("engine_errors") or [
+        finding.get("message", str(finding))
+        for finding in static_findings
+        if finding.get("severity", "ERROR") == "ERROR"
+    ]
+    warnings = [
+        finding.get("message", str(finding))
+        for finding in static_findings
+        if finding.get("severity") == "WARNING"
+    ]
+    warnings.extend(state.get("engine_validation_warnings", []) or [])
     logger.warning(
         "BPMN template escalated for %s (%s)",
         state.get("item", {}).get("name", "unknown"), reason,
@@ -552,6 +614,7 @@ def _bpmn_escalate(state: BPMNPipelineState) -> dict:
         "escalated": True,
         "escalation_reason": reason,
         "escalation_errors": list(errors),
+        "escalation_warnings": warnings,
     }
 
 
@@ -857,6 +920,7 @@ def _generate_bpmn_results(state: dict) -> list[dict]:
         try:
             result = bpmn_graph.invoke({
                 "item": item,
+                "sibling_items": _sibling_process_items(item, process_items, manifest),
                 "source_pages": _bpmn_source_sections(item, state, manifest),
                 "figures": _process_figures(item, state),
                 "dmn_summaries": _linked_dmn_summaries(item, dmn_results),
@@ -894,7 +958,9 @@ def _generate_bpmn_results(state: dict) -> list[dict]:
             entry["escalation_errors"] = result.get("escalation_errors") or [
                 finding.get("message", str(finding))
                 for finding in entry["static_findings"]
+                if finding.get("severity", "ERROR") == "ERROR"
             ]
+            entry["escalation_warnings"] = result.get("escalation_warnings", [])
         bpmn_results.append(entry)
     return bpmn_results
 

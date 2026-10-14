@@ -58,3 +58,14 @@ def test_prompt_renders_human_feedback_on_first_attempt():
 
     assert "Keep the weekly interval from the CPG." in prompt
     assert "PREVIOUS HUMAN REVIEW FEEDBACK" in prompt
+
+
+def test_prompt_declares_required_parameters_for_unspecified_values():
+    flat_prompt = " ".join(build_bpmn_ir_creator_system().split())
+
+    assert (
+        "When the source does not state a timing, threshold, or count, declare a required"
+        in flat_prompt
+    )
+    assert "constraints only when the source states a range" in flat_prompt
+    assert "never choose a value" in flat_prompt

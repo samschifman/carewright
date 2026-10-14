@@ -17,7 +17,11 @@ from cpg_contracts.automation.compiler.kogito_profile import (
     PACKAGE_NAME,
     XSI_NS,
 )
-from cpg_contracts.automation.expressions import TypeInfo, to_java
+from cpg_contracts.automation.expressions import (
+    TypeInfo,
+    expression_environment,
+    to_java,
+)
 
 
 def _tag(namespace: str, local_name: str) -> str:
@@ -264,9 +268,7 @@ def serialize(process: XProcess) -> str:
             )
             unit_metadata.text = prop.unit
 
-    type_environment = {
-        prop.name: TypeInfo(prop.type, prop.unit) for prop in process.properties
-    }
+    type_environment = expression_environment(process.ir.process)
     for node in process.nodes:
         _append_node(model, node, process.flows, type_environment)
     for flow in process.flows:

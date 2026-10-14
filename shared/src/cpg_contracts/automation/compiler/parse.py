@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 import math
 import re
+from types import SimpleNamespace
 from typing import Any
 
 from lxml import etree
@@ -26,7 +27,12 @@ from cpg_contracts.automation.compiler.kogito_profile import (
     STRUCTURE_REF,
     task_label,
 )
-from cpg_contracts.automation.expressions import ExpressionError, TypeInfo, to_java
+from cpg_contracts.automation.expressions import (
+    ExpressionError,
+    TypeInfo,
+    expression_environment,
+    to_java,
+)
 from cpg_contracts.automation.ir import (
     AcpElement,
     AcpProcess,
@@ -777,13 +783,8 @@ def parse(xml: str | bytes, *, catalog: Catalog | None = None) -> ProcessIR:
         properties = _parse_properties(process_element, acp_process, item_definitions)
         parameters = {parameter.name for parameter in acp_process.parameters}
         property_names = {prop.name for prop in properties}
-        type_environment = {
-            name: TypeInfo(parameter.type, parameter.unit)
-            for parameter in acp_process.parameters
-            for name in [parameter.name]
-        }
-        type_environment.update(
-            {prop.name: TypeInfo(prop.type, prop.unit) for prop in properties}
+        type_environment = expression_environment(
+            SimpleNamespace(properties=properties, acp=acp_process)
         )
         active_catalog = load_catalog() if catalog is None else catalog
 

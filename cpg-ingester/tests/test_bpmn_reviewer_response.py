@@ -16,9 +16,11 @@ class ScriptedLLM:
     def __init__(self, response: str):
         self.response = response
         self.calls = 0
+        self.messages = []
 
-    def invoke(self, _messages):
+    def invoke(self, messages):
         self.calls += 1
+        self.messages.append(messages)
         return SimpleNamespace(content=self.response)
 
 
@@ -26,7 +28,17 @@ def _run_review(tmp_path, response):
     llm = ScriptedLLM(response)
     state = {
         "process_ir": {"process": {"id": "clinical-decision-support-alert"}},
-        "item": {"name": "Clinical Decision Support Alert Workflow"},
+        "item": {
+            "name": "Clinical Decision Support Alert Workflow",
+            "steps": ["Generate the clinician alert"],
+            "trigger_hint": "Treatment criteria are met",
+            "timing_cues": ["When criteria are met"],
+            "actors": ["electronic health record", "clinician"],
+        },
+        "sibling_items": [{
+            "name": "Follow-up Review Workflow",
+            "steps": ["Review home readings at follow-up"],
+        }],
         "source_pages": "Automated alerts should notify clinicians when criteria are met.",
         "output_dir": str(tmp_path),
     }
@@ -61,6 +73,23 @@ def test_inconsistent_summary_is_rebuilt_from_parseable_claims(tmp_path):
     assert llm.calls == 1
     assert result["force_escalate"] is False
     assert len(result["semantic_discrepancies"]) == 4
+
+
+def test_reviewer_prompt_includes_item_scope_siblings_and_contract_facts(tmp_path):
+    result, llm = _run_review(tmp_path, STORED_REVIEW.read_text())
+    system_prompt = llm.messages[0][0]["content"]
+    user_prompt = llm.messages[0][1]["content"]
+
+    assert result["force_escalate"] is False
+    assert '"Generate the clinician alert"' in user_prompt
+    assert '"Treatment criteria are met"' in user_prompt
+    assert '"Follow-up Review Workflow"' in user_prompt
+    assert "A step assigned to a" in system_prompt
+    assert "sibling item is not an omission here" in system_prompt
+    assert "associated triggers, intervals, and follow-up timing" in system_prompt
+    assert "Flag an invented default, not a missing one" in system_prompt
+    assert "period_elapsed" in system_prompt
+    assert "exclusive-join" in system_prompt
 
 
 def test_raw_creator_and_reviewer_responses_are_redacted_and_sequenced(tmp_path):

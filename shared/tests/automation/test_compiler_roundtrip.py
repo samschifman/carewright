@@ -9,7 +9,19 @@ from lxml import etree
 import pytest
 
 from cpg_contracts.automation.compiler import ParseError, compile, parse
-from cpg_contracts.automation.ir import ProcessIR, canonical_json
+from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.ir import (
+    Constraints,
+    Literal_,
+    Parameter,
+    ProcessIR,
+    Property,
+    SequenceFlow,
+    SourceRef,
+    canonical_json,
+)
+from cpg_contracts.automation.validators.grounding import validate_template_structure
+from cpg_contracts.automation.validators.ladder import run_static_ladder
 
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "automation"
@@ -56,6 +68,68 @@ def test_timer_literal_in_days_round_trips() -> None:
         ".//bpmn2:intermediateCatchEvent[@id='wait_interval']/bpmn2:timerEventDefinition/bpmn2:timeDuration/text()",
         namespaces=NS,
     ) == ["P7D"]
+    assert canonical_json(parse(xml)) == canonical_json(ir)
+
+
+def test_integer_literals_promote_for_decimal_and_quantity_conditions_round_trip() -> None:
+    ir = fixture_ir()
+    ir.process.properties.append(Property(name="lab_timing_weeks", type="decimal"))
+    ir.process.acp.parameters.extend(
+        [
+            Parameter(name="systolic_bp", type="decimal", required=True),
+            Parameter(
+                name="qty", type="quantity", unit="mm[Hg]", required=True
+            ),
+        ]
+    )
+    conditions = {
+        "f_some": "lab_timing_weeks == 2",
+        "f_escalate": "systolic_bp >= 140",
+        "f_high": "qty >= 140",
+    }
+    for flow in ir.process.flowElements:
+        if isinstance(flow, SequenceFlow) and flow.id in conditions:
+            flow.conditionExpression = conditions[flow.id]
+
+    result = run_static_ladder(ir, catalog=load_catalog(), stage="template")
+    assert result.rungs_passed[0] == "L0"
+    xml = compile(ir)
+    assert "lab_timing_weeks == 2" in xml
+    assert "systolic_bp >= 140" in xml
+    assert "qty >= 140" in xml
+    assert canonical_json(parse(xml)) == canonical_json(ir)
+
+
+def test_enum_parameter_environment_round_trips_string_condition() -> None:
+    ir = fixture_ir()
+    ir.process.acp.parameters.append(
+        Parameter(
+            name="review_pathway",
+            type="string",
+            required=True,
+            constraints=Constraints(enum=["lifestyle modification alone", "medication"]),
+            source=SourceRef(
+                kind="cpg",
+                source_text=(
+                    "Patients managed with lifestyle modification alone should have "
+                    "their home readings reviewed at the scheduled follow-up visit."
+                ),
+            ),
+        )
+    )
+    flow = next(
+        item for item in ir.process.flowElements
+        if isinstance(item, SequenceFlow) and item.id == "f_some"
+    )
+    flow.conditionExpression = (
+        'review_pathway == "lifestyle modification alone"'
+    )
+
+    assert validate_template_structure(ir) == []
+    result = run_static_ladder(ir, catalog=load_catalog(), stage="template")
+    assert result.rungs_passed[0] == "L0"
+    xml = compile(ir)
+    assert '"lifestyle modification alone".equals(review_pathway)' in xml
     assert canonical_json(parse(xml)) == canonical_json(ir)
 
 

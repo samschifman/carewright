@@ -7,10 +7,9 @@ from lxml import etree
 
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.automation.compiler import compile
-from cpg_contracts.automation.expressions import parse, typecheck
+from cpg_contracts.automation.expressions import expression_environment, parse, typecheck
 from cpg_contracts.automation.ir import Constraints, Parameter, ProcessIR, ir_version
 from cpg_contracts.automation.validators.ladder import run_static_ladder
-from cpg_contracts.automation.validators.ladder import _expression_environment
 
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "automation"
@@ -59,7 +58,7 @@ def test_enum_constrained_string_parameter_has_enum_expression_type() -> None:
         )
     )
 
-    environment = _expression_environment(ir)
+    environment = expression_environment(ir.process)
     assert typecheck(parse('treatment_action == "Start medication"'), environment) == "boolean"
 
 

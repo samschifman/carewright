@@ -492,9 +492,17 @@ def test_generate_all_passes_linked_dmn_namespace_and_recommendation():
     process = {
         "type": "process", "id": "process-guid", "template_id": "home-bp-monitoring",
         "name": "Home BP Monitoring", "section": "3.5",
+        "steps": ["Review weekly readings"],
         "linked_decisions": ["Treatment Plan"],
         "linked_recommendations": ["Home BP Monitoring"],
         "tier_hint": "A",
+    }
+    sibling = {
+        **process,
+        "id": "outreach-guid",
+        "template_id": "missing-reading-outreach",
+        "name": "Missing Reading Outreach",
+        "steps": ["Send a reminder after a week without readings"],
     }
     dmn_graph = MagicMock()
     dmn_graph.invoke.return_value = {
@@ -524,7 +532,7 @@ def test_generate_all_passes_linked_dmn_namespace_and_recommendation():
         rec_builder.return_value.compile.return_value = rec_graph
         bpmn_builder.return_value.compile.return_value = bpmn_graph
         result = generate_all({
-            "item_manifest": [decision, recommendation_item, process],
+            "item_manifest": [decision, recommendation_item, process, sibling],
             "markdown": "# 3.2 Treatment Plan\nText.\n# 3.5 Home BP Monitoring\nReview readings.",
             "section_map": [
                 {"heading": "3.2 Treatment Plan"},
@@ -534,13 +542,22 @@ def test_generate_all_passes_linked_dmn_namespace_and_recommendation():
             "review_feedback": "Retain the source's follow-up interval.",
         })
 
-    bpmn_state = bpmn_graph.invoke.call_args.args[0]
+    bpmn_state = bpmn_graph.invoke.call_args_list[0].args[0]
+    sibling_state = bpmn_graph.invoke.call_args_list[1].args[0]
     assert bpmn_state["dmn_summaries"][0]["namespace"] == "https://example.org/treatment-plan"
     assert bpmn_state["linked_recs"][0]["id"] == "recommendation-guid"
     assert bpmn_state["human_feedback"] == "Retain the source's follow-up interval."
+    assert bpmn_state["sibling_items"] == [{
+        "name": "Missing Reading Outreach",
+        "steps": ["Send a reminder after a week without readings"],
+    }]
+    assert sibling_state["sibling_items"] == [{
+        "name": "Home BP Monitoring",
+        "steps": ["Review weekly readings"],
+    }]
     assert dmn_graph.invoke.call_args.args[0]["review_feedback"] == "Retain the source's follow-up interval."
     assert rec_graph.invoke.call_args.args[0]["review_feedback"] == "Retain the source's follow-up interval."
-    assert len(result["bpmn_results"]) == 1
+    assert len(result["bpmn_results"]) == 2
 
 
 def test_tier_c_and_unlinked_processes_are_gated_before_bpmn_subgraph():
@@ -560,6 +577,22 @@ def test_tier_c_and_unlinked_processes_are_gated_before_bpmn_subgraph():
 def test_engine_failure_has_a_distinct_escalation_reason():
     result = _bpmn_escalate({"engine_errors": ["engine rejected template"]})
     assert result["escalation_reason"] == "engine-validation-failed"
+
+
+def test_bpmn_escalation_separates_static_errors_and_warnings():
+    result = _bpmn_escalate({
+        "static_findings": [
+            {"severity": "ERROR", "message": "invalid condition"},
+            {"severity": "WARNING", "message": "name-like phrase"},
+        ],
+        "engine_validation_warnings": ["preflight unavailable"],
+    })
+
+    assert result["escalation_errors"] == ["invalid condition"]
+    assert result["escalation_warnings"] == [
+        "name-like phrase",
+        "preflight unavailable",
+    ]
 
 
 def test_human_review_feedback_appears_in_dmn_and_rec_creator_prompts(tmp_path, monkeypatch):

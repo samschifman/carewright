@@ -99,6 +99,9 @@ T4: source-derived numeric, duration, quantity, enum, unit, and code values
 must meet the literal rules above; code inputs use a `{concept}` reference.
 T5: behavior-changing elements use source provenance, except the plan-bound
 main boundary.
+When the source does not state a timing, threshold, or count, declare a required
+parameter with no default (constraints only when the source states a range); never
+choose a value.
 
 The catalog and JSON schema follow. Do not use a capability outside the
 catalog. Output JSON only.

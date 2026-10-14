@@ -79,6 +79,24 @@ class TypeInfo:
     unit: str | None = None
 
 
+def expression_environment(process: Any) -> dict[str, TypeInfo]:
+    """Build the shared acp-expr types for process properties and parameters."""
+    environment = {
+        prop.name: TypeInfo(type=prop.type, unit=prop.unit)
+        for prop in process.properties
+    }
+    for parameter in process.acp.parameters:
+        is_enum = (
+            parameter.constraints is not None
+            and parameter.constraints.enum is not None
+        )
+        environment[parameter.name] = TypeInfo(
+            type="enum" if is_enum else parameter.type,
+            unit=parameter.unit,
+        )
+    return environment
+
+
 @dataclass(frozen=True, slots=True)
 class _Token:
     kind: str
@@ -442,6 +460,18 @@ def _infer(expression: Expr, env: dict[str, TypeInfo]) -> TypeInfo:
                     )
                 return TypeInfo("boolean")
             if left.type != right.type:
+                left_is_integer_literal = (
+                    isinstance(expression.left, LiteralNode)
+                    and expression.left.literal_type == "integer"
+                )
+                right_is_integer_literal = (
+                    isinstance(expression.right, LiteralNode)
+                    and expression.right.literal_type == "integer"
+                )
+                if left_is_integer_literal and right.type in {"decimal", "quantity"}:
+                    return TypeInfo("boolean")
+                if right_is_integer_literal and left.type in {"decimal", "quantity"}:
+                    return TypeInfo("boolean")
                 raise _operator_error(operator, left, right)
             if left.type == "quantity" and (
                 left.unit is None or right.unit is None or left.unit != right.unit

@@ -61,6 +61,7 @@ def bpmn_semantic_reviewer(state: dict) -> dict:
     """Review generated Process IR claims against the original CPG text."""
     process_ir = state.get("process_ir", {})
     item = state.get("item", {})
+    sibling_items = state.get("sibling_items", []) or []
     source_pages = state.get("source_pages", "")
     output_dir = state.get("output_dir", "output")
     retry_count = state.get("semantic_retry_count", 0)
@@ -82,6 +83,19 @@ def bpmn_semantic_reviewer(state: dict) -> dict:
         {"role": "system", "content": BPMN_SEMANTIC_REVIEWER_SYSTEM},
         {"role": "user", "content": BPMN_SEMANTIC_REVIEWER_USER.format(
             name=name,
+            item_scope=json.dumps(
+                {
+                    key: item.get(key, [])
+                    for key in ("steps", "trigger_hint", "timing_cues", "actors")
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            sibling_items=json.dumps(
+                sibling_items,
+                indent=2,
+                ensure_ascii=False,
+            ),
             process_ir=json.dumps(process_ir, indent=2, ensure_ascii=False, default=str),
             source_pages=source_pages,
         )},

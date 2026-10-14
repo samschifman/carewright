@@ -13,6 +13,7 @@ from cpg_contracts.automation.expressions import (
     LiteralNode,
     TypeInfo,
     UnaryNode,
+    expression_environment,
     identifiers,
     literals,
     parse,
@@ -29,18 +30,7 @@ def fixture_ir() -> ProcessIR:
 
 
 def fixture_env() -> dict[str, TypeInfo]:
-    process = fixture_ir().process
-    env = {
-        prop.name: TypeInfo(type=prop.type, unit=prop.unit)
-        for prop in process.properties
-    }
-    env.update(
-        {
-            parameter.name: TypeInfo(type=parameter.type, unit=parameter.unit)
-            for parameter in process.acp.parameters
-        }
-    )
-    return env
+    return expression_environment(fixture_ir().process)
 
 
 def test_fixture_conditions_and_invariant_parse_and_typecheck() -> None:
@@ -115,6 +105,32 @@ def test_quantity_comparisons_require_matching_units() -> None:
     env["glucose"] = TypeInfo("quantity", "mmol/L")
     with pytest.raises(ExpressionError, match=r"quantity.*mm\[Hg\].*mmol/L"):
         typecheck(parse("avg_systolic >= glucose"), env)
+
+
+def test_integer_literal_promotes_to_decimal_or_quantity_in_comparisons() -> None:
+    env = fixture_env()
+    env["lab_timing_weeks"] = TypeInfo("decimal")
+    env["systolic_bp"] = TypeInfo("decimal")
+    env["qty"] = TypeInfo("quantity", "mm[Hg]")
+
+    for source in (
+        "lab_timing_weeks == 2",
+        "systolic_bp >= 140",
+        "qty >= 140",
+    ):
+        assert typecheck(parse(source), env) == "boolean"
+
+
+def test_decimal_property_does_not_promote_an_integer_property() -> None:
+    env = fixture_env()
+    env["int_prop"] = TypeInfo("integer")
+    env["dec_prop"] = TypeInfo("decimal")
+
+    with pytest.raises(
+        ExpressionError,
+        match=r"operator '==' does not support operand types 'integer' and 'decimal'",
+    ):
+        typecheck(parse("int_prop == dec_prop"), env)
 
 
 @pytest.mark.parametrize(

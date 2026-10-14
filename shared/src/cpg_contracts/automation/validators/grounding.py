@@ -35,6 +35,7 @@ from cpg_contracts.automation.expressions import (
     TypeInfo,
     UnaryNode,
     check_invariants,
+    expression_environment,
     identifiers,
     literals,
     parse,
@@ -244,7 +245,9 @@ def _duration_alias_groups(value: Any) -> list[list[str]]:
         if count in _SIMPLE_NUMBER_WORDS:
             aliases.append([_SIMPLE_NUMBER_WORDS[count], noun])
         if count == 1:
-            aliases.extend([["weekly"], ["every", "week"]])
+            aliases.extend(
+                [["a", noun], ["each", noun], ["per", noun], ["weekly"], ["every", noun]]
+            )
     elif seconds % day_seconds == 0:
         count = seconds // day_seconds
         noun = "day" if count == 1 else "days"
@@ -252,19 +255,25 @@ def _duration_alias_groups(value: Any) -> list[list[str]]:
         if count in _SIMPLE_NUMBER_WORDS:
             aliases.append([_SIMPLE_NUMBER_WORDS[count], noun])
         if count == 1:
-            aliases.extend([["daily"], ["every", "day"]])
+            aliases.extend(
+                [["a", noun], ["each", noun], ["per", noun], ["daily"], ["every", noun]]
+            )
     elif seconds % 3600 == 0:
         count = seconds // 3600
         noun = "hour" if count == 1 else "hours"
         aliases.append([str(count), noun])
         if count in _SIMPLE_NUMBER_WORDS:
             aliases.append([_SIMPLE_NUMBER_WORDS[count], noun])
+        if count == 1:
+            aliases.extend([["a", noun], ["each", noun], ["per", noun]])
     elif seconds % 60 == 0:
         count = seconds // 60
         noun = "minute" if count == 1 else "minutes"
         aliases.append([str(count), noun])
         if count in _SIMPLE_NUMBER_WORDS:
             aliases.append([_SIMPLE_NUMBER_WORDS[count], noun])
+        if count == 1:
+            aliases.extend([["a", noun], ["each", noun], ["per", noun]])
     else:
         count = seconds
         noun = "second" if count == 1 else "seconds"
@@ -335,20 +344,6 @@ def _within_constraints(parameter: Parameter, value: Any) -> bool:
     if constraints.pattern is not None and not re.fullmatch(constraints.pattern, str(value)):
         return False
     return True
-
-
-def _expression_env(process: Process) -> dict[str, TypeInfo]:
-    env = {
-        prop.name: TypeInfo(type=prop.type, unit=prop.unit)
-        for prop in process.properties
-    }
-    env.update(
-        {
-            parameter.name: TypeInfo(type=parameter.type, unit=parameter.unit)
-            for parameter in process.acp.parameters
-        }
-    )
-    return env
 
 
 def _derived_names(process: Process) -> set[str]:
@@ -434,7 +429,7 @@ def _check_template_structure(
     elements = {element.id: element for element in process.flowElements}
     properties = _property_by_name(process)
     parameters = _parameter_by_name(process)
-    env = _expression_env(process)
+    env = expression_environment(process)
     derived = _derived_names(process)
 
     for element in process.flowElements:
@@ -1751,7 +1746,7 @@ def _check_bindings_and_invariants(
         try:
             invariant_findings, _ = check_invariants(
                 process.acp.invariants,
-                _expression_env(process),
+                expression_environment(process),
                 values,
             )
         except (ExpressionError, TypeError, ValueError) as exc:
@@ -2387,7 +2382,7 @@ def _template_invariant_findings(
     try:
         violations, _ = check_invariants(
             template.acp.invariants,
-            _expression_env(template),
+            expression_environment(template),
             values,
         )
     except (ExpressionError, TypeError, ValueError) as exc:

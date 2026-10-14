@@ -90,6 +90,7 @@ class BPMNPipelineState(TypedDict, total=False):
     """State for Process IR creation, validation, review, and preflight."""
 
     item: dict
+    sibling_items: list[dict]
     source_pages: str
     figures: list[dict]
     abbreviations: dict[str, str]
@@ -115,4 +116,5 @@ class BPMNPipelineState(TypedDict, total=False):
     escalated: bool
     escalation_reason: str
     escalation_errors: list[str]
+    escalation_warnings: list[str]
     force_escalate: bool

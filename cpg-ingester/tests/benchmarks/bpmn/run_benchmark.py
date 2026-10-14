@@ -178,7 +178,11 @@ def main(suite: str, corpus: str, prompt_rev: str, section_range: str | None, go
         raise click.ClickException(
             "No benchmark templates match the requested section and golden filters."
         )
-    corpus_entry = {**corpus_entry, "templates": selected_templates}
+    corpus_entry = {
+        **corpus_entry,
+        "templates": selected_templates,
+        "all_templates": corpus_entry.get("templates", []),
+    }
     markdown_path = INGESTER_ROOT / corpus_entry["source_cpg"]
     if not markdown_path.is_file():
         raise click.ClickException(f"Source CPG not found: {markdown_path}")

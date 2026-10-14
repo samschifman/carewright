@@ -84,6 +84,25 @@ def test_five_minute_parameter_default_matches_written_out_cpg_duration() -> Non
     )
 
 
+def test_week_duration_grounds_against_a_week_phrase() -> None:
+    ir = fixture_ir()
+    timer = next(item for item in ir.process.flowElements if item.id == "wait_interval")
+    timer.timerEventDefinition.timeDuration = Literal_(literal="P7D", type="duration")
+    timer.acp.provenance.source_text = (
+        "If a week passes without readings, a reminder should be sent to the patient."
+    )
+
+    findings = findings_for(
+        ir,
+        "If a week passes without readings, a reminder should be sent to the patient.",
+    )
+
+    assert not any(
+        finding.code == "T4" and finding.element_id == "wait_interval"
+        for finding in findings
+    )
+
+
 def test_catalog_enum_input_is_not_required_to_appear_in_cpg_text() -> None:
     ir = fixture_ir()
     remind = next(item for item in ir.process.flowElements if item.id == "remind")

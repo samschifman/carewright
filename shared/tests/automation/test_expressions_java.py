@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from cpg_contracts.automation.expressions import ExpressionError, TypeInfo, parse, to_java
+from cpg_contracts.automation.expressions import (
+    ExpressionError,
+    TypeInfo,
+    expression_environment,
+    parse,
+    to_java,
+)
 from cpg_contracts.automation.ir import ProcessIR, SequenceFlow
 
 
@@ -18,18 +24,7 @@ def fixture_ir() -> ProcessIR:
 
 
 def fixture_env() -> dict[str, TypeInfo]:
-    process = fixture_ir().process
-    env = {
-        prop.name: TypeInfo(type=prop.type, unit=prop.unit)
-        for prop in process.properties
-    }
-    env.update(
-        {
-            parameter.name: TypeInfo(type=parameter.type, unit=parameter.unit)
-            for parameter in process.acp.parameters
-        }
-    )
-    return env
+    return expression_environment(fixture_ir().process)
 
 
 def test_fixture_conditions_match_appendix_a_exactly() -> None:
@@ -92,6 +87,15 @@ def test_enum_comparisons_use_string_equals() -> None:
     )
     assert to_java("kind != 'routine'", env) == (
         'return kind != null && !("routine".equals(kind));'
+    )
+
+
+def test_numeric_literal_comparisons_use_java_numeric_operators() -> None:
+    assert to_java("systolic_bp >= 140", {"systolic_bp": TypeInfo("decimal")}) == (
+        "return systolic_bp != null && systolic_bp >= 140;"
+    )
+    assert to_java("qty == 140", {"qty": TypeInfo("quantity", "mm[Hg]")}) == (
+        "return qty != null && qty == 140;"
     )
 
 

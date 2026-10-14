@@ -116,6 +116,7 @@ def _item(template: dict) -> dict:
         "name": template["name"],
         "description": template.get("description", ""),
         "section": template.get("section", ""),
+        "sections": template.get("source_sections") or [template.get("section", "")],
         "tier_hint": template.get("tier_hint"),
         "pattern_family_hint": template.get("pattern_family_hint"),
         "trigger_hint": template.get("trigger_hint"),
@@ -141,9 +142,17 @@ def _record_first_attempt(record: dict, state: dict) -> None:
 
 
 def _drive_template(template: dict, markdown: str, llm_config: dict,
-                    output_dir: Path, ingester_root: Path) -> dict:
+                    output_dir: Path, ingester_root: Path,
+                    sibling_templates: list[dict] | None = None) -> dict:
     """Drive production node functions with production routers for one template."""
     item = _item(template)
+    sibling_items = generation._sibling_process_items(
+        item,
+        [
+            item if candidate.get("id") == template.get("id") else _item(candidate)
+            for candidate in sibling_templates or [template]
+        ],
+    )
     source = _source_pages(markdown, template.get("source_sections", []))
     token_tracker = _UsageTrackingModel(get_llm({
         "litellm_url": llm_config["litellm_url"],
@@ -155,6 +164,7 @@ def _drive_template(template: dict, markdown: str, llm_config: dict,
     reviewer_module.get_llm = lambda _state: token_tracker
     state: dict[str, Any] = {
         "item": item,
+        "sibling_items": sibling_items,
         "source_pages": source,
         "dmn_summaries": _dmn_summaries(template, ingester_root),
         "linked_recs": [
@@ -265,6 +275,7 @@ def run_creator_suite(corpus: dict, markdown: str, llm_config: dict,
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     records = []
+    sibling_templates = corpus.get("all_templates", corpus.get("templates", []))
     for template in corpus.get("templates", []):
         logger.info("Benchmarking BPMN template %s", template["id"])
         records.append(_drive_template(
@@ -273,6 +284,7 @@ def run_creator_suite(corpus: dict, markdown: str, llm_config: dict,
             llm_config,
             output_path / template["id"],
             ingester_root,
+            sibling_templates,
         ))
     valid = [record for record in records if record["accepted"]]
     rung_metrics = {}

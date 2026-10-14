@@ -14,8 +14,8 @@ from cpg_contracts.automation.catalog import Catalog
 from cpg_contracts.automation.compiler import ParseError, compile, parse
 from cpg_contracts.automation.expressions import (
     ExpressionError,
-    TypeInfo,
     check_invariants,
+    expression_environment,
     parse_duration,
     typecheck,
 )
@@ -56,29 +56,6 @@ def _finding(rung: str, code: str, message: str, element_id: str | None = None) 
         message=message,
         element_id=element_id,
     )
-
-
-def _expression_environment(ir: ProcessIR) -> dict[str, TypeInfo]:
-    process = ir.process
-    environment = {
-        prop.name: TypeInfo(type=prop.type, unit=prop.unit)
-        for prop in process.properties
-    }
-    environment.update(
-        {
-            parameter.name: TypeInfo(
-                type=(
-                    "enum"
-                    if parameter.constraints is not None
-                    and parameter.constraints.enum is not None
-                    else parameter.type
-                ),
-                unit=parameter.unit,
-            )
-            for parameter in process.acp.parameters
-        }
-    )
-    return environment
 
 
 def _runtime_value(parameter: Parameter, value: object) -> object:
@@ -229,7 +206,7 @@ def _l0(
                     _finding("L0", "parameter-binding-duration", str(exc), name)
                 )
 
-    environment = _expression_environment(ir)
+    environment = expression_environment(ir.process)
     for element in ir.process.flowElements:
         if not isinstance(element, SequenceFlow) or element.conditionExpression is None:
             continue

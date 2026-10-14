@@ -17,7 +17,7 @@ from cpg_ingester.generation import (
     bpmn_engine_preflight,
     generate_all,
 )
-from cpg_ingester.nodes.bpmn_ir_creator import _normalize_template_ir
+from cpg_ingester.nodes.bpmn_ir_creator import _normalize_template_ir, bpmn_ir_creator
 from cpg_ingester.nodes.dmn_creator import dmn_creator
 from cpg_ingester.nodes.rec_extractor import rec_extractor
 
@@ -56,10 +56,8 @@ def _implicit_join(ir):
     return changed
 
 
-def _reserved_join_id(ir):
+def _rename_id(ir, old_id, new_id):
     changed = deepcopy(ir)
-    old_id = "request_readings"
-    new_id = "request_readings_join"
     for element in changed["process"]["flowElements"]:
         if element.get("id") == old_id:
             element["id"] = new_id
@@ -137,6 +135,7 @@ def test_golden_is_accepted_on_first_creation_attempt(tmp_path, monkeypatch):
     assert result["process_ir"]["process"]["id"] == "home-bp-monitoring"
     assert result["bpmn_xml"].startswith("<?xml")
     assert result["static_retry_count"] == 0
+    assert result["join_normalizer_fired"] is False
     assert len(llm.calls) == 2
     response_dir = tmp_path / "bpmn" / "responses" / "home-blood-pressure-monitoring"
     assert (response_dir / "creator-001.json").is_file()
@@ -163,8 +162,19 @@ def test_implicit_join_is_normalized_before_l0(tmp_path):
     assert elements["request_readings_join_in"]["targetRef"] == "request_readings"
 
 
+def test_creator_reports_when_join_normalizer_fires(tmp_path, monkeypatch):
+    llm = ScriptedLLM([json.dumps(_implicit_join(_ir()))])
+    monkeypatch.setattr(
+        "cpg_ingester.nodes.bpmn_ir_creator.get_llm", lambda _state: llm
+    )
+
+    result = bpmn_ir_creator(_state(tmp_path))
+
+    assert result["join_normalizer_fired"] is True
+
+
 def test_three_invalid_irs_exhaust_static_budget(tmp_path, monkeypatch):
-    invalid = _reserved_join_id(_ir())
+    invalid = _rename_id(_ir(), "request_readings", "request_readings_route_suffix")
     llm = ScriptedLLM([json.dumps(invalid)] * 3)
 
     result = _invoke(llm, tmp_path, monkeypatch)
@@ -190,7 +200,7 @@ def test_two_critical_reviews_exhaust_semantic_budget(tmp_path, monkeypatch):
 def test_static_failures_after_semantic_review_retry_and_escalate_at_l0(
     tmp_path, monkeypatch
 ):
-    invalid = _reserved_join_id(_ir())
+    invalid = _rename_id(_ir(), "request_readings", "request_readings_route_suffix")
     creator = ScriptedLLM([
         json.dumps(invalid),
         json.dumps(_ir()),
@@ -207,7 +217,7 @@ def test_static_failures_after_semantic_review_retry_and_escalate_at_l0(
     assert result["static_retry_count"] == 3
     assert result["escalated"] is True
     assert result["escalation_reason"] == "static-budget-exhausted"
-    assert any("compiler-reserved sequence '_join'" in error for error in result["escalation_errors"])
+    assert any("compiler-reserved sequence '_route'" in error for error in result["escalation_errors"])
     assert any(
         finding.get("rung") == "L0"
         for finding in result["static_findings"]
@@ -408,6 +418,54 @@ def test_existing_converging_gateway_is_not_rewritten(tmp_path):
         element_id: normalized_elements[element_id]
         for element_id in original_incoming
     } == original_incoming
+
+
+def test_model_named_join_gateway_is_valid_and_unchanged(tmp_path):
+    raw_ir = _rename_id(_ir(), "loop_entry", "readings_join")
+
+    normalized = _normalize_template_ir(raw_ir, _state(tmp_path))
+    ir = ProcessIR.model_validate(normalized)
+    result = run_static_ladder(
+        ir,
+        catalog=load_catalog(),
+        stage="template",
+        section_text=SOURCE_TEXT,
+    )
+
+    assert normalized == raw_ir
+    assert result.rungs_passed and result.rungs_passed[0] == "L0"
+
+
+def test_implicit_join_allocates_around_authored_join_id(tmp_path):
+    raw_ir = _rename_id(_implicit_join(_ir()), "loop_entry", "request_readings_join")
+
+    normalized = _normalize_template_ir(raw_ir, _state(tmp_path))
+    elements = {
+        element["id"]: element for element in normalized["process"]["flowElements"]
+    }
+
+    assert elements["request_readings_join"]["type"] == "exclusiveGateway"
+    assert elements["request_readings_join_2"]["gatewayDirection"] == "Converging"
+    assert elements["request_readings_join_in"]["sourceRef"] == "request_readings_join_2"
+    assert elements["request_readings_join_in"]["targetRef"] == "request_readings"
+    assert elements["f_implicit_join"]["targetRef"] == "request_readings_join_2"
+
+
+def test_implicit_join_allocates_around_authored_connector_id(tmp_path):
+    raw_ir = _implicit_join(
+        _rename_id(_ir(), "f_none", "request_readings_join_in")
+    )
+
+    normalized = _normalize_template_ir(raw_ir, _state(tmp_path))
+    elements = {
+        element["id"]: element for element in normalized["process"]["flowElements"]
+    }
+
+    assert elements["request_readings_join"]["gatewayDirection"] == "Converging"
+    assert elements["request_readings_join_in"]["sourceRef"] == "gw_received"
+    assert elements["request_readings_join_in"]["targetRef"] == "remind"
+    assert elements["request_readings_join_in_2"]["sourceRef"] == "request_readings_join"
+    assert elements["request_readings_join_in_2"]["targetRef"] == "request_readings"
 
 
 def test_appendix_b_fixture_is_unchanged_by_join_normalization(tmp_path):

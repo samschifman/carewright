@@ -83,8 +83,7 @@ def _normalize_template_ir(raw_ir: dict, state: dict) -> dict:
         })
 
     # Make every non-gateway merge explicit before the ProcessIR validator
-    # runs. The ids are reserved by the IR contract so this transformation is
-    # deterministic and cannot collide with authored element ids.
+    # runs. These are IR elements, so allocate around authored ID collisions.
     nodes = {
         element.get("id"): element
         for element in elements
@@ -113,14 +112,19 @@ def _normalize_template_ir(raw_ir: dict, state: dict) -> dict:
         ):
             continue
 
-        gateway_id = f"{node_id}_join"
-        flow_id = f"{node_id}_join_in"
-        collisions = sorted({gateway_id, flow_id}.intersection(existing_ids))
-        if collisions:
-            raise ValueError(
-                f"cannot insert explicit join before {node_id!r}; generated id collision: "
-                + ", ".join(collisions)
-            )
+        gateway_base = f"{node_id}_join"
+        gateway_id = gateway_base
+        suffix = 2
+        while gateway_id in existing_ids:
+            gateway_id = f"{gateway_base}_{suffix}"
+            suffix += 1
+
+        flow_base = f"{node_id}_join_in"
+        flow_id = flow_base
+        suffix = 2
+        while flow_id in existing_ids or flow_id == gateway_id:
+            flow_id = f"{flow_base}_{suffix}"
+            suffix += 1
 
         supports = sorted(flow["sourceRef"] for flow in flows if isinstance(flow.get("sourceRef"), str))
         for flow in flows:
@@ -245,11 +249,38 @@ def bpmn_ir_creator(state: dict) -> dict:
         content=content_to_text(response.content),
     )
 
+    join_normalizer_fired = False
     try:
         raw_ir = _parse_llm_json(content_to_text(response.content))
         if not isinstance(raw_ir, dict):
             raise ValueError("ProcessIR response must be a JSON object")
+        original_process = raw_ir.get("process")
+        original_elements = (
+            original_process.get("flowElements", [])
+            if isinstance(original_process, dict)
+            else []
+        )
+        original_ids = {
+            element.get("id")
+            for element in original_elements
+            if isinstance(element, dict)
+        }
         raw_ir = _normalize_template_ir(raw_ir, state)
+        normalized_process = raw_ir.get("process")
+        normalized_elements = (
+            normalized_process.get("flowElements", [])
+            if isinstance(normalized_process, dict)
+            else []
+        )
+        join_normalizer_fired = any(
+            element.get("id") not in original_ids
+            and element.get("type") == "exclusiveGateway"
+            and isinstance(element.get("acp"), dict)
+            and isinstance(element["acp"].get("provenance"), dict)
+            and element["acp"]["provenance"].get("derivation_rule") == "exclusive-join"
+            for element in normalized_elements
+            if isinstance(element, dict)
+        )
     except (json.JSONDecodeError, ValueError, TypeError) as exc:
         logger.warning("ProcessIR creator returned invalid JSON for %s: %s", name, exc)
         raw_ir = {}
@@ -257,6 +288,7 @@ def bpmn_ir_creator(state: dict) -> dict:
     write_artifact(output_dir, f"bpmn/{_safe_name(name)}.ir.json", raw_ir)
     return {
         "process_ir": raw_ir,
+        "join_normalizer_fired": join_normalizer_fired,
         "static_findings": [],
         "deferred_invariants": [],
         "static_rungs_passed": [],

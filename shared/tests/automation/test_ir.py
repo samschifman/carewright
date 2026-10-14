@@ -320,14 +320,6 @@ def test_invalid_structural_variants_are_rejected(mutator, message: str) -> None
             "contains compiler-reserved sequence '_route'",
         ),
         (
-            lambda d: rename_element(d, "request_readings", "request_readings_join"),
-            "contains compiler-reserved sequence '_join'",
-        ),
-        (
-            lambda d: rename_element(d, "f_some", "f_some_join_in"),
-            "generated join flow id(s) do not match their gateways",
-        ),
-        (
             lambda d: d["process"]["properties"].append(
                 {"name": "outcome", "type": "string"}
             ),

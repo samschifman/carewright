@@ -177,6 +177,8 @@ def _drive_template(template: dict, markdown: str, llm_config: dict,
         "source_text_present": bool(source.strip()),
         "first_attempt_rungs": {rung: None for rung in RUNGS},
         "creator_attempts": 0,
+        "repair_count": 0,
+        "join_normalizer_fired": False,
         "accepted": False,
         "escalated": False,
         "escalation_reason": None,
@@ -188,6 +190,10 @@ def _drive_template(template: dict, markdown: str, llm_config: dict,
         for _ in range(MAX_BPMN_STATIC_RETRIES + MAX_BPMN_SEMANTIC_RETRIES + 3):
             state.update(creator_module.bpmn_ir_creator(state))
             record["creator_attempts"] += 1
+            record["join_normalizer_fired"] = (
+                record["join_normalizer_fired"]
+                or bool(state.get("join_normalizer_fired"))
+            )
             state.update(validator_module.bpmn_compile_and_validate(state))
             if record["creator_attempts"] == 1:
                 _record_first_attempt(record, state)
@@ -242,6 +248,7 @@ def _drive_template(template: dict, markdown: str, llm_config: dict,
         creator_module.get_llm = creator_get_llm
         reviewer_module.get_llm = reviewer_get_llm
     record["elapsed_seconds"] = round(time.perf_counter() - started, 3)
+    record["repair_count"] = max(0, record["creator_attempts"] - 1)
     return record
 
 

@@ -101,6 +101,7 @@ class BPMNPipelineState(TypedDict, total=False):
     linked_recs: list[dict]
     human_feedback: str
     process_ir: dict
+    join_normalizer_fired: bool
     bpmn_xml: str
     template_summary: dict
     static_findings: list[dict]

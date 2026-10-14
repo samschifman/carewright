@@ -12,15 +12,22 @@ and per-rung first-attempt results.
 ## Prerequisites and run
 
 The runner uses the cpg-ingester virtual environment and requires a live
-LiteLLM-compatible endpoint. Configure the same variables used by the pipeline
-in the environment running the command:
+LiteLLM-compatible endpoint, or `OPENAI_API_KEY` for the OpenAI API endpoint.
+Configure the model and credentials in the environment running the command:
 
     export LITELLM_URL=...
     export LLM_MODEL=...
     export LITELLM_API_KEY=...
     ./cpg-ingester/tests/benchmarks/bpmn/run-benchmark.sh --suite creator --corpus hypertension-v2
 
-The values are required; the runner refuses placeholder defaults. An unset
+When only `OPENAI_API_KEY` is configured, the runner uses `https://api.openai.com`
+unless `OPENAI_BASE_URL` or `OPENAI_API_BASE` is set. Credentials are read by
+the shared client factory and are not copied into pipeline state.
+
+To benchmark one golden within a section range, add `--section` and `--golden`,
+for example `--section 3.5-3.6 --golden home-bp-monitoring`.
+
+The model and one credential environment variable are required; the runner refuses placeholder values. An unset
 BPMN_PREFLIGHT_URL skips the optional Kogito preflight and is recorded as
 skipped. Set MLFLOW_TRACKING_URI to use a remote tracking server; otherwise
 the benchmark uses a local file store under working/benchmarks/bpmn/mlruns/.

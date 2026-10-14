@@ -172,16 +172,22 @@ def _resolve_template_links(
     )
 
     dmn_models = []
+    delivered_dmn_ids = set()
+    dmn_display_names = {}
     for result in dmn_results:
         summary = result.get("decision_model_summary") or {}
         if summary.get("id"):
+            dmn_display_names[summary["id"]] = summary.get("name") or summary["id"]
             dmn_models.append({
                 "id": summary["id"],
                 "name": summary.get("name", ""),
                 "model_id": summary["id"],
             })
+            if not result.get("escalated") and result.get("dmn_xml"):
+                delivered_dmn_ids.add(summary["id"])
     for item in manifest:
         if item.get("type") == "decision" and item.get("model_id"):
+            dmn_display_names.setdefault(item["model_id"], item.get("name") or item["model_id"])
             dmn_models.append({
                 "id": item["model_id"],
                 "model_id": item["model_id"],
@@ -292,6 +298,7 @@ def _resolve_template_links(
             ))
             continue
         link_errors = []
+        undelivered_decision_errors = []
         for trigger in acp.get("triggers", []):
             if trigger.get("kind") == "recommendation":
                 value = str(trigger.get("recommendation_id", ""))
@@ -326,13 +333,30 @@ def _resolve_template_links(
             if element.get("type") == "businessRuleTask":
                 value = str(element.get("dmnModel", ""))
                 model_id = dmn_aliases.get(value.casefold().strip())
+                task_id = str(element.get("id", "?"))
+                task_name = str(element.get("name", "")).strip()
+                task_label = f"{task_id!r} ({task_name!r})" if task_name else repr(task_id)
                 if model_id is None:
-                    link_errors.append(
-                        f"Could not resolve businessRuleTask {element.get('id')!r} model {value!r}."
+                    undelivered_decision_errors.append(
+                        f"businessRuleTask {task_label} references decision {value!r}, "
+                        "which was not delivered in this run."
                     )
                 else:
                     element["dmnModel"] = model_id
                     linked_dmn_ids.append(model_id)
+                    if model_id not in delivered_dmn_ids:
+                        decision_name = dmn_display_names.get(model_id, value)
+                        undelivered_decision_errors.append(
+                            f"businessRuleTask {task_label} references decision {decision_name!r}, "
+                            "which was not delivered in this run."
+                        )
+        if undelivered_decision_errors:
+            resolved_results.append(_template_escalation(
+                result,
+                "undelivered-decision-reference",
+                undelivered_decision_errors,
+            ))
+            continue
         if link_errors:
             resolved_results.append(_template_escalation(
                 result, "unresolved-template-link", link_errors

@@ -505,9 +505,8 @@ else:
         target.write_text(template.model_dump_json(indent=2, exclude_none=True) + "\n")
         templates.append(template)
 
-home_monitoring = [item for item in templates if item.summary.id == "home-bp-monitoring"]
-if not home_monitoring:
-    raise SystemExit("No publishable home-bp-monitoring template is available")
+if not templates:
+    raise SystemExit("No publishable automation template is available")
 if from_golden:
     generation["bpmn_results"] = [
         {
@@ -600,6 +599,10 @@ import json
 import sys
 bundle = json.load(open(sys.argv[1]))
 system = sys.argv[2]
+entries = {
+    entry.get("fullUrl"): entry.get("resource", {})
+    for entry in bundle.get("entry", [])
+}
 careplan = next(
     item["resource"] for item in bundle.get("entry", [])
     if item.get("resource", {}).get("resourceType") == "CarePlan"
@@ -610,12 +613,38 @@ identifier = next(
 )
 if not identifier:
     raise SystemExit("Generated bundle did not include the stable CarePlan identifier")
-if not any(
+def referenced_resource(activity):
+    reference = (activity.get("reference") or {}).get("reference")
+    return entries.get(reference, {})
+
+def activity_text(activity):
+    detail = activity.get("detail") or {}
+    resource = referenced_resource(activity)
+    values = [
+        detail.get("description", ""),
+        (detail.get("code") or {}).get("text", ""),
+        resource.get("description", ""),
+        (resource.get("code") or {}).get("text", ""),
+    ]
+    return " ".join(value for value in values if isinstance(value, str)).casefold()
+
+home_bp_monitoring = [
+    activity for activity in careplan.get("activity", [])
+    if ("home blood pressure" in activity_text(activity)
+        or "home bp" in activity_text(activity))
+    and ("validated" in activity_text(activity)
+         or "monitoring" in activity_text(activity))
+    and ("reading" in activity_text(activity)
+         or "monitor" in activity_text(activity))
+]
+if not home_bp_monitoring or not any(
     ext.get("url", "").endswith("/activity-automation")
-    for activity in careplan.get("activity", [])
+    for activity in home_bp_monitoring
     for ext in activity.get("extension", [])
 ):
-    raise SystemExit("Generated CarePlan has no activity automation extension")
+    raise SystemExit(
+        "Generated CarePlan's home-BP monitoring activity has no activity automation extension"
+    )
 print(identifier)
 PY
 )"

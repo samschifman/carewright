@@ -196,8 +196,10 @@ def test_resolves_linked_decision_names_to_model_ids(tmp_path):
         ],
         "recommendation_results": [recommendation],
         "dmn_results": [
-            {"decision_model_summary": treatment_summary.model_dump(mode="json")},
-            {"decision_model_summary": monitoring_summary.model_dump(mode="json")},
+            {"dmn_xml": "<definitions/>",
+             "decision_model_summary": treatment_summary.model_dump(mode="json")},
+            {"dmn_xml": "<definitions/>",
+             "decision_model_summary": monitoring_summary.model_dump(mode="json")},
         ],
         "bpmn_results": [{
             "item": item,
@@ -213,3 +215,108 @@ def test_resolves_linked_decision_names_to_model_ids(tmp_path):
         "monitoring-plan", "treatment-recommendation"
     ]
     assert normalized["summary"]["triggers"][0]["model_id"] == "treatment-recommendation"
+
+
+def _acei_assembly_state(tmp_path, *, dmn_results, manifest_decision=True):
+    golden = json.loads(
+        (GOLDEN_DIR / "acei-lab-follow-up.template.json").read_text()
+    )
+    manifest = [{
+        "id": "rec-acei",
+        "type": "recommendation",
+        "name": "ACE inhibitor laboratory follow-up",
+    }]
+    if manifest_decision:
+        manifest.append({
+            "id": "decision-monitoring",
+            "type": "decision",
+            "model_id": "monitoring-plan",
+            "name": "Monitoring Plan",
+        })
+    return {
+        "cpg_metadata": {"cpg_id": "SYN-HTN-2026-002"},
+        "item_manifest": manifest,
+        "recommendation_results": [{
+            "id": "rec-acei",
+            "title": "ACE inhibitor laboratory follow-up",
+            "source_cpg": "SYN-HTN-2026-002",
+        }],
+        "dmn_results": dmn_results,
+        "bpmn_results": [{
+            "item": {
+                "id": "process-acei",
+                "template_id": "acei-lab-follow-up",
+                "name": "ACE inhibitor laboratory follow-up",
+                "section": "3.3 Monitoring Plan",
+                "linked_recommendations": ["ACE inhibitor laboratory follow-up"],
+                "linked_decisions": ["Monitoring Plan"],
+            },
+            "process_ir": golden["ir"],
+            "bpmn_xml": golden["bpmn_xml"],
+            "template_summary": golden["summary"],
+        }],
+        "output_dir": str(tmp_path),
+    }
+
+
+def test_business_rule_task_referencing_escalated_dmn_escalates_as_undelivered(tmp_path):
+    result = assembly(_acei_assembly_state(
+        tmp_path,
+        dmn_results=[{
+            "dmn_xml": "<definitions/>",
+            "escalated": True,
+            "decision_model_summary": {
+                "id": "monitoring-plan",
+                "name": "Monitoring Plan",
+            },
+        }],
+    ))
+
+    template_result = result["bpmn_results"][0]
+    assert template_result["escalated"] is True
+    assert template_result["escalation_reason"] == "undelivered-decision-reference"
+    message = template_result["escalation_errors"][0]
+    assert "run_monitoring_plan" in message
+    assert "Monitoring Plan" in message
+
+
+def test_business_rule_task_referencing_missing_dmn_escalates_as_undelivered(tmp_path):
+    result = assembly(_acei_assembly_state(tmp_path, dmn_results=[]))
+
+    template_result = result["bpmn_results"][0]
+    assert template_result["escalated"] is True
+    assert template_result["escalation_reason"] == "undelivered-decision-reference"
+    message = template_result["escalation_errors"][0]
+    assert "run_monitoring_plan" in message
+    assert "Monitoring Plan" in message
+
+
+def test_escalated_linked_decision_without_business_rule_task_does_not_block_template(tmp_path):
+    state = _state(tmp_path)
+    state["item_manifest"].append({
+        "id": "decision-weekly-home-bp",
+        "type": "decision",
+        "model_id": "weekly-home-bp-interpretation-and-notification",
+        "name": "Weekly Home BP Interpretation and Notification",
+    })
+    state["dmn_results"] = [{
+        "dmn_xml": "<definitions/>",
+        "escalated": True,
+        "decision_model_summary": {
+            "id": "weekly-home-bp-interpretation-and-notification",
+            "name": "Weekly Home BP Interpretation and Notification",
+            "inputs": [],
+            "outputs": [],
+        },
+    }]
+    state["bpmn_results"][0]["item"]["linked_decisions"] = [
+        "Weekly Home BP Interpretation and Notification"
+    ]
+
+    result = assembly(state)
+
+    template_result = result["bpmn_results"][0]
+    assert template_result.get("escalated") is not True
+    assert template_result["automation_template"]["summary"][
+        "linked_decision_model_ids"
+    ] == ["weekly-home-bp-interpretation-and-notification"]

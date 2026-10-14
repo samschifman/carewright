@@ -19,7 +19,7 @@ from cpg_contracts.automation.expressions import (
     parse,
     typecheck,
 )
-from cpg_contracts.automation.ir import ProcessIR, SequenceFlow
+from cpg_contracts.automation.ir import Parameter, ProcessIR, SequenceFlow
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures/automation/home-bp-monitoring.ir.json"
@@ -98,6 +98,25 @@ def test_enum_string_literal_is_allowed_only_for_equality() -> None:
         typecheck(parse("kind < 'reminder'"), env)
     with pytest.raises(ExpressionError, match="enum-typed"):
         typecheck(parse("instructions_text == 'message'"), env)
+
+
+def test_string_parameter_error_explains_enum_remedy() -> None:
+    ir = fixture_ir()
+    ir.process.acp.parameters.append(
+        Parameter(name="review_pathway", type="string", required=True)
+    )
+
+    with pytest.raises(ExpressionError) as exc_info:
+        typecheck(
+            parse('review_pathway == "lifestyle modification alone"'),
+            expression_environment(ir.process),
+        )
+
+    assert str(exc_info.value) == (
+        "quoted strings require == or != against an enum-typed operand; "
+        "parameter 'review_pathway' is typed 'string' — declare constraints.enum "
+        "on it with the categorical values (for a DMN output, that output's value set)"
+    )
 
 
 def test_quantity_comparisons_require_matching_units() -> None:

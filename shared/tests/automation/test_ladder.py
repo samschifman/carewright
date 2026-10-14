@@ -8,7 +8,13 @@ from lxml import etree
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.automation.compiler import compile
 from cpg_contracts.automation.expressions import expression_environment, parse, typecheck
-from cpg_contracts.automation.ir import Constraints, Parameter, ProcessIR, ir_version
+from cpg_contracts.automation.ir import (
+    Constraints,
+    Parameter,
+    ProcessIR,
+    SequenceFlow,
+    ir_version,
+)
 from cpg_contracts.automation.validators.ladder import run_static_ladder
 
 
@@ -60,6 +66,44 @@ def test_enum_constrained_string_parameter_has_enum_expression_type() -> None:
 
     environment = expression_environment(ir.process)
     assert typecheck(parse('treatment_action == "Start medication"'), environment) == "boolean"
+
+
+def test_l0_condition_finding_preserves_string_parameter_enum_remedy() -> None:
+    ir = fixture_ir()
+    ir.process.acp.parameters.append(
+        Parameter(name="review_pathway", type="string", required=True)
+    )
+    flow = next(
+        element
+        for element in ir.process.flowElements
+        if isinstance(element, SequenceFlow) and element.conditionExpression
+    )
+    ir.process.flowElements = [
+        element.model_copy(
+            update={
+                "conditionExpression": (
+                    'review_pathway == "lifestyle modification alone"'
+                )
+            }
+        )
+        if element.id == flow.id
+        else element
+        for element in ir.process.flowElements
+    ]
+
+    result = run_static_ladder(ir, catalog=load_catalog(), stage="template")
+    finding = next(
+        finding
+        for finding in result.findings
+        if finding.code == "condition-expression"
+    )
+
+    assert finding.rung == "L0"
+    assert finding.message == (
+        "quoted strings require == or != against an enum-typed operand; "
+        "parameter 'review_pathway' is typed 'string' — declare constraints.enum "
+        "on it with the categorical values (for a DMN output, that output's value set)"
+    )
 
 
 def test_xml_input_passes_after_recovering_its_ir() -> None:

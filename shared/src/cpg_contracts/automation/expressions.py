@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 import json
 import re
@@ -77,6 +77,7 @@ Expression: TypeAlias = Expr
 class TypeInfo:
     type: str
     unit: str | None = None
+    is_parameter: bool = field(default=False, compare=False)
 
 
 def expression_environment(process: Any) -> dict[str, TypeInfo]:
@@ -93,6 +94,7 @@ def expression_environment(process: Any) -> dict[str, TypeInfo]:
         environment[parameter.name] = TypeInfo(
             type="enum" if is_enum else parameter.type,
             unit=parameter.unit,
+            is_parameter=True,
         )
     return environment
 
@@ -450,10 +452,31 @@ def _infer(expression: Expr, env: dict[str, TypeInfo]) -> TypeInfo:
                 else _infer(expression.right, env)
             )
             if left_is_string_literal or right_is_string_literal:
+                string_parameter = None
+                parameter_operand = (
+                    expression.right
+                    if left_is_string_literal
+                    else expression.left
+                )
+                if isinstance(parameter_operand, IdentifierNode):
+                    parameter_type = env.get(parameter_operand.name)
+                    if (
+                        parameter_type is not None
+                        and parameter_type.type == "string"
+                        and parameter_type.is_parameter
+                    ):
+                        string_parameter = parameter_operand.name
                 enum_comparison = (
                     left_is_string_literal and right.type == "enum"
                 ) or (right_is_string_literal and left.type == "enum")
                 if operator not in {"==", "!="} or not enum_comparison:
+                    if string_parameter is not None:
+                        raise ExpressionError(
+                            "quoted strings require == or != against an enum-typed operand; "
+                            f"parameter '{string_parameter}' is typed 'string' — declare "
+                            "constraints.enum on it with the categorical values "
+                            "(for a DMN output, that output's value set)"
+                        )
                     raise ExpressionError(
                         "quoted strings require == or != against an enum-typed operand; "
                         f"operator {operator!r} has types {left.type!r} and {right.type!r}"

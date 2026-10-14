@@ -68,6 +68,47 @@ def test_resolves_recommendation_name_in_trigger_and_publishes_normalized_templa
     assert (tmp_path / "bpmn/home-bp-monitoring.bpmn").exists()
 
 
+def _state_with_saved_run_recommendation_names(tmp_path, linked_recommendations):
+    recommendation_id = "f3672ae9-2bf5-4e41-9ebe-838b09adc3f8"
+    state = _state(tmp_path, linked_recommendations=linked_recommendations)
+    state["item_manifest"] = [{
+        "id": recommendation_id,
+        "type": "recommendation",
+        "title": "Structured Home BP Measurement and Weekly Review",
+    }]
+    state["recommendation_results"] = [{
+        "id": recommendation_id,
+        "title": "Structured Home Blood Pressure Measurement and Weekly Review",
+        "source_cpg": "SYN-HTN-2026-002",
+    }]
+    return state
+
+
+def test_manifest_recommendation_title_resolves_abbreviation_expansion_from_saved_run(tmp_path):
+    result = assembly(_state_with_saved_run_recommendation_names(
+        tmp_path, ["Structured Home BP Measurement and Weekly Review"]
+    ))
+
+    template_result = result["bpmn_results"][0]
+    assert template_result.get("escalated", False) is False
+    assert template_result["automation_template"]["summary"][
+        "linked_recommendation_ids"
+    ] == ["f3672ae9-2bf5-4e41-9ebe-838b09adc3f8"]
+
+
+def test_unmatched_manifest_recommendation_name_keeps_unresolved_message(tmp_path):
+    result = assembly(_state_with_saved_run_recommendation_names(
+        tmp_path, ["No matching recommendation title"]
+    ))
+
+    template_result = result["bpmn_results"][0]
+    assert template_result["escalated"] is True
+    assert template_result["escalation_reason"] == "unresolved-recommendation-link"
+    assert template_result["escalation_errors"] == [
+        "Could not resolve linked recommendation(s): No matching recommendation title"
+    ]
+
+
 def test_template_without_recommendation_link_is_escalated(tmp_path):
     result = assembly(_state(tmp_path, linked_recommendations=[]))
 

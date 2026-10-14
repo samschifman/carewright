@@ -92,10 +92,17 @@ def _collect_escalations(
     return escalated
 
 
-def _alias_map(items: list[dict], *, id_field: str, aliases: tuple[str, ...]) -> dict[str, str]:
+def _alias_map(
+    items: list[dict],
+    *,
+    id_field: str,
+    aliases: tuple[str, ...],
+    additional_aliases: list[tuple[str, str]] | None = None,
+) -> dict[str, str]:
     """Map display names and source identifiers to canonical registry ids."""
     result = {}
     ambiguous = set()
+    alias_pairs = []
     for item in items:
         canonical = item.get(id_field)
         if not canonical:
@@ -103,11 +110,18 @@ def _alias_map(items: list[dict], *, id_field: str, aliases: tuple[str, ...]) ->
         for field in aliases:
             value = item.get(field)
             if isinstance(value, str) and value.strip():
-                key = value.casefold().strip()
-                if key in result and result[key] != canonical:
-                    ambiguous.add(key)
-                else:
-                    result[key] = canonical
+                alias_pairs.append((value, canonical))
+    alias_pairs.extend(additional_aliases or [])
+    for value, canonical in alias_pairs:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        key = value.casefold().strip()
+        if key in ambiguous:
+            continue
+        if key in result and result[key] != canonical:
+            ambiguous.add(key)
+        else:
+            result[key] = canonical
     for key in ambiguous:
         result.pop(key, None)
     return result
@@ -135,17 +149,27 @@ def _resolve_template_links(
     """Resolve template links, normalize IR, and compile publishable versions."""
     for recommendation in recommendations:
         recommendation["automation_template_ids"] = []
-    rec_aliases = _alias_map(
-        recommendations, id_field="id", aliases=("id", "title", "name")
-    )
-    for item in manifest:
-        if item.get("type") == "recommendation" and item.get("id"):
-            name = item.get("name") or item.get("title")
-            if isinstance(name, str) and name.casefold().strip() in rec_aliases:
-                rec_aliases[item["id"].casefold()] = rec_aliases[name.casefold().strip()]
     rec_by_id = {
         item["id"]: item for item in recommendations if isinstance(item.get("id"), str)
     }
+    manifest_rec_aliases = []
+    for item in manifest:
+        manifest_id = item.get("id")
+        if (
+            item.get("type") == "recommendation"
+            and isinstance(manifest_id, str)
+            and manifest_id in rec_by_id
+        ):
+            for field in ("title", "name"):
+                title = item.get(field)
+                if isinstance(title, str) and title.strip():
+                    manifest_rec_aliases.append((title, manifest_id))
+    rec_aliases = _alias_map(
+        recommendations,
+        id_field="id",
+        aliases=("id", "title", "name"),
+        additional_aliases=manifest_rec_aliases,
+    )
 
     dmn_models = []
     for result in dmn_results:

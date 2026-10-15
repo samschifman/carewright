@@ -1405,17 +1405,14 @@ def _check_instance_provenance(
             ),
             None,
         ) if source_template is not None and ref is not None else None
-        copied_template_rule = (
-            isinstance(element, ExclusiveGateway)
-            and isinstance(provenance, StructuralProvenance)
-            and provenance.derivation_rule == "exclusive-split"
-            and source_element is not None
+        copied_template_provenance = (
+            source_element is not None
             and source_element.acp.provenance == provenance
         )
         if (
             isinstance(provenance, StructuralProvenance)
             and provenance.derivation_rule not in _INSTANCE_STRUCTURAL_RULES
-            and not copied_template_rule
+            and not copied_template_provenance
         ):
             findings.append(
                 _finding(

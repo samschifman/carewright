@@ -15,7 +15,6 @@ import requests
 from fastapi import HTTPException
 from cpg_contracts import content_to_text
 from acp_writer.llm import get_llm
-from cpg_contracts.automation.compiler import compile
 from cpg_contracts.automation.instances import ActivityAutomation, Evidence, ParameterBinding
 from cpg_contracts.automation.ir import ProcessIR, TemplateRef, ir_version
 from cpg_contracts.automation.catalog import load_catalog
@@ -38,7 +37,6 @@ from acp_writer.planning_brief import PlanningBrief
 
 logger = logging.getLogger(__name__)
 _STATIC_REPAIR_LIMIT = 3
-_REVIEW_REPAIR_LIMIT = 2
 _CREDENTIAL_ASSIGNMENT_RE = re.compile(
     r"(?i)\b(?:OPENAI_API_KEY|LITELLM_API_KEY|LLM_API_KEY)\b\s*[:=]\s*[\"']?[^\s,;\"']+"
 )
@@ -314,6 +312,26 @@ def _slice_findings(exc: Exception) -> list[Finding]:
     return [Finding(rung="L5a", severity="ERROR", code=code, message=message)]
 
 
+def _is_binding_finding(finding: Finding) -> bool:
+    if finding.severity != "ERROR":
+        return False
+    if finding.code.startswith("parameter-binding-") or finding.code == "incomplete-binding":
+        return True
+    return finding.rung.startswith("I") and "binding" in finding.message.casefold()
+
+
+def _record_contract_fault(findings: list[Finding], errors: Sequence[Finding]) -> None:
+    if not errors:
+        return
+    findings.append(Finding(
+        rung=errors[0].rung,
+        severity="ERROR",
+        code="contract-fault",
+        message="Non-binding instance validation error is a contract fault: "
+        + _json([item.__dict__ for item in errors]),
+    ))
+
+
 @mlflow.trace(name="automation.llm_json_call")
 def _invoke_json(
     llm: Any,
@@ -410,6 +428,7 @@ def _automation(
     rungs_passed: Sequence[str],
     findings: Sequence[Finding],
     review_notes: Sequence[str],
+    bpmn_xml: str,
 ) -> ActivityAutomation:
     template_ir = _template_ir(template)
     caps = sorted({
@@ -428,7 +447,7 @@ def _automation(
         )],
         template_snapshots=[template_ir],
         ir=ir,
-        bpmn_xml=compile(ir),
+        bpmn_xml=bpmn_xml,
         bindings=list(bindings),
         derivation_evidence=dict(evidence),
         capabilities_used=caps,
@@ -501,6 +520,7 @@ def synthesize_for_activity(
         repair_feedback = ""
         static_exhausted = False
         engine_unavailable = False
+        validation_xml: str | None = None
 
         # Initial attempt plus at most three static repair rounds.
         for attempt in range(_STATIC_REPAIR_LIMIT + 1):
@@ -526,10 +546,12 @@ def synthesize_for_activity(
                 raw_bindings = _model_bindings(generated, template_ir, plan_facts)
             except Exception as exc:
                 final_findings = _slice_findings(exc)
-                repair_feedback = _json([item.__dict__ for item in final_findings])
-                if attempt == _STATIC_REPAIR_LIMIT:
-                    static_exhausted = True
-                continue
+                _record_contract_fault(
+                    final_findings,
+                    [item for item in final_findings if item.severity == "ERROR"],
+                )
+                static_exhausted = True
+                break
 
             candidate, candidate_bindings, evidence, binding_findings = bind_instance(
                 instance_base,
@@ -550,150 +572,138 @@ def synthesize_for_activity(
             )
             final_findings = [*binding_findings, *ladder.findings]
             rungs = list(ladder.rungs_passed)
-            if ladder.ok:
-                try:
-                    engine = validator(_validation_payload(candidate, [template_ir], context))
-                except requests.RequestException as exc:
-                    final_findings.append(Finding(
-                        rung="L6", severity="WARNING", code="engine-unavailable",
-                        message=f"Kogito validation unavailable: {exc}",
-                    ))
-                    engine_unavailable = True
-                    static_exhausted = True
-                    break
-                except HTTPException as exc:
-                    if not 500 <= exc.status_code < 600:
-                        raise
-                    final_findings.append(Finding(
-                        rung="L6", severity="WARNING", code="engine-unavailable",
-                        message=f"Kogito validation unavailable: {exc.detail}",
-                    ))
-                    engine_unavailable = True
-                    static_exhausted = True
-                    break
-                if engine.get("valid"):
-                    if "L6" not in rungs:
-                        rungs.append("L6")
-                    final_findings.extend(
-                        Finding(**item) for item in engine.get("findings", [])
-                        if isinstance(item, Mapping) and item.get("code")
-                    )
-                    break
+            validation_xml = None
+            try:
+                engine = validator(_validation_payload(candidate, [template_ir], context))
+                returned_xml = engine.get("bpmn_xml")
+                if isinstance(returned_xml, str) and returned_xml:
+                    validation_xml = returned_xml
+                elif validation_xml is None and engine.get("valid"):
+                    raise ValueError("automation validation response omitted compiled bpmn_xml")
+            except requests.RequestException as exc:
                 final_findings.append(Finding(
-                    rung="L6", severity="ERROR", code="kogito-validation",
-                    message=_json(engine.get("errors") or engine.get("messages") or "Kogito rejected BPMN"),
+                    rung="L6", severity="WARNING", code="engine-unavailable",
+                    message=f"Kogito validation unavailable: {exc}",
                 ))
-            if attempt == _STATIC_REPAIR_LIMIT:
+                engine_unavailable = True
                 static_exhausted = True
-            repair_feedback = _json([item.__dict__ for item in final_findings])
+                break
+            except HTTPException as exc:
+                if not 500 <= exc.status_code < 600:
+                    raise
+                detail = exc.detail
+                if isinstance(detail, Mapping):
+                    returned_xml = detail.get("bpmn_xml")
+                    if isinstance(returned_xml, str) and returned_xml:
+                        validation_xml = returned_xml
+                    detail = detail.get("message") or detail
+                final_findings.append(Finding(
+                    rung="L6", severity="WARNING", code="engine-unavailable",
+                    message=f"Kogito validation unavailable: {detail}",
+                ))
+                engine_unavailable = True
+                static_exhausted = True
+                break
+
+            errors = [item for item in final_findings if item.severity == "ERROR"]
+            binding_errors = [item for item in errors if _is_binding_finding(item)]
+            contract_errors = [item for item in errors if not _is_binding_finding(item)]
+            if contract_errors:
+                _record_contract_fault(final_findings, contract_errors)
+                static_exhausted = True
+                break
+            if binding_errors:
+                if attempt == _STATIC_REPAIR_LIMIT:
+                    static_exhausted = True
+                    break
+                repair_feedback = _json([item.__dict__ for item in binding_errors])
+                continue
+
+            if engine.get("unavailable"):
+                messages = engine.get("messages") or []
+                message = _json(messages or "Kogito validation unavailable")
+                final_findings.append(Finding(
+                    rung="L6", severity="WARNING", code="engine-unavailable",
+                    message=message,
+                ))
+                engine_unavailable = True
+                static_exhausted = True
+                break
+            if engine.get("valid"):
+                if "L6" not in rungs:
+                    rungs.append("L6")
+                final_findings.extend(
+                    Finding(**item) for item in engine.get("findings", [])
+                    if isinstance(item, Mapping) and item.get("code")
+                )
+                break
+
+            final_findings.append(Finding(
+                rung="L6", severity="ERROR", code="kogito-validation",
+                message=_json(engine.get("errors") or engine.get("messages") or "Kogito rejected BPMN"),
+            ))
+            _record_contract_fault(
+                final_findings,
+                [item for item in final_findings if item.severity == "ERROR" and not _is_binding_finding(item)],
+            )
+            static_exhausted = True
+            break
 
         has_incomplete = any(item.code == "incomplete-binding" for item in final_findings)
-        status = (
-            "escalated" if engine_unavailable
-            else ("incomplete" if has_incomplete else ("escalated" if static_exhausted else "valid"))
+        status = "escalated" if engine_unavailable or static_exhausted else (
+            "incomplete" if has_incomplete else "valid"
         )
         review_notes: list[str] = []
 
         if status == "valid":
-            approved = False
-            review_feedback = ""
-            for review_attempt in range(_REVIEW_REPAIR_LIMIT + 1):
-                try:
-                    if reviewer is None:
-                        approved, review_feedback = _review(
-                            llm,
-                            template=template,
-                            activity=activity_data,
-                            plan_facts=plan_facts,
-                            ir=candidate,
-                            bindings=_safe_text(
-                                [item.model_dump(mode="json", exclude_none=True) for item in candidate_bindings],
-                                known_values,
-                            ),
-                            derivation_evidence=_safe_text(
-                                {key: value.model_dump(mode="json", exclude_none=True) for key, value in evidence.items()},
-                                known_values,
-                            ),
-                            findings=final_findings,
-                            attempt_recorder=record_attempt("reviewer") if record_attempt else None,
-                        )
-                    else:
-                        approved, review_feedback = reviewer(
-                            template=template,
-                            activity=activity_data,
-                            plan_facts=plan_facts,
-                            ir=candidate,
-                            findings=final_findings,
-                        )
-                except Exception as exc:
-                    approved = False
-                    review_feedback = f"Semantic reviewer failed: {exc}"
-                if approved:
-                    if "L7" not in rungs:
-                        rungs.append("L7")
-                    break
-                if review_attempt == _REVIEW_REPAIR_LIMIT:
-                    status = "escalated"
-                    final_findings.append(Finding(
-                        rung="L7", severity="ERROR", code="semantic-review",
-                        message=review_feedback or "Semantic reviewer did not approve the instance.",
-                    ))
-                    review_notes.append("Semantic reviewer did not approve within the repair budget.")
-                    break
-                repair_feedback = f"L7 reviewer requested repair: {review_feedback}"
-                try:
-                    repair_prompt = AUTOMATION_SYNTHESIZER_USER.format(
-                        template=template_json,
-                        activity=_json(activity_data),
-                        plan_facts=_json(plan_facts),
-                        feedback=_json(feedback),
-                        prior_bindings=_json(prior_bindings),
-                        requested_bindings=requested_bindings_json,
-                        repair_feedback=repair_feedback,
-                    )
-                    if prompt_sink is not None:
-                        prompt_key = f"{_field(activity, 'id', 'activity')}:{_field(_summary(template), 'id', template_ir.process.id)}:synthesis:semantic-{review_attempt + 1}"
-                        prompt_sink[prompt_key] = repair_prompt
-                    generated = _invoke_json(
+            try:
+                if reviewer is None:
+                    approved, review_feedback = _review(
                         llm,
-                        AUTOMATION_SYNTHESIZER_SYSTEM,
-                        repair_prompt,
-                        attempt_recorder=record_attempt("synthesizer") if record_attempt else None,
+                        template=template,
+                        activity=activity_data,
+                        plan_facts=plan_facts,
+                        ir=candidate,
+                        bindings=_safe_text(
+                            [item.model_dump(mode="json", exclude_none=True) for item in candidate_bindings],
+                            known_values,
+                        ),
+                        derivation_evidence=_safe_text(
+                            {key: value.model_dump(mode="json", exclude_none=True) for key, value in evidence.items()},
+                            known_values,
+                        ),
+                        findings=final_findings,
+                        attempt_recorder=record_attempt("reviewer") if record_attempt else None,
                     )
-                    raw_bindings = _model_bindings(generated, template_ir, plan_facts)
-                    candidate, candidate_bindings, evidence, binding_findings = bind_instance(
-                        instance_base,
-                        [template_ir],
-                        activity=activity,
-                        brief=brief,
-                        policy=_field(state, "automation_policy", {}) or {},
-                        initial_bindings=raw_bindings,
+                else:
+                    approved, review_feedback = reviewer(
+                        template=template,
+                        activity=activity_data,
+                        plan_facts=plan_facts,
+                        ir=candidate,
+                        findings=final_findings,
                     )
-                    context = _context(candidate_bindings, evidence, brief, activity)
-                    ladder = run_static_ladder(
-                        candidate,
-                        catalog=load_catalog(),
-                        stage="instance",
-                        templates=[template_ir],
-                        context=context,
-                        phi_known_values=known_values,
-                    )
-                    final_findings = [*binding_findings, *ladder.findings]
-                    rungs = list(ladder.rungs_passed)
-                    if not ladder.ok:
-                        review_feedback = _json([item.__dict__ for item in final_findings])
-                        continue
-                    engine = validator(_validation_payload(candidate, [template_ir], context))
-                    if not engine.get("valid"):
-                        review_feedback = _json(engine.get("errors") or engine.get("messages") or "Kogito validation failed")
-                        continue
-                    rungs.append("L6")
-                except Exception as exc:
-                    review_feedback = str(exc)
-                    continue
+            except Exception as exc:
+                approved = False
+                review_feedback = f"Semantic reviewer failed: {exc}"
+            if approved:
+                if "L7" not in rungs:
+                    rungs.append("L7")
+            else:
+                review_error = Finding(
+                    rung="L7", severity="ERROR", code="semantic-review",
+                    message=review_feedback or "Semantic reviewer did not approve the instance.",
+                )
+                final_findings.append(review_error)
+                _record_contract_fault(final_findings, [review_error])
+                status = "escalated"
+                review_notes.append("Semantic reviewer rejection is escalated without an unclassified repair call.")
 
         if has_incomplete and status == "incomplete":
             review_notes.append("Required plan-specific values are unresolved; bind them before enabling.")
+        # If the validation service is unreachable, retain the registry's
+        # namespace-aware template artifact for the disabled escalated record.
+        compiled_xml = validation_xml or _field(template, "bpmn_xml", "")
         outputs.append(_automation(
             automation_id,
             candidate,
@@ -704,6 +714,7 @@ def synthesize_for_activity(
             rungs,
             final_findings,
             review_notes,
+            compiled_xml,
         ))
     return outputs
 

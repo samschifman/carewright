@@ -3,6 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import json
+import xml.etree.ElementTree as ET
 from unittest.mock import Mock
 
 import pytest
@@ -11,10 +12,17 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from cpg_contracts.automation.instances import ActivityAutomation, ParameterBinding
-from cpg_contracts.automation.ir import ConceptRef, Parameter, TemplateRef, ir_version
+from cpg_contracts.automation.ir import (
+    ConceptRef,
+    Parameter,
+    ProcessIR,
+    TemplateRef,
+    ir_version,
+)
 from cpg_contracts.automation.templates import AutomationTemplate
 from cpg_contracts.automation.validators.grounding import InstanceContext, validate_instance
 from cpg_contracts.automation.validators.ladder import run_static_ladder
+from cpg_contracts.automation.validators.results import Finding, LadderResult
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.decisions import DecisionVariable
 from acp_writer import api
@@ -107,7 +115,11 @@ def _synthesize(
         brief=effective_brief,
         state=state or {"patient_demographics": {"name": "Ada Patient"}},
         llm=llm,
-        validator=validator or (lambda _payload: {"valid": True, "rungs_passed": ["L6"]}),
+        validator=validator or (lambda _payload: {
+            "valid": True,
+            "rungs_passed": ["L6"],
+            "bpmn_xml": template.bpmn_xml,
+        }),
         reviewer=reviewer if use_llm_reviewer else (reviewer or (lambda **_: (True, ""))),
     )
 
@@ -259,19 +271,73 @@ def test_missing_required_binding_is_incomplete_not_escalated():
     assert any("scheduling_window" in warning for warning in automation.validation.warnings)
 
 
-def test_engine_rejection_with_messages_is_a_repairable_l6_finding():
+def test_engine_rejection_is_a_contract_fault_without_reprompt():
     template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
-    llm = ScriptedLLM([{"bindings": []}, {"bindings": []}])
-    results = iter([
-        {"valid": False, "messages": [{"severity": "ERROR", "text": "engine rejected BPMN"}]},
-        {"valid": True, "messages": []},
+    llm = ScriptedLLM([{"bindings": []}])
+
+    automation = _synthesize(template, llm, validator=lambda _payload: {
+        "valid": False,
+        "messages": [{"severity": "ERROR", "text": "engine rejected BPMN"}],
+        "bpmn_xml": template.bpmn_xml,
+    })[0]
+
+    assert automation.validation.status == "escalated"
+    assert len(llm.prompts) == 1
+    assert any("engine rejected BPMN" in error for error in automation.validation.errors)
+    assert any("contract fault" in error for error in automation.validation.errors)
+
+
+def test_binding_error_reprompts_but_contract_error_does_not(monkeypatch):
+    from acp_writer.nodes import automation_synthesizer
+
+    template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
+    binding_ladder = iter([
+        LadderResult(
+            ok=False,
+            findings=[Finding(
+                rung="I4", severity="ERROR", code="I4",
+                message="binding for 'max_duration' does not match its type",
+            )],
+            rungs_passed=["L0", "L1", "L2", "L3", "L4"],
+        ),
+        LadderResult(
+            ok=True,
+            findings=[],
+            rungs_passed=["L0", "L1", "L2", "L3", "L4", "L5a"],
+        ),
     ])
-
-    automation = _synthesize(template, llm, validator=lambda _payload: next(results))[0]
-
-    assert automation.validation.status == "valid"
+    monkeypatch.setattr(
+        automation_synthesizer,
+        "run_static_ladder",
+        lambda *_args, **_kwargs: next(binding_ladder),
+    )
+    llm = ScriptedLLM([{"bindings": []}, {"bindings": []}])
+    binding_result = _synthesize(template, llm)[0]
+    assert binding_result.validation.status == "valid"
     assert len(llm.prompts) == 2
-    assert "kogito-validation" in str(llm.prompts[1])
+    assert "max_duration" in llm.prompts[1][1]["content"]
+
+    contract_ladder = iter([
+        LadderResult(
+            ok=False,
+            findings=[Finding(
+                rung="I2", severity="ERROR", code="I2",
+                message="instance element 'f_start' uses unsupported structural rule 'sequence'",
+            )],
+            rungs_passed=["L0", "L1", "L2", "L3", "L4"],
+        ),
+    ])
+    monkeypatch.setattr(
+        automation_synthesizer,
+        "run_static_ladder",
+        lambda *_args, **_kwargs: next(contract_ladder),
+    )
+    llm = ScriptedLLM([{"bindings": []}])
+    contract_result = _synthesize(template, llm)[0]
+    assert contract_result.validation.status == "escalated"
+    assert len(llm.prompts) == 1
+    assert any("unsupported structural rule 'sequence'" in error for error in contract_result.validation.errors)
+    assert any("contract fault" in error for error in contract_result.validation.errors)
 
 
 @pytest.mark.parametrize(
@@ -364,6 +430,85 @@ def test_replay_dmn_registration_normalizes_nested_variables_before_instance_val
     assert len(llm.prompts) == 2
 
 
+def test_business_rule_instance_uses_validation_service_xml_with_registered_namespace(monkeypatch):
+    from acp_writer.nodes import automation_synthesizer
+
+    monkeypatch.setattr(api, "_dynamic_models", {})
+    monkeypatch.setattr(api, "_validate_dmn_with_engine", lambda _xml: None)
+    monkeypatch.setattr(api, "validate_bpmn", lambda _xml: {"valid": True, "messages": []})
+    successful_ladder = LadderResult(
+        ok=True,
+        findings=[],
+        rungs_passed=["L0", "L1", "L2", "L3", "L4", "L5a"],
+    )
+    monkeypatch.setattr(api, "run_static_ladder", lambda *_args, **_kwargs: successful_ladder)
+    monkeypatch.setattr(
+        automation_synthesizer,
+        "run_static_ladder",
+        lambda *_args, **_kwargs: successful_ladder,
+    )
+
+    dmn_xml = (Path(__file__).parent / "fixtures/dmn/home-bp-monitoring-plan.dmn").read_text()
+    deployment = TestClient(api.app).post(
+        "/api/v1/decisions/models?source_cpg=SYN-HTN-2026-002",
+        content=dmn_xml,
+    )
+    assert deployment.status_code == 201
+    registered_namespace = api._automation_dmn_namespaces()["monitoring-plan"]
+
+    source = AutomationTemplate.model_validate_json(GOLDEN.read_text())
+    data = source.model_dump(mode="python")
+    task_index = next(
+        index for index, item in enumerate(data["ir"]["process"]["flowElements"])
+        if item["type"] == "task"
+    )
+    task_data = data["ir"]["process"]["flowElements"][task_index]
+    data["ir"]["process"]["flowElements"][task_index] = {
+        "type": "businessRuleTask",
+        "id": task_data["id"],
+        "name": task_data["name"],
+        "dmnModel": "monitoring-plan",
+        "inputs": {},
+        "outputs": {},
+        "acp": task_data["acp"],
+    }
+    source_ir = ProcessIR.model_validate(data["ir"])
+    data["ir"] = source_ir.model_dump(mode="python")
+    data["summary"]["version"] = ir_version(source_ir)
+    data["summary"]["linked_decision_model_ids"] = ["monitoring-plan"]
+    template = AutomationTemplate.model_validate(data)
+
+    validation_results = []
+
+    def validate_with_registered_namespace(payload):
+        result = api._automation_validation_result(payload)
+        validation_results.append(result)
+        return result
+
+    automation = _synthesize(
+        template,
+        ScriptedLLM([{"bindings": []}]),
+        validator=validate_with_registered_namespace,
+    )[0]
+
+    assert automation.bpmn_xml == validation_results[0]["bpmn_xml"]
+    xml_root = ET.fromstring(automation.bpmn_xml)
+    bpmn_ns = "{http://www.omg.org/spec/BPMN/20100524/MODEL}"
+    rule_task = xml_root.find(f".//{bpmn_ns}businessRuleTask")
+    assert rule_task is not None
+    namespace_input = next(
+        item for item in rule_task.findall(f"{bpmn_ns}ioSpecification/{bpmn_ns}dataInput")
+        if item.get("name") == "namespace"
+    )
+    namespace_input_id = namespace_input.get("id")
+    namespace_literal = next(
+        item.find(f"{bpmn_ns}assignment/{bpmn_ns}from").text
+        for item in rule_task.findall(f"{bpmn_ns}dataInputAssociation")
+        if item.findtext(f"{bpmn_ns}targetRef") == namespace_input_id
+    )
+    assert namespace_literal == registered_namespace
+
+
 def test_remote_validation_payload_excludes_patient_activity_and_phi_values():
     template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
     context = InstanceContext(activities=[{"description": "Patient-identifying activity"}])
@@ -374,21 +519,19 @@ def test_remote_validation_payload_excludes_patient_activity_and_phi_values():
     assert "phi_known_values" not in payload
 
 
-def test_semantic_reviewer_repair_uses_bindings_only():
+def test_semantic_reviewer_rejection_escalates_without_unclassified_repair():
     template = AutomationTemplate.model_validate_json(GOLDEN.read_text())
     llm = ScriptedLLM([
         {"bindings": []},
         {"verdict": "REVISE", "issues": [{"description": "Clarify sequence support", "fix": "Retain template sequence."}]},
-        {"bindings": []},
-        {"verdict": "APPROVE"},
     ])
 
     automation = _synthesize(template, llm, use_llm_reviewer=True)[0]
 
-    assert automation.enabled is True
-    assert automation.validation.status == "valid"
-    assert automation.validation.rungs_passed[-1] == "L7"
-    assert len(llm.prompts) == 4
+    assert automation.enabled is False
+    assert automation.validation.status == "escalated"
+    assert len(llm.prompts) == 2
+    assert any("contract fault" in error for error in automation.validation.errors)
 
 
 def test_no_linked_template_returns_no_automation():

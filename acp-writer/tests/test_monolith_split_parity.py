@@ -99,7 +99,7 @@ def test_monolith_and_split_compose_share_automation_synthesis_result(monkeypatc
         "patient_demographics": {},
         "litellm_url": "http://unused",
     }
-    validator = lambda _payload: {"valid": True}
+    validator = lambda _payload: {"valid": True, "bpmn_xml": template.bpmn_xml}
 
     # Both orchestration paths call this same node with the same inputs.
     monolith = synthesize_automations_for_brief(

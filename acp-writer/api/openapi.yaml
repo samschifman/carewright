@@ -296,9 +296,24 @@ paths:
                 - required: [bpmn_xml]
                   properties: { bpmn_xml: { type: string } }
       responses:
-        "200": { description: Ladder and Kogito validation result }
+        "200":
+          description: Ladder and Kogito validation result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AutomationValidationResult" }
         "400": { description: Invalid request shape }
-        "503": { description: Kogito validation unavailable }
+        "503":
+          description: Kogito validation unavailable; compiled BPMN is included when available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: object
+                    properties:
+                      message: { type: string }
+                      bpmn_xml: { type: string, description: BPMN compiled with registered DMN namespaces }
 
   /api/v1/decisions/evaluate/{modelId}:
     post:
@@ -615,6 +630,33 @@ paths:
 
 components:
   schemas:
+
+    AutomationValidationResult:
+      type: object
+      description: Static and engine validation result for an automation IR or BPMN document.
+      properties:
+        valid:
+          type: boolean
+        bpmn_xml:
+          type: string
+          description: BPMN compiled with the DMN namespaces held by the decision registry, when compilation succeeds.
+        rungs_passed:
+          type: array
+          items: { type: string }
+        findings:
+          type: array
+          items: { type: object }
+        messages:
+          type: array
+          items: { type: object }
+        errors:
+          type: array
+          items: { type: string }
+        deferred:
+          type: array
+          items: { type: string }
+        unavailable:
+          type: boolean
 
     # --- Guidelines ---
 

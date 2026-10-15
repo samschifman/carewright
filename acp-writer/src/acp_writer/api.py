@@ -359,6 +359,20 @@ def _automation_validation_result(payload: dict) -> dict:
     except (ParseError, ValueError, TypeError) as exc:
         return {"valid": False, "rungs_passed": [], "findings": [], "errors": [str(exc)]}
 
+    validation_xml = xml
+    if validation_xml is None:
+        try:
+            validation_xml = compile_bpmn(
+                process_ir, dmn_namespaces=_automation_dmn_namespaces()
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            return {
+                "valid": False,
+                "rungs_passed": [],
+                "findings": [],
+                "errors": [str(exc)],
+            }
+
     stage = "template" if process_ir.process.kind == "template" else "instance"
     templates = [ProcessIR.model_validate(item) for item in payload.get("templates", [])]
     context_data = payload.get("context", {})
@@ -388,18 +402,23 @@ def _automation_validation_result(payload: dict) -> dict:
     if not result.ok:
         return {
             "valid": False,
+            "bpmn_xml": validation_xml,
             "rungs_passed": result.rungs_passed,
             "findings": [finding.__dict__ for finding in result.findings],
             "deferred": result.deferred,
         }
-    xml = xml if xml is not None else compile_bpmn(
-        process_ir, dmn_namespaces=_automation_dmn_namespaces()
-    )
-    engine = validate_bpmn(xml)
+    engine = validate_bpmn(validation_xml)
     if engine is None:
-        raise HTTPException(status_code=503, detail="Decision engine BPMN validation unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Decision engine BPMN validation unavailable",
+                "bpmn_xml": validation_xml,
+            },
+        )
     return {
         "valid": bool(engine.get("valid")),
+        "bpmn_xml": validation_xml,
         "rungs_passed": [*result.rungs_passed, "L6"] if engine.get("valid") else result.rungs_passed,
         "findings": [finding.__dict__ for finding in result.findings],
         "messages": engine.get("messages", []),

@@ -746,6 +746,45 @@ def test_template_exclusive_split_provenance_is_preserved_verbatim() -> None:
     assert "I2" not in codes(validate_instance(instance, [template], context))
 
 
+def test_copied_template_sequence_and_default_flow_provenance_is_preserved() -> None:
+    instance, template, context = make_instance()
+    template_flows = [
+        item for item in template.process.flowElements
+        if item.type == "sequenceFlow"
+    ]
+    copied_flows = {
+        item.id: item for item in instance.process.flowElements
+        if item.type == "sequenceFlow"
+    }
+    for flow, rule in zip(template_flows[:2], ("sequence", "default-flow")):
+        flow.acp.provenance = StructuralProvenance(
+            kind="structural", derivation_rule=rule, supports=[flow.sourceRef]
+        )
+        copied_flows[flow.id].acp.provenance = deepcopy(flow.acp.provenance)
+
+    findings = validate_instance(instance, [template], context)
+
+    assert not [finding for finding in findings if finding.code == "I2"]
+
+
+def test_added_sequence_provenance_without_template_ref_is_rejected() -> None:
+    instance, template, context = make_instance()
+    flow = next(item for item in instance.process.flowElements if item.type == "sequenceFlow")
+    flow.acp.template_ref = None
+    flow.acp.provenance = StructuralProvenance(
+        kind="structural", derivation_rule="sequence", supports=[flow.sourceRef]
+    )
+
+    findings = validate_instance(instance, [template], context)
+
+    assert any(
+        finding.code == "I2"
+        and finding.element_id == flow.id
+        and "unsupported structural rule 'sequence'" in finding.message
+        for finding in findings
+    )
+
+
 def test_fragment_induced_subgraph_must_preserve_edges() -> None:
     instance, template, context = make_instance()
     flow = next(item for item in instance.process.flowElements if item.id == "f_wait")

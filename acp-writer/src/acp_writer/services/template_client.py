@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 
 import mlflow
 import requests
@@ -64,6 +65,22 @@ class TemplateClient:
             json=payload,
             timeout=self.timeout,
         )
+        if response.status_code == 503:
+            try:
+                unavailable = response.json()
+            except ValueError:
+                unavailable = None
+            detail = unavailable.get("detail") if isinstance(unavailable, Mapping) else None
+            if isinstance(detail, Mapping) and isinstance(detail.get("bpmn_xml"), str):
+                return {
+                    "valid": False,
+                    "unavailable": True,
+                    "bpmn_xml": detail["bpmn_xml"],
+                    "messages": [{
+                        "severity": "WARNING",
+                        "text": str(detail.get("message") or "Decision engine validation unavailable"),
+                    }],
+                }
         response.raise_for_status()
         result = response.json()
         if not isinstance(result, dict):

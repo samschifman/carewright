@@ -464,7 +464,7 @@ async def generate_careplan(request: Request):
     import uuid
 
     from acp_writer.checkpointer import get_checkpointer
-    from acp_writer.pipeline import build_pipeline
+    from acp_writer.pipeline import MAX_BRIEF_REVIEWS, build_pipeline
 
     litellm_url = os.environ.get("LITELLM_URL", "http://localhost:4000")
     llm_model = os.environ.get("LLM_MODEL", "default")
@@ -501,6 +501,18 @@ async def generate_careplan(request: Request):
         )
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Care plan generation failed: {e}")
+
+    brief = result.get("planning_brief") or {}
+    if (
+        result.get("brief_review_count", 0) >= MAX_BRIEF_REVIEWS
+        and not brief.get("goals")
+        and not brief.get("activities")
+    ):
+        feedback = result.get("brief_review_feedback") or brief.get("review_feedback")
+        raise HTTPException(
+            status_code=422,
+            detail=feedback or "Care plan generation exhausted its brief review budget without a usable brief.",
+        )
 
     fhir_bundle = result.get("fhir_bundle", {})
     return Response(

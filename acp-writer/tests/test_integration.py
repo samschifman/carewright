@@ -137,6 +137,27 @@ class TestCarePlanEndpoint:
         r = client.post("/api/v1/careplans", json={"not": "a bundle"})
         assert r.status_code == 400
 
+    @patch("acp_writer.checkpointer.get_checkpointer", return_value=None)
+    @patch("acp_writer.pipeline.build_pipeline")
+    def test_empty_brief_after_budget_returns_422_feedback(self, mock_build_pipeline, _mock_checkpointer):
+        feedback = "Planning Brief parse/normalization error: invalid activity item"
+        compiled = MagicMock()
+        compiled.invoke.return_value = {
+            "planning_brief": {"goals": [], "activities": []},
+            "brief_review_count": 4,
+            "brief_review_feedback": feedback,
+        }
+        graph = MagicMock()
+        graph.compile.return_value = compiled
+        mock_build_pipeline.return_value = graph
+
+        response = client.post(
+            "/api/v1/careplans",
+            json=load_bundle("patient-bundle-medication.json"),
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"] == feedback
+
     @patch("acp_writer.nodes.plan_composer.get_llm")
     @patch("acp_writer.nodes.brief_reviewer.get_llm")
     @patch("acp_writer.nodes.fhir_semantic_reviewer.get_llm")
@@ -162,7 +183,17 @@ class TestCarePlanEndpoint:
             mock_llm.return_value = m
 
         bundle = load_bundle("patient-bundle-medication.json")
-        r = client.post("/api/v1/careplans", json=bundle)
+        with patch(
+            "acp_writer.pipeline.guideline_resolver",
+            return_value={"applicable_cpgs": [{"cpg_id": "test"}], "applicable_dmn_models": []},
+        ), patch(
+            "acp_writer.pipeline.recommendation_retriever",
+            return_value={"recommendations": [{"id": "rec-test", "title": "Test", "content": "Test", "source_cpg": "test"}]},
+        ), patch(
+            "acp_writer.pipeline.fhir_server_writer",
+            return_value={"delivery_status": "skipped"},
+        ):
+            r = client.post("/api/v1/careplans", json=bundle)
         assert r.status_code == 201
         data = r.json()
         assert data["resourceType"] == "Bundle"

@@ -488,7 +488,11 @@ paths:
         "400":
           description: Invalid patient data
         "422":
-          description: Unable to generate care plan (e.g., no applicable decision models)
+          description: Unable to generate a usable care plan; includes the final composition or review feedback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
     get:
       operationId: listCarePlans

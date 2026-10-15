@@ -5,6 +5,8 @@ from unittest.mock import patch, MagicMock
 
 from langgraph.checkpoint.memory import MemorySaver
 
+from acp_writer.pipeline import _route_after_plan_composer
+
 from .pipeline_helpers import build_pipeline
 
 
@@ -94,6 +96,17 @@ class TestPipelineStructure:
         assert ("conflict_analyst", "fhir_bundle_generator") in edges
         # The FHIR review loop returns to the generator, never the analyst.
         assert ("fhir_semantic_reviewer", "conflict_analyst") not in edges
+
+    def test_malformed_brief_routes_to_composer_without_reviewer(self):
+        assert _route_after_plan_composer({
+            "brief_parse_failed": True,
+            "brief_review_count": 1,
+        }) == "plan_composer"
+        assert _route_after_plan_composer({
+            "brief_parse_failed": True,
+            "brief_review_count": 4,
+        }) == "__end__"
+        assert _route_after_plan_composer({"brief_parse_failed": False}) == "brief_reviewer"
 
 
 class TestPipelineExecution:

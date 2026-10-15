@@ -324,7 +324,55 @@ class TestPlanComposer:
 
         result = plan_composer(self._make_state())
         assert result["planning_brief"]["review_status"] == "flagged"
-        assert "parse error" in result["planning_brief"]["review_feedback"].lower()
+        assert "parse/normalization error" in result["planning_brief"]["review_feedback"].lower()
+
+    @patch("acp_writer.nodes.plan_composer.get_llm")
+    def test_malformed_activity_is_fed_back_to_composer_and_saved(self, mock_get_llm, tmp_path, caplog):
+        malformed = json.loads(SAMPLE_BRIEF_JSON)
+        malformed["activities"][0] = "this activity must be an object"
+        first = MagicMock(content=json.dumps(malformed))
+        second = MagicMock(content=SAMPLE_BRIEF_JSON)
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = [first, second]
+        mock_get_llm.return_value = mock_llm
+
+        state = self._make_state()
+        state.update({"output_dir": str(tmp_path), "run_id": "run-test"})
+        with caplog.at_level("ERROR"):
+            failed = plan_composer(state)
+        assert "str' object has no attribute 'get'" in failed["brief_review_feedback"]
+        assert "this activity must be an object" in failed["brief_review_feedback"]
+        assert failed["brief_parse_failed"] is True
+        assert failed["brief_review_count"] == 1
+        assert "Traceback" in caplog.text
+
+        state.update(failed)
+        repaired = plan_composer(state)
+        assert repaired["brief_parse_failed"] is False
+        assert "str' object has no attribute 'get'" in mock_llm.invoke.call_args_list[1].args[0][1]["content"]
+        assert "Revising an existing care plan" in mock_llm.invoke.call_args_list[1].args[0][0]["content"]
+
+        artifact_dir = tmp_path / "acp-writer" / "run-test" / "plan-composer"
+        for round_number in (1, 2):
+            assert (artifact_dir / f"round-{round_number}.request.json").is_file()
+            assert (artifact_dir / f"round-{round_number}.response.json").is_file()
+
+    @patch("acp_writer.nodes.plan_composer.get_llm")
+    def test_saved_composer_response_redacts_credential_patterns(self, mock_get_llm, tmp_path):
+        malformed = json.loads(SAMPLE_BRIEF_JSON)
+        malformed["activities"][0] = "sk-test-sentinel-123456789012345"
+        mock_response = MagicMock(content=json.dumps(malformed))
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = mock_response
+        mock_get_llm.return_value = mock_llm
+
+        state = self._make_state()
+        state.update({"output_dir": str(tmp_path), "run_id": "run-redaction"})
+        plan_composer(state)
+
+        artifacts = tmp_path / "acp-writer" / "run-redaction" / "plan-composer"
+        for path in artifacts.glob("*.json"):
+            assert "sk-test-sentinel-123456789012345" not in path.read_text()
 
     @patch("acp_writer.nodes.plan_composer.get_llm")
     def test_includes_feedback_in_prompt(self, mock_get_llm):

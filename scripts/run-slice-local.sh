@@ -117,6 +117,8 @@ for required in "${REQUIRED_INPUTS[@]}"; do
 done
 
 mkdir -p "$INGESTER_RUN_DIR" "$PLAN_ROOT"
+export PYTHONUNBUFFERED=1
+exec > >(tee -a "$INGESTER_RUN_DIR/slice-runner.log") 2>&1
 if [ "$FROM_GOLDEN" = "1" ]; then
   if [ -n "${SLICE_GOLDEN_SOURCE_RUN_DIR:-}" ]; then
     GOLDEN_SOURCE_RUN_DIR="$(cd "$SLICE_GOLDEN_SOURCE_RUN_DIR" && pwd)"
@@ -178,10 +180,79 @@ HOST_SERVICE_PIDS=()
 HOST_LOG_DIR="$INGESTER_RUN_DIR/host-services"
 SLICE_SUCCESS=0
 
+redact_log_stream() {
+  "$INGESTER_PYTHON" -c '
+import os
+import re
+import sys
+from pathlib import Path
+
+credential_name = re.compile(r"(?:API[_-]?KEY|MASTER[_-]?KEY|SECRET|TOKEN|PASSWORD)", re.IGNORECASE)
+secrets = [
+    value for name, value in os.environ.items()
+    if credential_name.search(name) and value
+]
+root = Path(sys.argv[1])
+for path in (
+    root / "deploy/config/secrets.env",
+    root / "platform/litellm/deploy/.env",
+    root / ".medplum/medplum-fhir.env",
+):
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        continue
+    for line in lines:
+        if not line or line.lstrip().startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        value = value.strip()
+        if credential_name.search(name) and value:
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"\x27":
+                value = value[1:-1]
+            if value:
+                secrets.append(value)
+
+secrets = sorted(set(secrets), key=len, reverse=True)
+for line in sys.stdin:
+    for secret in secrets:
+        line = line.replace(secret, "[redacted]")
+    sys.stdout.write(line)
+' "$ROOT_DIR"
+}
+
+compose_service_names() {
+  "$INGESTER_PYTHON" - "$ROOT_DIR/compose.yml" "$ROOT_DIR/compose.slice.yml" <<'PY'
+import sys
+
+import yaml
+
+services = set()
+for filename in sys.argv[1:]:
+    data = yaml.safe_load(open(filename)) or {}
+    services.update((data.get("services") or {}).keys())
+print("\n".join(sorted(services)))
+PY
+}
+
+save_compose_logs() {
+  local service log_path
+  mkdir -p "$RUN_ROOT/compose-logs"
+  while IFS= read -r service; do
+    [ -n "$service" ] || continue
+    log_path="$RUN_ROOT/compose-logs/$service.log"
+    if ! podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" logs "$service" 2>&1 \
+      | redact_log_stream > "$log_path"; then
+      echo "Compose log capture reported an error for service $service." >> "$log_path"
+    fi
+  done < <(compose_service_names)
+}
+
 cleanup_failed_slice() {
   if [ "$SLICE_SUCCESS" != "1" ]; then
     set +u
     echo "SLICE FAIL: run $RUN_ID did not complete; inspect $INGESTER_RUN_DIR and compose logs." >&2
+    save_compose_logs
     for pid in "${HOST_SERVICE_PIDS[@]}"; do
       kill "$pid" 2>/dev/null || true
     done
@@ -558,8 +629,10 @@ for template in "$DELIVERY_DIR"/templates/*.template.json; do
 done
 
 echo "Generating the patient-specific care plan."
-CAREPLAN_HTTP_STATUS="$("$INGESTER_PYTHON" - "$PATIENT" "$ACP_WRITER_URL" "$RUN_ROOT" <<'PY'
+CAREPLAN_HTTP_RESULT="$("$INGESTER_PYTHON" - "$PATIENT" "$ACP_WRITER_URL" "$RUN_ROOT" <<'PY'
 import os
+import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -583,15 +656,42 @@ for name in ("OPENAI_API_KEY", "LITELLM_API_KEY", "LLM_API_KEY"):
     secret = os.environ.get(name)
     if secret:
         body = body.replace(secret, "[redacted]")
+body = re.sub(
+    r"(?i)\b(?:OPENAI_API_KEY|LITELLM_API_KEY|LLM_API_KEY)\b\s*[:=]\s*[\"']?[^\s,;\"']+",
+    "[REDACTED_CREDENTIAL]",
+    body,
+)
+body = re.sub(r"\bsk-[A-Za-z0-9_-]{20,}\b", "[REDACTED_CREDENTIAL]", body)
 if status == "201":
     (run_root / "generated-careplan-bundle.json").write_text(body)
 else:
     (run_root / "careplan-http-error.json").write_text(body)
-print(status)
+    try:
+        error = json.loads(body).get("detail", body)
+    except (json.JSONDecodeError, AttributeError):
+        error = body
+    error = str(error)
+    error = re.sub(
+        r"(?i)\b(?:OPENAI_API_KEY|LITELLM_API_KEY|LLM_API_KEY)\b\s*[:=]\s*[\"']?[^\s,;\"']+",
+        "[REDACTED_CREDENTIAL]",
+        error,
+    )
+    error = re.sub(r"\bsk-[A-Za-z0-9_-]{20,}\b", "[REDACTED_CREDENTIAL]", error)
+    for name in ("OPENAI_API_KEY", "LITELLM_API_KEY", "LLM_API_KEY"):
+        secret = os.environ.get(name)
+        if secret:
+            error = error.replace(secret, "[REDACTED_CREDENTIAL]")
+    error = " ".join(error.split())[:1000]
+    print(status)
+    print(error or "Care plan generation failed without an error detail.")
+if status == "201":
+    print(status)
 PY
 )"
+CAREPLAN_HTTP_STATUS="$(printf '%s\n' "$CAREPLAN_HTTP_RESULT" | sed -n '1p')"
+CAREPLAN_HTTP_ERROR="$(printf '%s\n' "$CAREPLAN_HTTP_RESULT" | sed -n '2p')"
 if [ "$CAREPLAN_HTTP_STATUS" != "201" ]; then
-  echo "Care-plan endpoint returned HTTP $CAREPLAN_HTTP_STATUS; sanitized response saved under $RUN_ROOT." >&2
+  echo "SLICE FAIL: care-plan generation returned HTTP $CAREPLAN_HTTP_STATUS: $CAREPLAN_HTTP_ERROR. Sanitized response saved under $RUN_ROOT." >&2
   exit 1
 fi
 CAREPLAN_ID="$("$INGESTER_PYTHON" - "$RUN_ROOT/generated-careplan-bundle.json" "$CAREPLAN_SYSTEM" <<'PY'

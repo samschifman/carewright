@@ -7,8 +7,11 @@ context for future BPMN generation.
 
 import json
 import logging
+import os
 import re
 import time
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import mlflow
@@ -36,6 +39,98 @@ from acp_writer.state import CarePlanComposerState
 from acp_writer.tools.concept_resolver import resolve
 
 logger = logging.getLogger(__name__)
+
+_CREDENTIAL_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(?:OPENAI_API_KEY|LITELLM_API_KEY|LLM_API_KEY)\b\s*[:=]\s*[\"']?[^\s,;\"']+"
+)
+_API_KEY_RE = re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b")
+_SENSITIVE_FIELD_RE = re.compile(r"(?i)(?:api[_-]?key|secret|token|password|credential)")
+
+
+def _artifact_component(value: Any, fallback: str) -> str:
+    component = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(value or "")).strip("-")
+    return component[:100] or fallback
+
+
+def _patient_values(demographics: Mapping[str, Any], patient_reference: str) -> list[str]:
+    values: list[str] = [patient_reference] if patient_reference else []
+    if not isinstance(demographics, Mapping):
+        return values
+
+    def add(value: Any) -> None:
+        if isinstance(value, str) and value.strip():
+            values.append(value.strip())
+        elif isinstance(value, Mapping):
+            for child in value.values():
+                add(child)
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            for child in value:
+                add(child)
+
+    for key in ("name", "names", "identifiers", "birth_date", "birthDate"):
+        add(demographics.get(key))
+    return list(dict.fromkeys(values))
+
+
+def _sanitize_artifact_value(value: Any, patient_values: Sequence[str]) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): "[REDACTED_CREDENTIAL]" if _SENSITIVE_FIELD_RE.search(str(key))
+            else _sanitize_artifact_value(child, patient_values)
+            for key, child in value.items()
+        }
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return [_sanitize_artifact_value(child, patient_values) for child in value]
+    if not isinstance(value, str):
+        return value
+
+    sanitized = value
+    for name in ("OPENAI_API_KEY", "LITELLM_API_KEY", "LLM_API_KEY"):
+        secret = os.environ.get(name)
+        if secret:
+            sanitized = sanitized.replace(secret, "[REDACTED_CREDENTIAL]")
+    sanitized = _CREDENTIAL_ASSIGNMENT_RE.sub("[REDACTED_CREDENTIAL]", sanitized)
+    sanitized = _API_KEY_RE.sub("[REDACTED_CREDENTIAL]", sanitized)
+    for patient_value in sorted((v for v in patient_values if len(v) >= 2), key=len, reverse=True):
+        sanitized = re.sub(re.escape(patient_value), "[redacted]", sanitized, flags=re.IGNORECASE)
+    return sanitized
+
+
+def _record_composer_round(
+    output_dir: str,
+    run_id: Any,
+    round_number: int,
+    request: dict[str, Any],
+    response: Any | None,
+    patient_values: Sequence[str],
+) -> None:
+    if not output_dir:
+        return
+    output_path = Path(output_dir)
+    root = output_path.parent.parent if output_path.parent.name == "careplans" else output_path
+    directory = root / "acp-writer" / _artifact_component(run_id, "run") / "plan-composer"
+    directory.mkdir(parents=True, exist_ok=True)
+    stem = f"round-{round_number}"
+    safe_request = _sanitize_artifact_value(request, patient_values)
+    (directory / f"{stem}.request.json").write_text(
+        json.dumps(safe_request, ensure_ascii=False, indent=2, default=str) + "\n"
+    )
+    if response is not None:
+        safe_response = _sanitize_artifact_value(response, patient_values)
+        (directory / f"{stem}.response.json").write_text(
+            json.dumps(safe_response, ensure_ascii=False, indent=2, default=str) + "\n"
+        )
+
+
+def _offending_fragment(brief_data: Any, raw_response: str) -> str:
+    if isinstance(brief_data, Mapping):
+        for field in ("goals", "activities"):
+            items = brief_data.get(field)
+            if isinstance(items, list):
+                for item in items:
+                    if not isinstance(item, Mapping):
+                        return json.dumps(item, ensure_ascii=False, default=str)
+    return raw_response
 
 def _source_recommendation_ids(item: dict) -> list[str]:
     values = [item.get("source_recommendation_id"), *(item.get("source_recommendation_ids") or [])]
@@ -412,7 +507,10 @@ def plan_composer(state: CarePlanComposerState) -> dict:
     # loop. The monolith never sets this key (it is one-shot from an IPS bundle),
     # so it always authors.
     prior_brief = state.get("prior_planning_brief") or {}
-    is_revision = bool(prior_brief.get("goals") or prior_brief.get("activities"))
+    is_revision = bool(
+        prior_brief.get("goals") or prior_brief.get("activities")
+        or state.get("brief_parse_failed")
+    )
 
     # Evolving base (F18b): iteration 1 revises the clinician-reviewed prior
     # brief; once the loop has produced a draft (state["planning_brief"]), later
@@ -493,16 +591,35 @@ def plan_composer(state: CarePlanComposerState) -> dict:
     logger.info("Calling LLM...")
     t0 = time.time()
 
-    response = llm.invoke([
+    messages = [
         {"role": "system", "content": compose_system_prompt(is_revision)},
         {"role": "user", "content": user_prompt},
-    ])
+    ]
+    patient_values = _patient_values(demographics, patient_ref)
+    _record_composer_round(
+        output_dir,
+        state.get("run_id"),
+        review_round + 1,
+        {"messages": messages},
+        None,
+        patient_values,
+    )
+    response = llm.invoke(messages)
 
     elapsed = time.time() - t0
     logger.info("LLM responded in %.1fs", elapsed)
 
     try:
-        brief_data = _parse_brief_from_response(content_to_text(response.content))
+        raw_response = content_to_text(response.content)
+        _record_composer_round(
+            output_dir,
+            state.get("run_id"),
+            review_round + 1,
+            {"messages": messages},
+            {"content": raw_response},
+            patient_values,
+        )
+        brief_data = _parse_brief_from_response(raw_response)
         # The DMN audit trail is authoritative data the executor already built —
         # inject it directly rather than asking the LLM to echo it back through
         # the prompt (F10). This removes a large, error-prone round-trip and
@@ -538,12 +655,24 @@ def plan_composer(state: CarePlanComposerState) -> dict:
         return {
             "planning_brief": brief_dict,
             "brief_review_feedback": "",
+            "brief_parse_failed": False,
             "plan_composer_prompt": user_prompt,
         }
 
-    except (json.JSONDecodeError, Exception) as e:
-        logger.error("Failed to parse Planning Brief from LLM response: %s", e)
-        logger.debug("Raw response: %s", content_to_text(response.content)[:500])
+    except Exception as e:
+        raw_response = content_to_text(response.content)
+        try:
+            parsed_fragment_source = _parse_brief_from_response(raw_response)
+        except Exception:
+            parsed_fragment_source = None
+        fragment = _offending_fragment(parsed_fragment_source, raw_response)
+        safe_error = _sanitize_artifact_value(str(e), patient_values)
+        safe_fragment = _sanitize_artifact_value(fragment, patient_values)
+        feedback = (
+            f"Planning Brief parse/normalization error: {safe_error}\n"
+            f"Offending fragment (first 500 characters): {str(safe_fragment)[:500]}"
+        )
+        logger.exception("Failed to parse or normalize Planning Brief from LLM response")
         return {
             "planning_brief": {
                 "patient_reference": patient_ref,
@@ -551,8 +680,10 @@ def plan_composer(state: CarePlanComposerState) -> dict:
                 "goals": [],
                 "activities": [],
                 "review_status": "flagged",
-                "review_feedback": f"LLM response parse error: {e}",
+                "review_feedback": feedback,
             },
-            "brief_review_feedback": "",
+            "brief_review_feedback": feedback,
+            "brief_parse_failed": True,
+            "brief_review_count": review_round + 1,
             "plan_composer_prompt": user_prompt,
         }

@@ -56,6 +56,16 @@ def _route_after_brief_review(state: CarePlanComposerState) -> str:
     return "plan_composer"
 
 
+def _route_after_plan_composer(state: CarePlanComposerState) -> str:
+    """Retry malformed briefs directly; never send an empty parse failure to review."""
+    if not state.get("brief_parse_failed"):
+        return "brief_reviewer"
+    if state.get("brief_review_count", 0) >= MAX_BRIEF_REVIEWS:
+        logger.warning("Plan composition exhausted after %d malformed brief rounds", MAX_BRIEF_REVIEWS)
+        return END
+    return "plan_composer"
+
+
 def _route_after_fhir_review(state: CarePlanComposerState) -> str:
     feedback = state.get("fhir_review_feedback")
     if not feedback:
@@ -120,7 +130,15 @@ def build_pipeline(
     graph.add_edge("guideline_resolver", "dmn_executor")
     graph.add_edge("dmn_executor", "recommendation_retriever")
     graph.add_edge("recommendation_retriever", "plan_composer")
-    graph.add_edge("plan_composer", "brief_reviewer")
+    graph.add_conditional_edges(
+        "plan_composer",
+        _route_after_plan_composer,
+        {
+            "brief_reviewer": "brief_reviewer",
+            "plan_composer": "plan_composer",
+            END: END,
+        },
+    )
     graph.add_conditional_edges(
         "brief_reviewer",
         _route_after_brief_review,

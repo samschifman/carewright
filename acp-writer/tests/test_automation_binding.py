@@ -1,6 +1,9 @@
 """Plan-specific automation binding behavior."""
 
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from cpg_contracts.automation.instances import ParameterBinding
 from cpg_contracts.automation.ir import (
@@ -17,6 +20,16 @@ from acp_writer.nodes.automation_binding import bind_instance, known_phi_values
 GOLDEN = (
     Path(__file__).parent / "fixtures/home-bp-monitoring.ir.json"
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_terminology_lookup(monkeypatch):
+    def lookup(system, term):
+        if term == "blood pressure":
+            return SimpleNamespace(found=True, system=system, code="lookup-code")
+        return SimpleNamespace(found=False, system=system, code=None)
+
+    monkeypatch.setattr("acp_writer.nodes.automation_binding.find_terminology_concept", lookup)
 
 
 def _template_and_instance(*, monitoring_period: str | None = None):

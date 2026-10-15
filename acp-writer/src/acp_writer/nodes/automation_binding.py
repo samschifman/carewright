@@ -20,6 +20,7 @@ from cpg_contracts.automation.ir import (
 )
 from cpg_contracts.automation.validators.results import Finding
 from acp_writer.tools.concept_resolver import resolve as resolve_concept
+from acp_writer.tools.terminology_lookup import LOINC_SYSTEM, find as find_terminology_concept
 
 
 def _field(value: Any, name: str, default: Any = None) -> Any:
@@ -139,7 +140,13 @@ def _concept_binding(
     concept: ConceptRef,
 ) -> tuple[ParameterBinding | None, Finding | None]:
     resolved = resolve_concept(concept.concept)
-    if resolved is None or not resolved.system or not resolved.code:
+    system = resolved.system if resolved is not None else None
+    code = resolved.code if resolved is not None else None
+    if not system or not code:
+        lookup = find_terminology_concept(LOINC_SYSTEM, concept.concept)
+        if lookup.found and lookup.system and lookup.code:
+            system, code = lookup.system, lookup.code
+    if not system or not code:
         return None, Finding(
             rung="L5a",
             severity="WARNING",
@@ -147,7 +154,7 @@ def _concept_binding(
             message=f"concept {concept.concept!r} on task {element.id!r} could not be resolved to one code",
             element_id=element.id,
         )
-    code = f"{resolved.system}|{resolved.code}"
+    code = f"{system}|{code}"
     return (
         ParameterBinding(
             name=f"{element.id}__{input_name}",

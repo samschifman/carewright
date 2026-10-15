@@ -28,6 +28,16 @@ from acp_writer.nodes.automation_synthesizer import (
 GOLDEN = Path(__file__).parent / "fixtures/home-bp-monitoring.template.json"
 
 
+@pytest.fixture(autouse=True)
+def mock_terminology_lookup(monkeypatch):
+    def lookup(system, term):
+        if term == "blood pressure":
+            return SimpleNamespace(found=True, system=system, code="lookup-code")
+        return SimpleNamespace(found=False, system=system, code=None)
+
+    monkeypatch.setattr("acp_writer.nodes.automation_binding.find_terminology_concept", lookup)
+
+
 class Registry:
     def __init__(self, templates):
         self.templates = templates

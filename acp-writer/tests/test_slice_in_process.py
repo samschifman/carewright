@@ -6,6 +6,7 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
@@ -116,6 +117,14 @@ def _fake_fhir_app(resources: dict[str, dict]) -> FastAPI:
 
 def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp_path):
     """Exercise the real registration, FHIR generation, approval, and publication apps."""
+    monkeypatch.setattr(
+        "acp_writer.nodes.automation_binding.find_terminology_concept",
+        lambda system, term: SimpleNamespace(
+            found=(term == "blood pressure"),
+            system=system,
+            code="lookup-code" if term == "blood pressure" else None,
+        ),
+    )
     template_paths = {
         path.name.removesuffix(".template.json"): path
         for path in sorted((REPLAY / "templates").glob("*.template.json"))

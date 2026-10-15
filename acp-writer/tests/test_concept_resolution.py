@@ -41,6 +41,38 @@ class TestTerminologyResolution:
         assert result.match_basis == "terminology"
         assert any("E03" in e.code for e in result.entries)
 
+    @patch("acp_writer.tools.terminology_lookup.find_candidates")
+    def test_blood_pressure_panel_uses_terminology_fallback(self, mock_find):
+        mock_find.return_value = [
+            LookupResult(
+                found=True,
+                system="http://loinc.org",
+                code="85354-9",
+                display="Blood pressure panel",
+            ),
+        ]
+        bundle = {
+            "entry": [{
+                "resource": {
+                    "resourceType": "Observation",
+                    "id": "bp-panel",
+                    "status": "final",
+                    "code": {"coding": [{
+                        "system": "http://loinc.org",
+                        "code": "85354-9",
+                        "display": "Blood pressure panel",
+                    }]},
+                },
+            }],
+        }
+        inventory = build_bundle_inventory(bundle)
+
+        result = resolve_concept_in_bundle("blood pressure", inventory, "observation")
+
+        assert result.resolved
+        assert result.match_basis == "terminology"
+        mock_find.assert_called_once_with("http://loinc.org", "blood pressure", n=5)
+
 
 class TestDisplayTextMatch:
     def test_free_text_medication_found_via_display(self):

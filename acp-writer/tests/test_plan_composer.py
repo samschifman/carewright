@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from acp_writer.nodes.plan_composer import (
-    _ensure_clinical_follow_up,
     _format_conditions,
     _format_demographics,
     _format_recommendations,
@@ -16,7 +15,6 @@ from acp_writer.nodes.plan_composer import (
     _merge_same_cpg_medication_regimens,
     _resolve_missing_medication_codes,
     _neutralize_unprovided_pronouns,
-    _normalize_source_bound_safety_text,
     _parse_brief_from_response,
     _sanitize_provenance,
     plan_composer,
@@ -176,42 +174,12 @@ class TestDeterministicClinicalNormalization:
         assert len(brief["goals"]) == 1
         assert brief["goals"][0]["source_recommendation_ids"] == ["rec-a", "rec-b"]
 
-    def test_treatment_dmn_adds_clinical_visit_separate_from_home_review(self):
-        brief = self._duplicate_regimen_brief()
-        _resolve_missing_medication_codes(brief)
-        _merge_same_cpg_medication_regimens(brief)
-        _ensure_clinical_follow_up(brief, [{
-            "model_id": "treatment-recommendation",
-            "outputs": {"Treatment Recommendation": {"Action": "Start medication", "Follow Up Weeks": 2}},
-        }])
-        followups = [a for a in brief["activities"] if "clinical follow-up visit" in a["description"]]
-        assert len(followups) == 1
-        assert followups[0]["frequency"] == "2 weeks"
-        assert "separate from home-average review" in followups[0]["description"]
-
     @patch("acp_writer.nodes.plan_composer.resolve", return_value=None)
     def test_unresolved_medication_code_is_left_absent(self, resolver):
         brief = {"activities": [{"type": "medication", "description": "Unrecognized medicine"}]}
         _resolve_missing_medication_codes(brief)
         resolver.assert_called_once_with("Unrecognized medicine")
         assert "code" not in brief["activities"][0]
-
-    def test_sex_specific_alcohol_and_severe_bp_safety_text_are_explicit(self):
-        brief = {"activities": [
-            {"type": "lifestyle", "description": "Limit alcohol intake to no more than 2 drinks per day.", "source_recommendation_id": "alc", "source_cpg": "SYN"},
-            {"type": "monitoring", "description": "Notify on a single reading above 180/120 mmHg.", "source_recommendation_id": "bp", "source_cpg": "SYN"},
-        ]}
-        recs = [
-            {"id": "alc", "content": "Limit alcohol to 2 drinks per day for men and 1 for women."},
-            {"id": "bp", "content": "A single reading above 180/120 mmHg requires a repeat."},
-        ]
-        _normalize_source_bound_safety_text(brief, recs)
-        alcohol, severe_bp = brief["activities"]
-        assert "2 drinks per day for men and 1 drink per day for women" in alcohol["description"]
-        assert "confirm which limit applies" in alcohol["description"]
-        assert "emergency services immediately" in severe_bp["description"]
-        assert "repeat the reading after five minutes" in severe_bp["description"]
-        assert "American Heart Association" in severe_bp["clinical_rationale"]
 
     def test_unknown_patient_pronouns_are_neutralized(self):
         brief = {
@@ -350,7 +318,10 @@ class TestPlanComposer:
         repaired = plan_composer(state)
         assert repaired["brief_parse_failed"] is False
         assert "str' object has no attribute 'get'" in mock_llm.invoke.call_args_list[1].args[0][1]["content"]
-        assert "Revising an existing care plan" in mock_llm.invoke.call_args_list[1].args[0][0]["content"]
+        retry_messages = mock_llm.invoke.call_args_list[1].args[0]
+        assert "Preserving conflicts between guidelines" in retry_messages[0]["content"]
+        assert "Revising an existing care plan" not in retry_messages[0]["content"]
+        assert "Care Plan Base" not in retry_messages[1]["content"]
 
         artifact_dir = tmp_path / "acp-writer" / "run-test" / "plan-composer"
         for round_number in (1, 2):

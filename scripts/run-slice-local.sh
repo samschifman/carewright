@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT_DIR"
+SLICE_TEMPLATE_DIR="${SLICE_TEMPLATE_DIR:-$ROOT_DIR/cpg-ingester/data/golden/automation}"
 
 # Load only the Medplum setup values needed by the one-shot loader. In
 # particular, do not source the whole secrets file into the loader container.
@@ -53,7 +54,8 @@ while [ "$#" -gt 0 ]; do
     -h|--help)
       echo "Usage: $0 [--from-golden | --resume-bpmn-run RUN_DIR]"
       echo "Without an option, run the complete local automation slice."
-      echo "--from-golden skips extraction and runs delivery, care-plan approval, FHIR checks, and UI setup using saved CPG artifacts plus the checked-in automation goldens."
+      echo "--from-golden skips extraction and runs delivery, care-plan approval, FHIR checks, and UI setup using saved CPG artifacts plus *.template.json files from SLICE_TEMPLATE_DIR."
+      echo "SLICE_TEMPLATE_DIR defaults to cpg-ingester/data/golden/automation."
       echo "Set SLICE_GOLDEN_SOURCE_RUN_DIR to select the completed extraction run to replay; otherwise the newest usable run is selected."
       echo "--resume-bpmn-run reruns only BPMN generation from saved run artifacts."
       echo "Set SLICE_SKIP_BUILD=1 to use the existing slice-local service images."
@@ -68,6 +70,11 @@ done
 if [ "$FROM_GOLDEN" = "1" ] && [ -n "$RESUME_BPMN_RUN_DIR" ]; then
   echo "--from-golden and --resume-bpmn-run cannot be combined" >&2
   exit 2
+fi
+if [ "$FROM_GOLDEN" = "1" ] \
+  && { [ ! -d "$SLICE_TEMPLATE_DIR" ] || ! compgen -G "$SLICE_TEMPLATE_DIR/*.template.json" >/dev/null; }; then
+  echo "--from-golden requires at least one *.template.json in SLICE_TEMPLATE_DIR: $SLICE_TEMPLATE_DIR" >&2
+  exit 1
 fi
 if ! command -v podman-compose >/dev/null || ! command -v podman >/dev/null; then
   echo "podman and podman-compose are required" >&2
@@ -118,7 +125,8 @@ done
 
 mkdir -p "$INGESTER_RUN_DIR" "$PLAN_ROOT"
 export PYTHONUNBUFFERED=1
-exec > >(tee -a "$INGESTER_RUN_DIR/slice-runner.log") 2>&1
+echo "Slice runner log: $INGESTER_RUN_DIR/slice-runner.log"
+exec >>"$INGESTER_RUN_DIR/slice-runner.log" 2>&1
 if [ "$FROM_GOLDEN" = "1" ]; then
   if [ -n "${SLICE_GOLDEN_SOURCE_RUN_DIR:-}" ]; then
     GOLDEN_SOURCE_RUN_DIR="$(cd "$SLICE_GOLDEN_SOURCE_RUN_DIR" && pwd)"
@@ -238,14 +246,14 @@ PY
 save_compose_logs() {
   local service log_path
   mkdir -p "$RUN_ROOT/compose-logs"
-  while IFS= read -r service; do
+  compose_service_names | while IFS= read -r service; do
     [ -n "$service" ] || continue
     log_path="$RUN_ROOT/compose-logs/$service.log"
     if ! podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" logs "$service" 2>&1 \
       | redact_log_stream > "$log_path"; then
       echo "Compose log capture reported an error for service $service." >> "$log_path"
     fi
-  done < <(compose_service_names)
+  done
 }
 
 cleanup_failed_slice() {
@@ -450,7 +458,7 @@ wait_for "http://localhost:3003/" "cpg-ingester UI"
 
 echo "Preparing CPG artifacts for acp-writer."
 export SLICE_EVIDENCE_PATH
-"$INGESTER_PYTHON" - "$INGESTER_RUN_DIR" "$DELIVERY_DIR" "$CPG_ID" "$FROM_GOLDEN" "$ROOT_DIR/cpg-ingester/data/golden/automation" <<'PY'
+"$INGESTER_PYTHON" - "$INGESTER_RUN_DIR" "$DELIVERY_DIR" "$CPG_ID" "$FROM_GOLDEN" "$SLICE_TEMPLATE_DIR" <<'PY'
 import json
 import os
 import re
@@ -879,7 +887,38 @@ templates = [
     json.loads(path.read_text())
     for path in (ingester_dir / "deploy/templates").glob("*.template.json")
 ]
-template = next(item for item in templates if item["summary"]["id"] == "home-bp-monitoring")
+brief = json.loads((careplan_dir / "planning-brief.json").read_text())
+home_monitoring = [
+    activity for activity in brief.get("activities", [])
+    if activity.get("type") == "monitoring"
+    and "home" in activity.get("description", "").casefold()
+    and ("blood pressure" in activity.get("description", "").casefold()
+         or "home bp" in activity.get("description", "").casefold())
+    and activity.get("automations")
+]
+if len(home_monitoring) != 1:
+    raise SystemExit(
+        "Expected one automated home blood-pressure monitoring activity in the planning brief; "
+        f"found {len(home_monitoring)}"
+    )
+home_activity = home_monitoring[0]
+home_automations = home_activity.get("automations", [])
+home_template_refs = [
+    ref
+    for automation in home_automations
+    for ref in automation.get("template_refs", [])
+]
+registered_by_id = {item["summary"]["id"]: item for item in templates}
+missing_refs = [ref for ref in home_template_refs if ref.get("template_id") not in registered_by_id]
+if not home_template_refs or missing_refs:
+    raise SystemExit(
+        "The automated home blood-pressure monitoring activity has no matching registered template refs"
+    )
+home_template_labels = [
+    f"{ref['template_id']}@{ref.get('version', 'unknown')}"
+    for ref in home_template_refs
+]
+home_validation = [automation.get("validation", {}) for automation in home_automations]
 careplan = json.loads((careplan_dir / "careplan-server-resource.json").read_text())
 task = json.loads((careplan_dir / "Task.json").read_text())
 docref = json.loads((careplan_dir / "DocumentReference.json").read_text())
@@ -932,8 +971,10 @@ SLICE PASS
 - Replayed upstream run: `{run_summary.get('source_run_dir', 'live extraction')}`
 - Mode: `{run_summary.get('downstream_mode', 'full generation')}`; model: `{os.environ.get('SLICE_LLM_MODEL', 'not set')}`
 - Identified process items: {len(manifest_processes)}
-- Home-monitoring template: `{template['summary']['id']}@{template['summary']['version']}`
-- Registered golden templates: {', '.join(f"`{item['summary']['id']}`" for item in templates)}
+- Home-BP monitoring activity: `{home_activity.get('description', '')}`
+- Template attached to that activity: {', '.join(f"`{label}`" for label in home_template_labels)}
+- Automation validation (L0–L7): `{json.dumps(home_validation, ensure_ascii=False)}`
+- Registered templates: {', '.join(f"`{item['summary']['id']}@{item['summary']['version']}`" for item in templates)}
 - Planning brief: `{careplan_dir.relative_to(root)}/planning-brief.json`
 - UI fixture: `acp-writer/ui/src/mocks/fixtures/slice-careplan.json`
 

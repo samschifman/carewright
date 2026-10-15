@@ -295,6 +295,10 @@ paths:
                   properties: { ir: { type: object } }
                 - required: [bpmn_xml]
                   properties: { bpmn_xml: { type: string } }
+              properties:
+                dmn_namespaces:
+                  type: object
+                  additionalProperties: { type: string }
       responses:
         "200":
           description: Ladder and Kogito validation result
@@ -745,6 +749,10 @@ components:
         summary: { type: object }
         ir: { type: object }
         bpmn_xml: { type: string }
+        dmn_namespaces:
+          type: object
+          description: DMN model namespaces captured from the decision registry for linked models.
+          additionalProperties: { type: string }
 
     DecisionVariable:
       type: object

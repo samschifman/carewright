@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from acp_writer import api
 from acp_writer.services import decision_engine
 from acp_writer.services.automation_registry import AutomationRegistry, RegistryError, router as registry_router
+from acp_writer.services.template_client import TemplateClient
 from cpg_contracts.automation.compiler import compile
 from cpg_contracts.automation.ir import ProcessIR, ir_version
 from cpg_contracts.automation.templates import AutomationTemplate
@@ -60,6 +61,39 @@ def test_registers_valid_template_and_lists_latest_by_links():
     assert registry.list(recommendation_id="<placeholder-rec-id>") == [template]
     assert registry.list(recommendation_id="unlinked") == []
     assert registry.list(dmn_model_id="unlinked") == []
+
+
+def test_registration_captures_linked_dmn_namespaces_and_template_client_exposes_them(monkeypatch):
+    template = _template()
+    template.summary.linked_decision_model_ids = ["monitoring-plan"]
+    namespaces = {
+        "monitoring-plan": "https://example.test/dmn/monitoring-plan",
+        "unlinked-model": "https://example.test/dmn/unlinked",
+    }
+    registered = _register(
+        AutomationRegistry(),
+        template,
+        dmn_namespaces=namespaces,
+    )
+
+    assert registered.template.dmn_namespaces == {
+        "monitoring-plan": namespaces["monitoring-plan"]
+    }
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return registered.template.model_dump(mode="json")
+
+    monkeypatch.setattr(
+        "acp_writer.services.template_client.requests.get",
+        lambda *_args, **_kwargs: Response(),
+    )
+    fetched = TemplateClient("http://registry").get(template.summary.id)
+
+    assert fetched.dmn_namespaces == registered.template.dmn_namespaces
 
 
 def test_ir_xml_mismatch_is_rejected_before_engine_validation():
@@ -155,8 +189,14 @@ def test_api_registers_lists_and_retrieves_template_versions(monkeypatch):
     monkeypatch.setattr(api, "validate_bpmn", _valid_kogito)
     monkeypatch.setattr(api.app.state, "automation_registry", registry)
     monkeypatch.setattr(api.app.state, "bpmn_validator", _valid_kogito)
+    monkeypatch.setattr(
+        api.app.state,
+        "dmn_namespaces",
+        lambda: {"monitoring-plan": "https://example.test/dmn/monitoring-plan"},
+    )
     client = TestClient(api.app)
     template = _template()
+    template.summary.linked_decision_model_ids = ["monitoring-plan"]
 
     registered = client.post(
         "/api/v1/automation/templates",
@@ -174,6 +214,9 @@ def test_api_registers_lists_and_retrieves_template_versions(monkeypatch):
 
     assert [item["summary"]["version"] for item in listed.json()] == [template.summary.version]
     assert fetched.json()["summary"]["version"] == template.summary.version
+    assert fetched.json()["dmn_namespaces"] == {
+        "monitoring-plan": "https://example.test/dmn/monitoring-plan"
+    }
 
 
 def test_registry_routes_are_defined_once_and_mounted_by_both_services():

@@ -75,6 +75,7 @@ class AutomationTemplate(ContractModel):
     summary: AutomationTemplateSummary
     ir: ProcessIR
     bpmn_xml: str = Field(min_length=1)
+    dmn_namespaces: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def matches_ir(self) -> AutomationTemplate:

@@ -13,8 +13,8 @@ project's Process IR. The IR is a strict JSON contract. Return exactly one JSON
 object that validates against the schema below.
 
 Never write BPMN XML and never write coordinates. Never invent timing,
-thresholds, actors, clinical steps, or defaults. Preserve the source's clinical
-meaning and cite source text on source-derived elements.
+thresholds, actors, or clinical steps. Preserve the source's clinical meaning
+and cite source text on source-derived elements.
 
 ## BPMN element subset and compiler macros
 The only flow element types are startEvent, endEvent, task, userTask,
@@ -92,7 +92,8 @@ interval, or other fields to this trigger.
 ## Grounding requirements
 T1: source provenance quotes must occur in the supplied CPG section text.
 T2: a CPG-sourced parameter default must be stated in its citation; authored
-defaults are allowed only for string parameters.
+free-text parameters carry their authored text as a non-empty string default.
+The no-default rule applies to unstated timings, thresholds, and counts only.
 T3: structural provenance uses only the closed rules above and has resolvable
 supports. A diverging gateway needs a source-derived condition.
 T4: source-derived numeric, duration, quantity, enum, unit, and code values

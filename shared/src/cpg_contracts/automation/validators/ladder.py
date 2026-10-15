@@ -144,6 +144,19 @@ def _l0(
     supplied_values: dict[str, object] = {}
     if ir.process.kind == "template":
         for parameter in parameters.values():
+            if (
+                parameter.source is not None
+                and parameter.source.kind == "authored"
+                and not (isinstance(parameter.default, str) and parameter.default.strip())
+            ):
+                findings.append(
+                    _finding(
+                        "L0",
+                        "parameter-authored-default",
+                        f"authored text parameter {parameter.name!r} requires a non-empty string default",
+                        parameter.name,
+                    )
+                )
             if parameter.default is None:
                 continue
             if not _matches_type(parameter, parameter.default):
@@ -253,6 +266,7 @@ def run_static_ladder(
     templates: list[ProcessIR] | None = None,
     context: InstanceContext | None = None,
     dmn_summaries: dict[str, DecisionModelSummary] | None = None,
+    dmn_namespaces: Mapping[str, str] | None = None,
     phi_known_values: Iterable[str] = (),
 ) -> LadderResult:
     """Run L0–L5 in order, stopping after the first rung with an error."""
@@ -308,6 +322,7 @@ def run_static_ladder(
             for model_id, summary in (dmn_summaries or {}).items()
             if summary.namespace is not None
         }
+        namespaces.update(dmn_namespaces or {})
         try:
             xml = compile(process_ir, catalog=catalog, dmn_namespaces=namespaces)
         except (ParseError, TypeError, ValueError, KeyError) as exc:

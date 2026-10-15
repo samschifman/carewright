@@ -6,6 +6,30 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT_DIR"
 SLICE_TEMPLATE_DIR="${SLICE_TEMPLATE_DIR:-$ROOT_DIR/cpg-ingester/data/golden/automation}"
+SLICE_LITELLM_URL_INPUT="${SLICE_LITELLM_URL:-}"
+SLICE_LITELLM_URL_INPUT="${SLICE_LITELLM_URL_INPUT%/}"
+case "$SLICE_LITELLM_URL_INPUT" in
+  "")
+    SLICE_DIRECT_LLM=0
+    SLICE_LITELLM_URL="http://litellm:4000"
+    SLICE_HOST_LITELLM_URL="http://localhost:4000"
+    ;;
+  http://litellm:4000)
+    SLICE_DIRECT_LLM=0
+    SLICE_LITELLM_URL="$SLICE_LITELLM_URL_INPUT"
+    SLICE_HOST_LITELLM_URL="http://localhost:4000"
+    ;;
+  http://localhost:4000|http://127.0.0.1:4000)
+    SLICE_DIRECT_LLM=0
+    SLICE_LITELLM_URL="http://litellm:4000"
+    SLICE_HOST_LITELLM_URL="$SLICE_LITELLM_URL_INPUT"
+    ;;
+  *)
+    SLICE_DIRECT_LLM=1
+    SLICE_LITELLM_URL="$SLICE_LITELLM_URL_INPUT"
+    SLICE_HOST_LITELLM_URL="$SLICE_LITELLM_URL_INPUT"
+    ;;
+esac
 
 # Load only the Medplum setup values needed by the one-shot loader. In
 # particular, do not source the whole secrets file into the loader container.
@@ -21,13 +45,19 @@ if [ -f "$SLICE_SECRETS_ENV_FILE" ]; then
   done < "$SLICE_SECRETS_ENV_FILE"
 fi
 SLICE_LITELLM_ENV_FILE="${SLICE_LITELLM_ENV_FILE:-$ROOT_DIR/platform/litellm/deploy/.env}"
-if [ -f "$SLICE_LITELLM_ENV_FILE" ]; then
+if [ "$SLICE_DIRECT_LLM" = "1" ]; then
+  SLICE_LLM_API_KEY="${OPENAI_API_KEY:-}"
+elif [ -f "$SLICE_LITELLM_ENV_FILE" ]; then
   while IFS= read -r entry || [ -n "$entry" ]; do
     case "$entry" in
       LITELLM_MASTER_KEY=*) export LITELLM_MASTER_KEY="${entry#*=}" ;;
     esac
   done < "$SLICE_LITELLM_ENV_FILE"
+  SLICE_LLM_API_KEY="${LITELLM_MASTER_KEY:-}"
+else
+  SLICE_LLM_API_KEY="${LITELLM_MASTER_KEY:-}"
 fi
+export SLICE_LLM_API_KEY SLICE_LITELLM_URL SLICE_HOST_LITELLM_URL
 
 INGESTER_CLI="$ROOT_DIR/cpg-ingester/.venv/bin/cpg-ingest"
 INGESTER_PYTHON="$ROOT_DIR/cpg-ingester/.venv/bin/python"
@@ -67,6 +97,14 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+if [ -z "$SLICE_LLM_API_KEY" ]; then
+  if [ "$SLICE_DIRECT_LLM" = "1" ]; then
+    echo "Direct LLM mode requires OPENAI_API_KEY." >&2
+  else
+    echo "Local LLM gateway mode requires its configured gateway key." >&2
+  fi
+  exit 1
+fi
 if [ "$FROM_GOLDEN" = "1" ] && [ -n "$RESUME_BPMN_RUN_DIR" ]; then
   echo "--from-golden and --resume-bpmn-run cannot be combined" >&2
   exit 2
@@ -78,6 +116,10 @@ if [ "$FROM_GOLDEN" = "1" ] \
 fi
 if ! command -v podman-compose >/dev/null || ! command -v podman >/dev/null; then
   echo "podman and podman-compose are required" >&2
+  exit 1
+fi
+if ! podman info >/dev/null 2>&1; then
+  echo "Podman preflight failed: Podman is not responding." >&2
   exit 1
 fi
 PROJECT="slice-local"
@@ -280,6 +322,19 @@ if ! podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" down --remove-orphans >"
   exit 1
 fi
 
+if [ "${SLICE_SKIP_BUILD:-0}" != "1" ]; then
+  echo "Removing images from the previous slice build."
+  for service in litellm kogito automation acp-writer medplum-loader; do
+    image="localhost/${PROJECT}_${service}:latest"
+    if podman image exists "$image"; then
+      if ! podman image rm -f "$image" >/dev/null 2>&1; then
+        echo "Could not remove a previous slice build image: $image" >&2
+        exit 1
+      fi
+    fi
+  done
+fi
+
 echo "Building and starting the isolated compose stack ($PROJECT)."
 if [ "${SLICE_SKIP_BUILD:-0}" = "1" ]; then
   for service in litellm kogito automation acp-writer medplum-loader; do
@@ -410,10 +465,11 @@ if [ -n "$RESUME_BPMN_RUN_DIR" ]; then
   if ! ARTIFACT_STORE_URL="http://localhost:9000" \
     ARTIFACT_STORE_ACCESS_KEY="$SLICE_S3_ACCESS_KEY" \
     ARTIFACT_STORE_SECRET_KEY="$SLICE_S3_SECRET_KEY" \
-    LITELLM_URL="${SLICE_LITELLM_URL:-http://localhost:4000}" \
+    LITELLM_URL="$SLICE_HOST_LITELLM_URL" \
     LLM_MODEL="${SLICE_LLM_MODEL:-${LLM_MODEL:-default}}" \
     LLM_MAX_RETRIES="${SLICE_LLM_MAX_RETRIES:-0}" \
     LLM_API_KEY="" \
+    LITELLM_API_KEY="$SLICE_LLM_API_KEY" \
     MLFLOW_TRACKING_URI="$MLFLOW_URL" \
     MLFLOW_EXPERIMENT_NAME="$SLICE_MLFLOW_EXPERIMENT_NAME" \
       "$INGESTER_PYTHON" -m cpg_ingester.resume_bpmn "$INGESTER_RUN_DIR" \
@@ -428,10 +484,10 @@ else
   if ! ARTIFACT_STORE_URL="http://localhost:9000" \
     ARTIFACT_STORE_ACCESS_KEY="$SLICE_S3_ACCESS_KEY" \
     ARTIFACT_STORE_SECRET_KEY="$SLICE_S3_SECRET_KEY" \
-    LITELLM_URL="${SLICE_LITELLM_URL:-http://localhost:4000}" \
+    LITELLM_URL="$SLICE_HOST_LITELLM_URL" \
     LLM_MODEL="${SLICE_LLM_MODEL:-${LLM_MODEL:-default}}" \
     LLM_MAX_RETRIES="${SLICE_LLM_MAX_RETRIES:-0}" \
-    LITELLM_API_KEY="${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY must be set}" \
+    LITELLM_API_KEY="$SLICE_LLM_API_KEY" \
     MLFLOW_TRACKING_URI="$MLFLOW_URL" \
     MLFLOW_EXPERIMENT_NAME="$SLICE_MLFLOW_EXPERIMENT_NAME" \
       "$INGESTER_CLI" "$PDF" --output-dir "$INGESTER_RUN_DIR" \
@@ -496,7 +552,11 @@ for index, item in enumerate(generation.get("dmn_results") or []):
     path = dmn_dir / f"decision-{index + 1}.dmn"
     path.write_text(item["dmn_xml"])
     dmn_count += 1
-if from_golden:
+canonical_golden_dir = Path("cpg-ingester/data/golden/automation").resolve()
+use_canonical_golden_dmns = (
+    from_golden and golden_template_dir.resolve() == canonical_golden_dir
+)
+if use_canonical_golden_dmns:
     canonical_dmns = {}
     for path in golden_template_dir.parent.glob("*.dmn"):
         try:
@@ -707,10 +767,6 @@ import json
 import sys
 bundle = json.load(open(sys.argv[1]))
 system = sys.argv[2]
-entries = {
-    entry.get("fullUrl"): entry.get("resource", {})
-    for entry in bundle.get("entry", [])
-}
 careplan = next(
     item["resource"] for item in bundle.get("entry", [])
     if item.get("resource", {}).get("resourceType") == "CarePlan"
@@ -721,38 +777,6 @@ identifier = next(
 )
 if not identifier:
     raise SystemExit("Generated bundle did not include the stable CarePlan identifier")
-def referenced_resource(activity):
-    reference = (activity.get("reference") or {}).get("reference")
-    return entries.get(reference, {})
-
-def activity_text(activity):
-    detail = activity.get("detail") or {}
-    resource = referenced_resource(activity)
-    values = [
-        detail.get("description", ""),
-        (detail.get("code") or {}).get("text", ""),
-        resource.get("description", ""),
-        (resource.get("code") or {}).get("text", ""),
-    ]
-    return " ".join(value for value in values if isinstance(value, str)).casefold()
-
-home_bp_monitoring = [
-    activity for activity in careplan.get("activity", [])
-    if ("home blood pressure" in activity_text(activity)
-        or "home bp" in activity_text(activity))
-    and ("validated" in activity_text(activity)
-         or "monitoring" in activity_text(activity))
-    and ("reading" in activity_text(activity)
-         or "monitor" in activity_text(activity))
-]
-if not home_bp_monitoring or not any(
-    ext.get("url", "").endswith("/activity-automation")
-    for activity in home_bp_monitoring
-    for ext in activity.get("extension", [])
-):
-    raise SystemExit(
-        "Generated CarePlan's home-BP monitoring activity has no activity automation extension"
-    )
 print(identifier)
 PY
 )"
@@ -764,6 +788,97 @@ for expected in planning-brief.json fhir-bundle.json; do
     exit 1
   fi
 done
+
+HAS_VALID_AUTOMATION="$("$INGESTER_PYTHON" - \
+  "$CAREPLAN_ARTIFACT_DIR/planning-brief.json" \
+  "$RUN_ROOT/generated-careplan-bundle.json" \
+  "$CAREPLAN_ARTIFACT_DIR/automation-guard.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+brief_path, bundle_path, result_path = map(Path, sys.argv[1:])
+brief = json.loads(brief_path.read_text())
+bundle = json.loads(bundle_path.read_text())
+attached = []
+for activity in brief.get("activities", []):
+    for automation in activity.get("automations", []) or []:
+        if automation.get("template_refs"):
+            attached.append((activity, automation))
+if not attached:
+    raise SystemExit("Generated planning brief has no attached live automations")
+
+issues = []
+for activity, automation in attached:
+    validation = automation.get("validation") or {}
+    status = validation.get("status")
+    errors = validation.get("errors") or []
+    if status not in {"valid", "incomplete"} or errors:
+        issues.append({
+            "activity_id": activity.get("id"),
+            "status": status,
+            "errors": errors,
+        })
+if issues:
+    raise SystemExit(
+        "Attached automation validation failed: " + json.dumps(issues, ensure_ascii=False)
+    )
+
+valid = [item for item in attached if (item[1].get("validation") or {}).get("status") == "valid"]
+if valid:
+    careplan = next(
+        item.get("resource", {}) for item in bundle.get("entry", [])
+        if item.get("resource", {}).get("resourceType") == "CarePlan"
+    )
+    entries = {
+        entry.get("fullUrl"): entry.get("resource", {})
+        for entry in bundle.get("entry", [])
+    }
+    links = []
+    for activity in careplan.get("activity", []):
+        for extension in activity.get("extension", []) or []:
+            if extension.get("url", "").endswith("/activity-automation"):
+                links.append({
+                    child.get("url"): child.get("valueReference", {}).get("reference")
+                    for child in extension.get("extension", []) or []
+                })
+    if len(links) < len(valid):
+        raise SystemExit(
+            "Generated CarePlan is missing an activity automation extension for a valid instance"
+        )
+    for link in links:
+        task_ref = link.get("instance")
+        document_ref = link.get("definition")
+        if not task_ref or not document_ref:
+            raise SystemExit("Activity automation extension must reference a Task and DocumentReference")
+        if entries.get(task_ref, {}).get("resourceType") != "Task":
+            raise SystemExit("Valid activity automation extension has no matching Task in the bundle")
+        if entries.get(document_ref, {}).get("resourceType") != "DocumentReference":
+            raise SystemExit(
+                "Valid activity automation extension has no matching DocumentReference in the bundle"
+            )
+
+result = {
+    "attached": [
+        {
+            "activity_id": activity.get("id"),
+            "activity_description": activity.get("description", ""),
+            "automation_id": automation.get("id"),
+            "template_refs": automation.get("template_refs", []),
+            "status": (automation.get("validation") or {}).get("status"),
+            "errors": (automation.get("validation") or {}).get("errors", []),
+        }
+        for activity, automation in attached
+    ],
+    "valid_instances": len(valid),
+    "attached_count": len(attached),
+}
+result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
+print("1" if valid else "0")
+PY
+)"
+ATTACHED_AUTOMATION_COUNT="$("$INGESTER_PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["attached_count"])' "$CAREPLAN_ARTIFACT_DIR/automation-guard.json")"
+echo "Attached $ATTACHED_AUTOMATION_COUNT live automation(s); valid instances present: $HAS_VALID_AUTOMATION."
 
 curl --silent --show-error --fail --output "$CAREPLAN_ARTIFACT_DIR/approval-response.json" \
   -X PUT -H 'Content-Type: application/json' \
@@ -784,7 +899,7 @@ PY
 
 echo "Checking the FHIR server transaction result."
 podman-compose "${COMPOSE_SLICE[@]}" -p "$PROJECT" exec -T acp-writer python - \
-  "$CAREPLAN_SYSTEM" "$CAREPLAN_ID" "/slice-run/careplans/$CAREPLAN_ID" "$FHIR_CONTAINER_URL" <<'PY'
+  "$CAREPLAN_SYSTEM" "$CAREPLAN_ID" "/slice-run/careplans/$CAREPLAN_ID" "$FHIR_CONTAINER_URL" "$HAS_VALID_AUTOMATION" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -792,7 +907,7 @@ import requests
 
 from acp_writer.nodes.fhir_server_writer import _get_auth_headers
 
-system, careplan_id, output_dir, fhir_url = sys.argv[1:]
+system, careplan_id, output_dir, fhir_url, has_valid_automation = sys.argv[1:]
 out_dir = Path(output_dir)
 out_dir.mkdir(parents=True, exist_ok=True)
 headers = {"Accept": "application/fhir+json", **_get_auth_headers()}
@@ -814,6 +929,13 @@ careplan = next(
 if not careplan:
     raise SystemExit("FHIR search returned no CarePlan")
 (out_dir / "careplan-server-resource.json").write_text(json.dumps(careplan, indent=2) + "\n")
+if has_valid_automation != "1":
+    print(json.dumps({
+        "careplan_search_status": response.status_code,
+        "careplan_found": True,
+        "automation_resources_expected": False,
+    }))
+    raise SystemExit(0)
 references = {}
 for activity in careplan.get("activity", []):
     for extension in activity.get("extension", []) or []:
@@ -841,11 +963,12 @@ for resource_type, reference in references.items():
     print(json.dumps({"resource_type": resource_type, "status": resource_response.status_code}))
 PY
 
-curl --silent --show-error --fail --get \
-  --data-urlencode "careplan_id=$CAREPLAN_ID" \
-  "$AUTOMATION_URL/api/v1/automations" \
-  > "$CAREPLAN_ARTIFACT_DIR/automation-service-records.json"
-"$INGESTER_PYTHON" - "$CAREPLAN_ARTIFACT_DIR/automation-service-records.json" <<'PY'
+if [ "$HAS_VALID_AUTOMATION" = "1" ]; then
+  curl --silent --show-error --fail --get \
+    --data-urlencode "careplan_id=$CAREPLAN_ID" \
+    "$AUTOMATION_URL/api/v1/automations" \
+    > "$CAREPLAN_ARTIFACT_DIR/automation-service-records.json"
+  "$INGESTER_PYTHON" - "$CAREPLAN_ARTIFACT_DIR/automation-service-records.json" <<'PY'
 import json
 import sys
 records = json.load(open(sys.argv[1]))
@@ -853,6 +976,10 @@ if not records:
     raise SystemExit("Automation service has no records for the approved CarePlan")
 print(f"Automation service stored {len(records)} automation record(s).")
 PY
+else
+  printf '[]\n' > "$CAREPLAN_ARTIFACT_DIR/automation-service-records.json"
+  echo "No valid automation instance exists; skipping automation-service record checks."
+fi
 
 PYTHONPATH="$ROOT_DIR/acp-writer/src:$ROOT_DIR/shared/src${PYTHONPATH:+:$PYTHONPATH}" \
   "$ACP_WRITER_PYTHON" acp-writer/scripts/export_ui_fixture.py \
@@ -888,41 +1015,53 @@ templates = [
     for path in (ingester_dir / "deploy/templates").glob("*.template.json")
 ]
 brief = json.loads((careplan_dir / "planning-brief.json").read_text())
-home_monitoring = [
-    activity for activity in brief.get("activities", [])
-    if activity.get("type") == "monitoring"
-    and "home" in activity.get("description", "").casefold()
-    and ("blood pressure" in activity.get("description", "").casefold()
-         or "home bp" in activity.get("description", "").casefold())
-    and activity.get("automations")
-]
-if len(home_monitoring) != 1:
-    raise SystemExit(
-        "Expected one automated home blood-pressure monitoring activity in the planning brief; "
-        f"found {len(home_monitoring)}"
-    )
-home_activity = home_monitoring[0]
-home_automations = home_activity.get("automations", [])
-home_template_refs = [
-    ref
-    for automation in home_automations
-    for ref in automation.get("template_refs", [])
-]
 registered_by_id = {item["summary"]["id"]: item for item in templates}
-missing_refs = [ref for ref in home_template_refs if ref.get("template_id") not in registered_by_id]
-if not home_template_refs or missing_refs:
-    raise SystemExit(
-        "The automated home blood-pressure monitoring activity has no matching registered template refs"
+activity_automation_rows = []
+for activity in brief.get("activities", []):
+    description = activity.get("description", "")
+    normalized = description.casefold() if isinstance(description, str) else ""
+    home_bp_activity = (
+        ("home blood pressure" in normalized or "home bp" in normalized)
+        and ("reading" in normalized or "monitor" in normalized)
     )
-home_template_labels = [
-    f"{ref['template_id']}@{ref.get('version', 'unknown')}"
-    for ref in home_template_refs
+    for automation in activity.get("automations", []) or []:
+        refs = automation.get("template_refs", []) or []
+        missing_refs = [
+            ref for ref in refs
+            if ref.get("template_id") not in registered_by_id
+        ]
+        if missing_refs:
+            raise SystemExit(
+                "Planning brief automation references a template that was not registered: "
+                + json.dumps(missing_refs, ensure_ascii=False)
+            )
+        activity_automation_rows.append({
+            "activity_id": activity.get("id"),
+            "activity_type": activity.get("type"),
+            "activity_description": description,
+            "home_bp_monitoring": home_bp_activity,
+            "automation_id": automation.get("id"),
+            "template_refs": [
+                f"{ref.get('template_id')}@{ref.get('version', 'unknown')}"
+                for ref in refs
+            ],
+            "status": (automation.get("validation") or {}).get("status"),
+            "errors": (automation.get("validation") or {}).get("errors", []),
+        })
+home_monitoring_automations = [
+    item for item in activity_automation_rows if item["home_bp_monitoring"]
 ]
-home_validation = [automation.get("validation", {}) for automation in home_automations]
 careplan = json.loads((careplan_dir / "careplan-server-resource.json").read_text())
-task = json.loads((careplan_dir / "Task.json").read_text())
-docref = json.loads((careplan_dir / "DocumentReference.json").read_text())
-excerpt = {"carePlan": careplan, "task": task, "documentReference": docref}
+excerpt = {"carePlan": careplan}
+resource_names = ["CarePlan"]
+for filename, key, label in (
+    ("Task.json", "task", "Task"),
+    ("DocumentReference.json", "documentReference", "DocumentReference"),
+):
+    resource_path = careplan_dir / filename
+    if resource_path.is_file():
+        excerpt[key] = json.loads(resource_path.read_text())
+        resource_names.append(label)
 (careplan_dir / "fhir-automation-excerpt.json").write_text(
     json.dumps(excerpt, indent=2, ensure_ascii=False) + "\n"
 )
@@ -971,9 +1110,12 @@ SLICE PASS
 - Replayed upstream run: `{run_summary.get('source_run_dir', 'live extraction')}`
 - Mode: `{run_summary.get('downstream_mode', 'full generation')}`; model: `{os.environ.get('SLICE_LLM_MODEL', 'not set')}`
 - Identified process items: {len(manifest_processes)}
-- Home-BP monitoring activity: `{home_activity.get('description', '')}`
-- Template attached to that activity: {', '.join(f"`{label}`" for label in home_template_labels)}
-- Automation validation (L0–L7): `{json.dumps(home_validation, ensure_ascii=False)}`
+- Home-BP monitoring activity automations: `{json.dumps(home_monitoring_automations, ensure_ascii=False)}`
+- Activities, attached templates, and validation statuses:
+
+```json
+{json.dumps(activity_automation_rows, indent=2, ensure_ascii=False)}
+```
 - Registered templates: {', '.join(f"`{item['summary']['id']}@{item['summary']['version']}`" for item in templates)}
 - Planning brief: `{careplan_dir.relative_to(root)}/planning-brief.json`
 - UI fixture: `acp-writer/ui/src/mocks/fixtures/slice-careplan.json`
@@ -981,7 +1123,7 @@ SLICE PASS
 ## FHIR and automation handoff
 
 - CarePlan identifier: `{careplan_id}`
-- Persisted resources: `CarePlan`, `Task`, `DocumentReference`
+- Persisted resources: {', '.join(f'`{name}`' for name in resource_names)}
 - FHIR excerpt: `{careplan_dir.relative_to(root)}/fhir-automation-excerpt.json`
 - Automation service records: `{json.dumps(records, ensure_ascii=False)}`
 

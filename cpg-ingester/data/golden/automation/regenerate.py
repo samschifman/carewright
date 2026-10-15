@@ -95,8 +95,16 @@ def _linked_decision_ids(ir: ProcessIR) -> list[str]:
     return sorted(model_ids)
 
 
-def _build_template(ir: ProcessIR, *, xml: str, result, catalog) -> AutomationTemplate:
+def _build_template(
+    ir: ProcessIR,
+    *,
+    xml: str,
+    result,
+    catalog,
+    dmn_namespaces: dict[str, str],
+) -> AutomationTemplate:
     process = ir.process
+    linked_decision_ids = _linked_decision_ids(ir)
     warning_messages = [
         f"{finding.rung}/{finding.code}: {finding.message}"
         for finding in result.warnings()
@@ -119,7 +127,7 @@ def _build_template(ir: ProcessIR, *, xml: str, result, catalog) -> AutomationTe
         source_location=process.acp.provenance.source_location,
         triggers=process.acp.triggers,
         linked_recommendation_ids=["<placeholder-rec-id>"],
-        linked_decision_model_ids=_linked_decision_ids(ir),
+        linked_decision_model_ids=linked_decision_ids,
         parameters=process.acp.parameters,
         capabilities_used=sorted(
             {
@@ -138,7 +146,16 @@ def _build_template(ir: ProcessIR, *, xml: str, result, catalog) -> AutomationTe
         validation=validation,
         artifact_id=f"golden-automation-{process.id}",
     )
-    return AutomationTemplate(summary=summary, ir=ir, bpmn_xml=xml)
+    return AutomationTemplate(
+        summary=summary,
+        ir=ir,
+        bpmn_xml=xml,
+        dmn_namespaces={
+            model_id: dmn_namespaces[model_id]
+            for model_id in linked_decision_ids
+            if model_id in dmn_namespaces
+        },
+    )
 
 
 def render_outputs() -> dict[str, str]:
@@ -172,7 +189,13 @@ def render_outputs() -> dict[str, str]:
             raise ValueError(f"{ir_path.name} lacks text grounding or a deferred invariant")
 
         xml = compile(ir, catalog=catalog, dmn_namespaces=dmn_namespaces)
-        template = _build_template(ir, xml=xml, result=result, catalog=catalog)
+        template = _build_template(
+            ir,
+            xml=xml,
+            result=result,
+            catalog=catalog,
+            dmn_namespaces=dmn_namespaces,
+        )
         outputs[f"{ir.process.id}.bpmn"] = xml
         outputs[f"{ir.process.id}.template.json"] = json.dumps(
             template.model_dump(mode="json"),

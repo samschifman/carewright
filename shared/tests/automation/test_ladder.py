@@ -13,6 +13,7 @@ from cpg_contracts.automation.ir import (
     Parameter,
     ProcessIR,
     SequenceFlow,
+    SourceRef,
     ir_version,
 )
 from cpg_contracts.automation.validators.ladder import run_static_ladder
@@ -51,6 +52,44 @@ def test_golden_template_passes_every_static_rung_and_defers_only_max_duration()
     assert result.rungs_passed == ["L0", "L1", "L2", "L3", "L4", "L5a", "L5b"]
     assert result.deferred == ir.process.acp.invariants
     assert result.errors() == []
+
+
+def test_authored_string_parameter_requires_nonempty_default() -> None:
+    ir = fixture_ir()
+    ir.process.acp.parameters.append(Parameter(
+        name="authored_instructions",
+        type="string",
+        required=True,
+        source=SourceRef(kind="authored"),
+    ))
+
+    result = run_static_ladder(ir, catalog=load_catalog(), stage="template")
+
+    finding = next(
+        item for item in result.findings
+        if item.code == "parameter-authored-default"
+    )
+    assert finding.rung == "L0"
+    assert finding.element_id == "authored_instructions"
+    assert finding.message == (
+        "authored text parameter 'authored_instructions' requires a non-empty string default"
+    )
+
+
+def test_authored_string_parameter_with_nonempty_default_passes_l0() -> None:
+    ir = fixture_ir()
+    ir.process.acp.parameters.append(Parameter(
+        name="authored_instructions",
+        type="string",
+        required=True,
+        default="Take two readings each morning and evening.",
+        source=SourceRef(kind="authored"),
+    ))
+
+    result = run_static_ladder(ir, catalog=load_catalog(), stage="template")
+
+    assert result.rungs_passed[0] == "L0"
+    assert not any(item.code == "parameter-authored-default" for item in result.findings)
 
 
 def test_enum_constrained_string_parameter_has_enum_expression_type() -> None:

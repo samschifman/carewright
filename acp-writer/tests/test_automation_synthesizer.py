@@ -476,11 +476,29 @@ def test_business_rule_instance_uses_validation_service_xml_with_registered_name
     data["ir"] = source_ir.model_dump(mode="python")
     data["summary"]["version"] = ir_version(source_ir)
     data["summary"]["linked_decision_model_ids"] = ["monitoring-plan"]
+    data["dmn_namespaces"] = {"monitoring-plan": registered_namespace}
     template = AutomationTemplate.model_validate(data)
 
+    instance = _instance_from_template(template, "namespace-l1-instance")
+    ladder_with_namespace = run_static_ladder(
+        instance,
+        catalog=load_catalog(),
+        stage="instance",
+        templates=[template.ir],
+        context=InstanceContext(),
+        dmn_namespaces=template.dmn_namespaces,
+    )
+    assert "L1" in ladder_with_namespace.rungs_passed
+    assert not any(
+        item.rung == "L1" and item.severity == "ERROR"
+        for item in ladder_with_namespace.findings
+    )
+
     validation_results = []
+    validation_payloads = []
 
     def validate_with_registered_namespace(payload):
+        validation_payloads.append(payload)
         result = api._automation_validation_result(payload)
         validation_results.append(result)
         return result
@@ -492,6 +510,7 @@ def test_business_rule_instance_uses_validation_service_xml_with_registered_name
     )[0]
 
     assert automation.bpmn_xml == validation_results[0]["bpmn_xml"]
+    assert validation_payloads[0]["dmn_namespaces"] == template.dmn_namespaces
     xml_root = ET.fromstring(automation.bpmn_xml)
     bpmn_ns = "{http://www.omg.org/spec/BPMN/20100524/MODEL}"
     rule_task = xml_root.find(f".//{bpmn_ns}businessRuleTask")

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.automation.compiler import compile
-from cpg_contracts.automation.ir import ir_version
+from cpg_contracts.automation.ir import BusinessRuleTask, ir_version
 from cpg_contracts.automation.templates import AutomationTemplate
 from cpg_contracts.automation.validators.ladder import run_static_ladder
 from cpg_contracts.decisions import DecisionModelSummary
@@ -66,8 +66,23 @@ class AutomationRegistry:
                 "source_cpg query parameter must match the template summary",
             )
 
+        linked_model_ids = set(template.summary.linked_decision_model_ids)
+        linked_model_ids.update(
+            element.dmnModel
+            for element in template.ir.process.flowElements
+            if isinstance(element, BusinessRuleTask)
+        )
+        registered_namespaces = dmn_namespaces or {}
+        template = template.model_copy(update={
+            "dmn_namespaces": {
+                model_id: registered_namespaces[model_id]
+                for model_id in sorted(linked_model_ids)
+                if model_id in registered_namespaces
+            }
+        })
+
         try:
-            compiled = compile(template.ir, dmn_namespaces=dmn_namespaces)
+            compiled = compile(template.ir, dmn_namespaces=template.dmn_namespaces)
         except (KeyError, TypeError, ValueError) as exc:
             raise RegistryError(422, "ir-compile-failed", str(exc)) from exc
         if compiled != template.bpmn_xml:
@@ -78,6 +93,7 @@ class AutomationRegistry:
             catalog=load_catalog(),
             stage="template",
             dmn_summaries=dmn_summaries,
+            dmn_namespaces=template.dmn_namespaces,
         )
         if not ladder.ok:
             raise RegistryError(

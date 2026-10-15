@@ -359,12 +359,21 @@ def _automation_validation_result(payload: dict) -> dict:
     except (ParseError, ValueError, TypeError) as exc:
         return {"valid": False, "rungs_passed": [], "findings": [], "errors": [str(exc)]}
 
+    supplied_namespaces = payload.get("dmn_namespaces", {})
+    if not isinstance(supplied_namespaces, dict) or any(
+        not isinstance(model_id, str) or not isinstance(namespace, str)
+        for model_id, namespace in supplied_namespaces.items()
+    ):
+        return {"valid": False, "rungs_passed": [], "findings": [], "errors": [
+            "dmn_namespaces must map model ids to namespace strings"
+        ]}
+    dmn_namespaces = _automation_dmn_namespaces()
+    dmn_namespaces.update(supplied_namespaces)
+
     validation_xml = xml
     if validation_xml is None:
         try:
-            validation_xml = compile_bpmn(
-                process_ir, dmn_namespaces=_automation_dmn_namespaces()
-            )
+            validation_xml = compile_bpmn(process_ir, dmn_namespaces=dmn_namespaces)
         except (KeyError, TypeError, ValueError) as exc:
             return {
                 "valid": False,
@@ -397,6 +406,7 @@ def _automation_validation_result(payload: dict) -> dict:
         templates=templates if stage == "instance" else None,
         context=context,
         dmn_summaries=_automation_dmn_summaries(),
+        dmn_namespaces=dmn_namespaces,
         phi_known_values=payload.get("phi_known_values", ()),
     )
     if not result.ok:

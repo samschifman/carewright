@@ -370,10 +370,17 @@ def _context(bindings: Sequence[ParameterBinding], evidence: Mapping[str, Eviden
     )
 
 
-def _validation_payload(ir: ProcessIR, templates: Sequence[ProcessIR], context: InstanceContext) -> dict[str, Any]:
+def _validation_payload(
+    ir: ProcessIR,
+    templates: Sequence[ProcessIR],
+    context: InstanceContext,
+    *,
+    dmn_namespaces: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
     return {
         "ir": ir.model_dump(mode="json", exclude_none=True),
         "templates": [template.model_dump(mode="json", exclude_none=True) for template in templates],
+        "dmn_namespaces": dict(dmn_namespaces or {}),
         "context": {
             "bindings": [item.model_dump(mode="json", exclude_none=True) for item in context.bindings],
             "evidence": {key: value.model_dump(mode="json", exclude_none=True) for key, value in context.evidence.items()},
@@ -562,19 +569,26 @@ def synthesize_for_activity(
                 initial_bindings=raw_bindings,
             )
             context = _context(candidate_bindings, evidence, brief, activity)
+            dmn_namespaces = _field(template, "dmn_namespaces", {}) or {}
             ladder = run_static_ladder(
                 candidate,
                 catalog=load_catalog(),
                 stage="instance",
                 templates=[template_ir],
                 context=context,
+                dmn_namespaces=dmn_namespaces,
                 phi_known_values=known_values,
             )
             final_findings = [*binding_findings, *ladder.findings]
             rungs = list(ladder.rungs_passed)
             validation_xml = None
             try:
-                engine = validator(_validation_payload(candidate, [template_ir], context))
+                engine = validator(_validation_payload(
+                    candidate,
+                    [template_ir],
+                    context,
+                    dmn_namespaces=dmn_namespaces,
+                ))
                 returned_xml = engine.get("bpmn_xml")
                 if isinstance(returned_xml, str) and returned_xml:
                     validation_xml = returned_xml

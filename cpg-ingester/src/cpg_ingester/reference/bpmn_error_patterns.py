@@ -34,6 +34,10 @@ ERROR_PATTERNS = (
         "source text",
         "Quote a concise, exact source passage that supports this element or parameter value.",
     ),
+    BpmnErrorPattern(
+        "authored text parameter",
+        "Give each authored free-text parameter a non-empty string default containing its authored text; only unstated timings, thresholds, and counts omit defaults.",
+    ),
 )
 
 

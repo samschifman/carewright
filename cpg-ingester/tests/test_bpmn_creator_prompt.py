@@ -63,9 +63,22 @@ def test_prompt_renders_human_feedback_on_first_attempt():
 def test_prompt_declares_required_parameters_for_unspecified_values():
     flat_prompt = " ".join(build_bpmn_ir_creator_system().split())
 
+    assert "free-text parameters carry their authored text as a non-empty string default" in flat_prompt
+    assert "The no-default rule applies to unstated timings, thresholds, and counts only" in flat_prompt
     assert (
         "When the source does not state a timing, threshold, or count, declare a required"
         in flat_prompt
     )
     assert "constraints only when the source states a range" in flat_prompt
     assert "never choose a value" in flat_prompt
+
+
+def test_authored_default_finding_has_a_targeted_repair_hint():
+    from cpg_ingester.reference.bpmn_error_patterns import format_bpmn_error_pattern_hints
+
+    hints = format_bpmn_error_pattern_hints([
+        "authored text parameter 'instructions_text' requires a non-empty string default"
+    ])
+
+    assert "Give each authored free-text parameter a non-empty string default" in hints
+    assert "unstated timings, thresholds, and counts" in hints

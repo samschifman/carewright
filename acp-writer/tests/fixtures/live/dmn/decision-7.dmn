@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="missing-home-readings-outreach"
+             name="Missing Home Readings Outreach"
+             namespace="https://redhat.com/cpg-to-acp/dmn/missing-home-readings-outreach">
+
+  <itemDefinition id="type_outreach_action" name="tOutreachAction">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["Care team contacts patient directly to identify barriers", "Send reminder", "No outreach triggered by these criteria"]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <itemDefinition id="type_medication_follow_up" name="tMedicationFollowUp">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["Review the seven-day home average two to four weeks after medication initiation or change, in addition to laboratory follow-up under Table 2", "Medication-related follow-up not triggered by this criterion"]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <itemDefinition id="type_lifestyle_follow_up" name="tLifestyleFollowUp">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["Review home readings at the follow-up visit scheduled under Table 1", "Lifestyle-only follow-up not triggered by this criterion"]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <inputData id="input_week_without_readings" name="Week without Readings">
+    <variable id="var_week_without_readings" name="Week without Readings" typeRef="boolean"/>
+  </inputData>
+
+  <inputData id="input_reminder_attempts" name="Reminder Attempts on Different Days">
+    <variable id="var_reminder_attempts" name="Reminder Attempts on Different Days" typeRef="number"/>
+  </inputData>
+
+  <inputData id="input_readings_still_absent" name="Readings Still Absent">
+    <variable id="var_readings_still_absent" name="Readings Still Absent" typeRef="boolean"/>
+  </inputData>
+
+  <inputData id="input_medication_start_or_change" name="Starting or Changing Medication">
+    <variable id="var_medication_start_or_change" name="Starting or Changing Medication" typeRef="boolean"/>
+  </inputData>
+
+  <inputData id="input_lifestyle_only" name="Lifestyle Modification Alone">
+    <variable id="var_lifestyle_only" name="Lifestyle Modification Alone" typeRef="boolean"/>
+  </inputData>
+
+  <decision id="decision_outreach" name="Missing Home Readings Outreach">
+    <description>A week without readings triggers a reminder. After three reminder attempts on different days without readings, the care team contacts the patient directly to identify barriers to monitoring. The interval between reminder attempts is not specified.</description>
+    <variable id="var_outreach" name="Missing Home Readings Outreach" typeRef="tOutreachAction"/>
+
+    <informationRequirement id="ir_outreach_week">
+      <requiredInput href="#input_week_without_readings"/>
+    </informationRequirement>
+    <informationRequirement id="ir_outreach_attempts">
+      <requiredInput href="#input_reminder_attempts"/>
+    </informationRequirement>
+    <informationRequirement id="ir_outreach_absence">
+      <requiredInput href="#input_readings_still_absent"/>
+    </informationRequirement>
+
+    <decisionTable id="dt_outreach" hitPolicy="FIRST" preferredOrientation="Rule-as-Row">
+      <input id="col_outreach_week">
+        <inputExpression id="expr_outreach_week" typeRef="boolean">
+          <text><![CDATA[Week without Readings]]></text>
+        </inputExpression>
+      </input>
+      <input id="col_outreach_attempts">
+        <inputExpression id="expr_outreach_attempts" typeRef="number">
+          <text><![CDATA[Reminder Attempts on Different Days]]></text>
+        </inputExpression>
+      </input>
+      <input id="col_outreach_absence">
+        <inputExpression id="expr_outreach_absence" typeRef="boolean">
+          <text><![CDATA[Readings Still Absent]]></text>
+        </inputExpression>
+      </input>
+      <output id="out_outreach" name="Outreach Action" typeRef="tOutreachAction"/>
+
+      <rule id="rule_direct_contact">
+        <description>After at least three reminder attempts on different days with readings still absent, the care team contacts the patient directly to identify barriers to monitoring.</description>
+        <inputEntry id="direct_week"><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry id="direct_attempts"><text><![CDATA[>= 3]]></text></inputEntry>
+        <inputEntry id="direct_absence"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="direct_action"><text><![CDATA["Care team contacts patient directly to identify barriers"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_reminder">
+        <description>Send a reminder when a week has passed without readings and the preceding direct-contact criterion is not met.</description>
+        <inputEntry id="reminder_week"><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry id="reminder_attempts"><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry id="reminder_absence"><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry id="reminder_action"><text><![CDATA["Send reminder"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_no_outreach">
+        <description>No outreach is triggered by these criteria when neither preceding rule applies.</description>
+        <inputEntry id="none_week"><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry id="none_attempts"><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry id="none_absence"><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry id="none_action"><text><![CDATA["No outreach triggered by these criteria"]]></text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+
+  <decision id="decision_medication_follow_up" name="Medication Change Follow-up">
+    <description>For patients starting or changing medication, review the seven-day home average two to four weeks after the change, in addition to laboratory follow-up under Table 2. Laboratory tests and their timing are not specified in the supplied excerpt.</description>
+    <variable id="var_medication_follow_up" name="Medication Change Follow-up" typeRef="tMedicationFollowUp"/>
+
+    <informationRequirement id="ir_medication_follow_up">
+      <requiredInput href="#input_medication_start_or_change"/>
+    </informationRequirement>
+
+    <decisionTable id="dt_medication_follow_up" hitPolicy="FIRST" preferredOrientation="Rule-as-Row">
+      <input id="col_medication_start_or_change">
+        <inputExpression id="expr_medication_start_or_change" typeRef="boolean">
+          <text><![CDATA[Starting or Changing Medication]]></text>
+        </inputExpression>
+      </input>
+      <output id="out_medication_follow_up" name="Medication Follow-up Action" typeRef="tMedicationFollowUp"/>
+
+      <rule id="rule_medication_review">
+        <description>Medication initiation or change requires seven-day home-average review two to four weeks afterward, alongside laboratory follow-up under Table 2.</description>
+        <inputEntry id="medication_review_condition"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="medication_review_action">
+          <text><![CDATA["Review the seven-day home average two to four weeks after medication initiation or change, in addition to laboratory follow-up under Table 2"]]></text>
+        </outputEntry>
+      </rule>
+
+      <rule id="rule_no_medication_review">
+        <description>The medication-initiation-or-change follow-up criterion is not met.</description>
+        <inputEntry id="no_medication_review_condition"><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry id="no_medication_review_action">
+          <text><![CDATA["Medication-related follow-up not triggered by this criterion"]]></text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+
+  <decision id="decision_lifestyle_follow_up" name="Lifestyle Only Follow-up">
+    <description>Patients managed with lifestyle modification alone should have their home readings reviewed at the follow-up visit scheduled under Table 1. The visit schedule is not specified in the supplied excerpt.</description>
+    <variable id="var_lifestyle_follow_up" name="Lifestyle Only Follow-up" typeRef="tLifestyleFollowUp"/>
+
+    <informationRequirement id="ir_lifestyle_follow_up">
+      <requiredInput href="#input_lifestyle_only"/>
+    </informationRequirement>
+
+    <decisionTable id="dt_lifestyle_follow_up" hitPolicy="FIRST" preferredOrientation="Rule-as-Row">
+      <input id="col_lifestyle_only">
+        <inputExpression id="expr_lifestyle_only" typeRef="boolean">
+          <text><![CDATA[Lifestyle Modification Alone]]></text>
+        </inputExpression>
+      </input>
+      <output id="out_lifestyle_follow_up" name="Lifestyle Follow-up Action" typeRef="tLifestyleFollowUp"/>
+
+      <rule id="rule_lifestyle_review">
+        <description>Lifestyle-only management requires home-reading review at the follow-up visit scheduled under Table 1.</description>
+        <inputEntry id="lifestyle_review_condition"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="lifestyle_review_action">
+          <text><![CDATA["Review home readings at the follow-up visit scheduled under Table 1"]]></text>
+        </outputEntry>
+      </rule>
+
+      <rule id="rule_no_lifestyle_review">
+        <description>The lifestyle-modification-alone follow-up criterion is not met.</description>
+        <inputEntry id="no_lifestyle_review_condition"><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry id="no_lifestyle_review_action">
+          <text><![CDATA["Lifestyle-only follow-up not triggered by this criterion"]]></text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

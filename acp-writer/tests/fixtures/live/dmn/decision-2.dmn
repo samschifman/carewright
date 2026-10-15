@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="blood-pressure-confirmation-sufficiency"
+             name="Blood Pressure Confirmation Sufficiency"
+             namespace="https://redhat.com/cpg-to-acp/dmn/blood-pressure-confirmation-sufficiency">
+
+  <itemDefinition id="type_confirmation_sufficiency" name="tConfirmationSufficiency">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["At least two measurement occasions: confirmation measurement requirement satisfied", "Fewer than two measurement occasions: additional measurement occasion required"]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <inputData id="input_distinct_measurement_occasions" name="Distinct Measurement Occasions">
+    <variable id="var_distinct_measurement_occasions"
+              name="Distinct Measurement Occasions"
+              typeRef="number"/>
+  </inputData>
+
+  <decision id="decision_confirmation_sufficiency" name="Blood Pressure Confirmation Sufficiency">
+    <description>Determines whether the requirement for at least two measurements on separate occasions has been satisfied. The source does not define the interval between occasions or provide coded observations for automatic temporal extraction.</description>
+    <variable id="var_confirmation_sufficiency"
+              name="Blood Pressure Confirmation Sufficiency"
+              typeRef="tConfirmationSufficiency"/>
+    <informationRequirement id="ir_distinct_measurement_occasions">
+      <requiredInput href="#input_distinct_measurement_occasions"/>
+    </informationRequirement>
+
+    <decisionTable id="dt_confirmation_sufficiency" hitPolicy="UNIQUE" preferredOrientation="Rule-as-Row">
+      <input id="column_distinct_measurement_occasions">
+        <inputExpression id="expr_distinct_measurement_occasions" typeRef="number">
+          <text><![CDATA[Distinct Measurement Occasions]]></text>
+        </inputExpression>
+      </input>
+      <output id="output_confirmation_requirement"
+              name="Confirmation Requirement"
+              typeRef="tConfirmationSufficiency">
+        <outputValues>
+          <text><![CDATA["At least two measurement occasions: confirmation measurement requirement satisfied", "Fewer than two measurement occasions: additional measurement occasion required"]]></text>
+        </outputValues>
+      </output>
+
+      <rule id="rule_requirement_satisfied">
+        <description>Blood pressure measurements obtained on at least two separate occasions satisfy the confirmation measurement requirement.</description>
+        <inputEntry id="test_at_least_two">
+          <text><![CDATA[>= 2]]></text>
+        </inputEntry>
+        <outputEntry id="result_requirement_satisfied">
+          <text><![CDATA["At least two measurement occasions: confirmation measurement requirement satisfied"]]></text>
+        </outputEntry>
+      </rule>
+
+      <rule id="rule_additional_occasion_required">
+        <description>Fewer than two separate measurement occasions do not satisfy the requirement for confirmation on at least two occasions.</description>
+        <inputEntry id="test_fewer_than_two">
+          <text><![CDATA[< 2]]></text>
+        </inputEntry>
+        <outputEntry id="result_additional_occasion_required">
+          <text><![CDATA["Fewer than two measurement occasions: additional measurement occasion required"]]></text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

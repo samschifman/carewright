@@ -299,6 +299,10 @@ paths:
                 dmn_namespaces:
                   type: object
                   additionalProperties: { type: string }
+                dmn_summaries:
+                  type: object
+                  additionalProperties:
+                    $ref: "#/components/schemas/DecisionModelSummary"
       responses:
         "200":
           description: Ladder and Kogito validation result
@@ -753,6 +757,11 @@ components:
           type: object
           description: DMN model namespaces captured from the decision registry for linked models.
           additionalProperties: { type: string }
+        dmn_summaries:
+          type: object
+          description: Decision model summaries captured from the registry for linked models.
+          additionalProperties:
+            $ref: "#/components/schemas/DecisionModelSummary"
 
     DecisionVariable:
       type: object

@@ -1,0 +1,29 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "entry": [
+    {
+      "fullUrl": "Patient/synthetic-live-001",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "synthetic-live-001",
+        "gender": "unknown",
+        "name": [{"text": "Synthetic Replay Patient"}]
+      }
+    },
+    {
+      "fullUrl": "Condition/synthetic-hypertension",
+      "resource": {
+        "resourceType": "Condition",
+        "id": "synthetic-hypertension",
+        "clinicalStatus": {
+          "coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active"}]
+        },
+        "code": {
+          "coding": [{"system": "http://snomed.info/sct", "code": "38341003", "display": "Hypertension"}]
+        },
+        "subject": {"reference": "Patient/synthetic-live-001"}
+      }
+    }
+  ]
+}

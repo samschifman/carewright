@@ -62,6 +62,40 @@ def _instance_parameter_name(process: Process, source_name: str) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def _matching_enum_outputs(parameter: Parameter, dmn_audit_trail: Sequence[Any]) -> list[dict[str, Any]]:
+    """Find DMN string outputs that state one declared CPG enum value verbatim."""
+    if (
+        parameter.source is None
+        or parameter.source.kind != "cpg"
+        or parameter.constraints is None
+        or not parameter.constraints.enum
+    ):
+        return []
+
+    matches: list[dict[str, Any]] = []
+    for audit in dmn_audit_trail:
+        outputs = _field(audit, "outputs", {}) or {}
+        if not isinstance(outputs, Mapping):
+            continue
+        for output_name, output_value in outputs.items():
+            if not isinstance(output_value, str):
+                continue
+            value = output_value.strip()
+            for enum_value in parameter.constraints.enum:
+                folded_value = value.casefold()
+                folded_enum = enum_value.casefold()
+                if folded_value.startswith(folded_enum):
+                    suffix = folded_value[len(folded_enum):]
+                    if not suffix or suffix[0].isspace() or suffix[0] in ":;—-":
+                        matches.append({
+                            "enum_value": enum_value,
+                            "audit": audit,
+                            "output_name": str(output_name),
+                            "output_value": output_value,
+                        })
+    return matches
+
+
 def _duration_from_period(value: Any, *, as_of: str | None = None) -> str | None:
     """Read a period as an ISO duration or derive whole days from FHIR Period."""
     if isinstance(value, str):
@@ -200,6 +234,40 @@ def bind_instance(
             ))
             continue
         bindings[binding.name] = binding
+
+    # Some DMN outputs include an enum label followed by explanatory detail.
+    # Bind the CPG-declared enum only when that label is an unambiguous prefix;
+    # do not ask an LLM to copy a value the executed decision already supplies.
+    dmn_audit_trail = _field(brief, "dmn_audit_trail", []) or []
+    for parameter in process.acp.parameters:
+        if parameter.name in bindings:
+            continue
+        matches = _matching_enum_outputs(parameter, dmn_audit_trail)
+        enum_values = {item["enum_value"] for item in matches}
+        if len(enum_values) != 1:
+            continue
+        selected = next(item for item in matches if item["enum_value"] in enum_values)
+        audit = selected["audit"]
+        model_id = _field(audit, "model_id", "unknown")
+        audit_id = _field(audit, "id")
+        bindings[parameter.name] = ParameterBinding(
+            name=parameter.name,
+            value=selected["enum_value"],
+            source="plan-derived",
+            note=(
+                f"Matched DMN output {model_id}.{selected['output_name']} "
+                "to the parameter's declared enum value."
+            ),
+        )
+        evidence[f"ev-dmn-enum-{parameter.name}"] = Evidence(
+            kind="dmn-output",
+            payload={
+                **({"audit_id": audit_id} if audit_id else {}),
+                "model_id": model_id,
+                "output_name": selected["output_name"],
+                "output_value": selected["output_value"],
+            },
+        )
 
     for binding in _prior_clinician_bindings(activity, brief):
         if binding.name in {parameter.name for parameter in process.acp.parameters}:

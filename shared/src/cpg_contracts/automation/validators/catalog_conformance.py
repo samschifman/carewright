@@ -403,10 +403,11 @@ def validate_catalog(
     dmn_summaries: dict[str, DecisionModelSummary] | None = None,
 ) -> list[Finding]:
     """Check IR task bindings against a capability catalog and known DMNs."""
-    dmn_summaries = {
-        model_id: normalize_decision_model_summary(summary)
-        for model_id, summary in (dmn_summaries or {}).items()
-    }
+    if dmn_summaries is not None:
+        dmn_summaries = {
+            model_id: normalize_decision_model_summary(summary)
+            for model_id, summary in dmn_summaries.items()
+        }
     process = ir.process
     properties = {prop.name: prop for prop in process.properties}
     parameters = {param.name: param for param in process.acp.parameters}

@@ -376,11 +376,20 @@ def _validation_payload(
     context: InstanceContext,
     *,
     dmn_namespaces: Mapping[str, str] | None = None,
+    dmn_summaries: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "ir": ir.model_dump(mode="json", exclude_none=True),
         "templates": [template.model_dump(mode="json", exclude_none=True) for template in templates],
         "dmn_namespaces": dict(dmn_namespaces or {}),
+        "dmn_summaries": {
+            model_id: (
+                summary.model_dump(mode="json", exclude_none=True)
+                if hasattr(summary, "model_dump")
+                else summary
+            )
+            for model_id, summary in (dmn_summaries or {}).items()
+        },
         "context": {
             "bindings": [item.model_dump(mode="json", exclude_none=True) for item in context.bindings],
             "evidence": {key: value.model_dump(mode="json", exclude_none=True) for key, value in context.evidence.items()},
@@ -570,6 +579,7 @@ def synthesize_for_activity(
             )
             context = _context(candidate_bindings, evidence, brief, activity)
             dmn_namespaces = _field(template, "dmn_namespaces", {}) or {}
+            dmn_summaries = _field(template, "dmn_summaries", {}) or {}
             ladder = run_static_ladder(
                 candidate,
                 catalog=load_catalog(),
@@ -577,6 +587,7 @@ def synthesize_for_activity(
                 templates=[template_ir],
                 context=context,
                 dmn_namespaces=dmn_namespaces,
+                dmn_summaries=dmn_summaries,
                 phi_known_values=known_values,
             )
             final_findings = [*binding_findings, *ladder.findings]
@@ -588,6 +599,7 @@ def synthesize_for_activity(
                     [template_ir],
                     context,
                     dmn_namespaces=dmn_namespaces,
+                    dmn_summaries=dmn_summaries,
                 ))
                 returned_xml = engine.get("bpmn_xml")
                 if isinstance(returned_xml, str) and returned_xml:

@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="severely-elevated-home-reading-response"
+             name="Severely Elevated Home Reading Response"
+             namespace="https://redhat.com/cpg-to-acp/dmn/severely-elevated-home-reading-response">
+
+  <itemDefinition id="type_reading_response" name="tReadingResponse">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["Repeat the measurement after five minutes", "Persistent elevation on repeat: patient contacts clinic the same day", "No further action specified by this rule when the repeat does not remain above the threshold", "Human interpretation required", "Not applicable: initial reading does not exceed either severe-reading threshold", "Insufficient measurement data to apply this rule"]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <inputData id="input_initial_systolic" name="Initial Home Systolic BP">
+    <variable id="var_initial_systolic" name="Initial Home Systolic BP" typeRef="number"/>
+  </inputData>
+  <inputData id="input_initial_diastolic" name="Initial Home Diastolic BP">
+    <variable id="var_initial_diastolic" name="Initial Home Diastolic BP" typeRef="number"/>
+  </inputData>
+  <inputData id="input_repeat_available" name="Repeat Reading Available">
+    <variable id="var_repeat_available" name="Repeat Reading Available" typeRef="boolean"/>
+  </inputData>
+  <inputData id="input_repeat_systolic" name="Repeat Home Systolic BP">
+    <variable id="var_repeat_systolic" name="Repeat Home Systolic BP" typeRef="number"/>
+  </inputData>
+  <inputData id="input_repeat_diastolic" name="Repeat Home Diastolic BP">
+    <variable id="var_repeat_diastolic" name="Repeat Home Diastolic BP" typeRef="number"/>
+  </inputData>
+
+  <decision id="decision_reading_response" name="Severely Elevated Home Reading Response">
+    <description>The CPG requires repetition after five minutes of a single home reading above 180/120 mmHg and same-day clinic contact if the repeat remains above that threshold. It does not specify whether either component or both components must exceed their respective thresholds. This table implements results shared by both interpretations, using strict comparisons above 180 mmHg systolic and 120 mmHg diastolic. Cases whose classification depends on the unresolved connective return Human interpretation required; this identifies source ambiguity rather than a patient disposition. An initial reading with neither component above its threshold is outside this severe-reading rule, not an instruction to discontinue other monitoring. Missing measurement data are reported separately. The CPG supplies no emergency disposition algorithm.</description>
+    <variable id="var_reading_response" name="Severely Elevated Home Reading Response" typeRef="tReadingResponse"/>
+
+    <informationRequirement id="ir_initial_systolic">
+      <requiredInput href="#input_initial_systolic"/>
+    </informationRequirement>
+    <informationRequirement id="ir_initial_diastolic">
+      <requiredInput href="#input_initial_diastolic"/>
+    </informationRequirement>
+    <informationRequirement id="ir_repeat_available">
+      <requiredInput href="#input_repeat_available"/>
+    </informationRequirement>
+    <informationRequirement id="ir_repeat_systolic">
+      <requiredInput href="#input_repeat_systolic"/>
+    </informationRequirement>
+    <informationRequirement id="ir_repeat_diastolic">
+      <requiredInput href="#input_repeat_diastolic"/>
+    </informationRequirement>
+
+    <decisionTable id="dt_reading_response" hitPolicy="FIRST" preferredOrientation="Rule-as-Row">
+      <input id="column_initial_systolic">
+        <inputExpression id="expression_initial_systolic" typeRef="number">
+          <text><![CDATA[Initial Home Systolic BP]]></text>
+        </inputExpression>
+      </input>
+      <input id="column_initial_diastolic">
+        <inputExpression id="expression_initial_diastolic" typeRef="number">
+          <text><![CDATA[Initial Home Diastolic BP]]></text>
+        </inputExpression>
+      </input>
+      <input id="column_repeat_available">
+        <inputExpression id="expression_repeat_available" typeRef="boolean">
+          <text><![CDATA[Repeat Reading Available]]></text>
+        </inputExpression>
+      </input>
+      <input id="column_repeat_systolic">
+        <inputExpression id="expression_repeat_systolic" typeRef="number">
+          <text><![CDATA[Repeat Home Systolic BP]]></text>
+        </inputExpression>
+      </input>
+      <input id="column_repeat_diastolic">
+        <inputExpression id="expression_repeat_diastolic" typeRef="number">
+          <text><![CDATA[Repeat Home Diastolic BP]]></text>
+        </inputExpression>
+      </input>
+
+      <output id="column_response" name="Response" typeRef="tReadingResponse"/>
+
+      <rule id="rule_initial_neither_above">
+        <description>Neither initial component is above its threshold; the initial reading does not qualify for this severe-reading rule under either interpretation.</description>
+        <inputEntry><text><![CDATA[<= 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[<= 120]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry><text><![CDATA["Not applicable: initial reading does not exceed either severe-reading threshold"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_unambiguous_repeat_required">
+        <description>Both initial components exceed their thresholds and no five-minute repeat is available; the repeat instruction applies under either interpretation.</description>
+        <inputEntry><text><![CDATA[> 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 120]]></text></inputEntry>
+        <inputEntry><text><![CDATA[false]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry><text><![CDATA["Repeat the measurement after five minutes"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_unambiguous_persistence">
+        <description>Both components exceed their thresholds on the initial and five-minute repeat readings; same-day clinic contact applies under either interpretation.</description>
+        <inputEntry><text><![CDATA[> 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 120]]></text></inputEntry>
+        <inputEntry><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 120]]></text></inputEntry>
+        <outputEntry><text><![CDATA["Persistent elevation on repeat: patient contacts clinic the same day"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_unambiguous_repeat_not_above">
+        <description>Both initial components exceed their thresholds and neither repeat component exceeds its threshold; the repeat does not remain above the paired threshold under either interpretation.</description>
+        <inputEntry><text><![CDATA[> 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 120]]></text></inputEntry>
+        <inputEntry><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry><text><![CDATA[<= 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[<= 120]]></text></inputEntry>
+        <outputEntry><text><![CDATA["No further action specified by this rule when the repeat does not remain above the threshold"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_ambiguous_residual_systolic">
+        <description>Only the repeat systolic component remains above its threshold. Whether this constitutes persistent paired-threshold elevation depends on the connective not specified by the CPG.</description>
+        <inputEntry><text><![CDATA[> 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 120]]></text></inputEntry>
+        <inputEntry><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[<= 120]]></text></inputEntry>
+        <outputEntry><text><![CDATA["Human interpretation required"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_ambiguous_residual_diastolic">
+        <description>Only the repeat diastolic component remains above its threshold. Whether this constitutes persistent paired-threshold elevation depends on the connective not specified by the CPG.</description>
+        <inputEntry><text><![CDATA[> 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 120]]></text></inputEntry>
+        <inputEntry><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry><text><![CDATA[<= 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 120]]></text></inputEntry>
+        <outputEntry><text><![CDATA["Human interpretation required"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_ambiguous_initial_systolic">
+        <description>Only the initial systolic component exceeds its threshold. The CPG does not specify whether this initiates the severe-reading pathway.</description>
+        <inputEntry><text><![CDATA[> 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[<= 120]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry><text><![CDATA["Human interpretation required"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_ambiguous_initial_diastolic">
+        <description>Only the initial diastolic component exceeds its threshold. The CPG does not specify whether this initiates the severe-reading pathway.</description>
+        <inputEntry><text><![CDATA[<= 180]]></text></inputEntry>
+        <inputEntry><text><![CDATA[> 120]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry><text><![CDATA["Human interpretation required"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_insufficient_measurement_data">
+        <description>The available data do not establish the initial paired-threshold classification or the five-minute repeat status needed to apply this rule.</description>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry><text><![CDATA["Insufficient measurement data to apply this rule"]]></text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

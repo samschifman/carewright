@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cpg_contracts.automation.ir import Parameter, ProcessIR, Trigger, ir_version
+from cpg_contracts.decisions import DecisionModelSummary
 from cpg_contracts.recommendations import SourceLocation
 
 
@@ -76,6 +77,7 @@ class AutomationTemplate(ContractModel):
     ir: ProcessIR
     bpmn_xml: str = Field(min_length=1)
     dmn_namespaces: dict[str, str] = Field(default_factory=dict)
+    dmn_summaries: dict[str, DecisionModelSummary] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def matches_ir(self) -> AutomationTemplate:

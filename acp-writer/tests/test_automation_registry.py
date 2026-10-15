@@ -12,6 +12,7 @@ from acp_writer.services.template_client import TemplateClient
 from cpg_contracts.automation.compiler import compile
 from cpg_contracts.automation.ir import ProcessIR, ir_version
 from cpg_contracts.automation.templates import AutomationTemplate
+from cpg_contracts.decisions import DecisionModelSummary, DecisionVariable
 
 
 GOLDEN = (
@@ -63,21 +64,41 @@ def test_registers_valid_template_and_lists_latest_by_links():
     assert registry.list(dmn_model_id="unlinked") == []
 
 
-def test_registration_captures_linked_dmn_namespaces_and_template_client_exposes_them(monkeypatch):
+def test_registration_captures_linked_dmn_metadata_and_template_client_exposes_it(monkeypatch):
     template = _template()
     template.summary.linked_decision_model_ids = ["monitoring-plan"]
     namespaces = {
         "monitoring-plan": "https://example.test/dmn/monitoring-plan",
         "unlinked-model": "https://example.test/dmn/unlinked",
     }
+    summaries = {
+        "monitoring-plan": DecisionModelSummary(
+            id="monitoring-plan",
+            name="Monitoring Plan",
+            inputs=[DecisionVariable(name="has_kidney_disease", type="boolean")],
+            outputs=[DecisionVariable(name="lab_timing_weeks", type="number")],
+            namespace=namespaces["monitoring-plan"],
+        ),
+        "unlinked-model": DecisionModelSummary(
+            id="unlinked-model",
+            name="Unlinked",
+            inputs=[],
+            outputs=[],
+            namespace=namespaces["unlinked-model"],
+        ),
+    }
     registered = _register(
         AutomationRegistry(),
         template,
         dmn_namespaces=namespaces,
+        dmn_summaries=summaries,
     )
 
     assert registered.template.dmn_namespaces == {
         "monitoring-plan": namespaces["monitoring-plan"]
+    }
+    assert registered.template.dmn_summaries == {
+        "monitoring-plan": summaries["monitoring-plan"]
     }
 
     class Response:
@@ -94,6 +115,7 @@ def test_registration_captures_linked_dmn_namespaces_and_template_client_exposes
     fetched = TemplateClient("http://registry").get(template.summary.id)
 
     assert fetched.dmn_namespaces == registered.template.dmn_namespaces
+    assert fetched.dmn_summaries == registered.template.dmn_summaries
 
 
 def test_ir_xml_mismatch_is_rejected_before_engine_validation():
@@ -194,6 +216,14 @@ def test_api_registers_lists_and_retrieves_template_versions(monkeypatch):
         "dmn_namespaces",
         lambda: {"monitoring-plan": "https://example.test/dmn/monitoring-plan"},
     )
+    registered_summary = DecisionModelSummary(
+        id="monitoring-plan",
+        name="Monitoring Plan",
+        inputs=[],
+        outputs=[],
+        namespace="https://example.test/dmn/monitoring-plan",
+    )
+    monkeypatch.setattr(api.app.state, "dmn_summaries", lambda: {"monitoring-plan": registered_summary})
     client = TestClient(api.app)
     template = _template()
     template.summary.linked_decision_model_ids = ["monitoring-plan"]
@@ -216,6 +246,9 @@ def test_api_registers_lists_and_retrieves_template_versions(monkeypatch):
     assert fetched.json()["summary"]["version"] == template.summary.version
     assert fetched.json()["dmn_namespaces"] == {
         "monitoring-plan": "https://example.test/dmn/monitoring-plan"
+    }
+    assert fetched.json()["dmn_summaries"] == {
+        "monitoring-plan": registered_summary.model_dump(mode="json")
     }
 
 

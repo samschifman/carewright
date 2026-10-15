@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="monitoring-plan"
+             name="Monitoring Plan"
+             namespace="https://redhat.com/cpg-to-acp/dmn/monitoring-plan">
+
+  <itemDefinition id="type_treatment_action" name="tTreatmentAction">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["Start medication", "Lifestyle modification only"]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <itemDefinition id="type_monitoring_recommendation" name="tMonitoringRecommendation">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["Basic Metabolic Panel at 2 weeks", "Basic Metabolic Panel at 4 weeks", "No additional routine laboratory monitoring under Table 2"]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <inputData id="input_treatment_action" name="Treatment Action">
+    <variable id="var_treatment_action" name="Treatment Action" typeRef="string"/>
+  </inputData>
+
+  <inputData id="input_has_kidney_disease" name="Has Kidney Disease">
+    <variable id="var_has_kidney_disease" name="Has Kidney Disease" typeRef="boolean"/>
+  </inputData>
+
+  <decision id="decision_monitoring_plan" name="Monitoring Plan">
+    <description>Determines follow-up laboratory monitoring from treatment action and CKD status. Starting medication with CKD requires a BMP at 2 weeks; starting medication without CKD requires a BMP at 4 weeks. Lifestyle modification alone generates no additional routine laboratory order under Table 2, regardless of CKD. This does not cancel baseline testing or standard preventive care.</description>
+    <variable id="var_monitoring_plan" name="Monitoring Plan" typeRef="tMonitoringRecommendation"/>
+
+    <informationRequirement id="ir_treatment_action">
+      <requiredInput href="#input_treatment_action"/>
+    </informationRequirement>
+    <informationRequirement id="ir_has_kidney_disease">
+      <requiredInput href="#input_has_kidney_disease"/>
+    </informationRequirement>
+
+    <decisionTable id="dt_monitoring_plan" hitPolicy="UNIQUE" preferredOrientation="Rule-as-Row">
+      <input id="column_treatment_action" label="Treatment Action">
+        <inputExpression id="expression_treatment_action" typeRef="tTreatmentAction">
+          <text><![CDATA[Treatment Action]]></text>
+        </inputExpression>
+        <inputValues>
+          <text><![CDATA["Start medication", "Lifestyle modification only"]]></text>
+        </inputValues>
+      </input>
+
+      <input id="column_has_kidney_disease" label="Has Kidney Disease">
+        <inputExpression id="expression_has_kidney_disease" typeRef="boolean">
+          <text><![CDATA[Has Kidney Disease]]></text>
+        </inputExpression>
+      </input>
+
+      <output id="output_monitoring_recommendation" name="Monitoring Recommendation" typeRef="tMonitoringRecommendation">
+        <outputValues>
+          <text><![CDATA["Basic Metabolic Panel at 2 weeks", "Basic Metabolic Panel at 4 weeks", "No additional routine laboratory monitoring under Table 2"]]></text>
+        </outputValues>
+      </output>
+
+      <rule id="rule_medication_with_ckd">
+        <description>Starting medication with chronic kidney disease requires a Basic Metabolic Panel at 2 weeks.</description>
+        <inputEntry id="entry_medication_with_ckd_action">
+          <text><![CDATA["Start medication"]]></text>
+        </inputEntry>
+        <inputEntry id="entry_medication_with_ckd_status">
+          <text><![CDATA[true]]></text>
+        </inputEntry>
+        <outputEntry id="result_medication_with_ckd">
+          <text><![CDATA["Basic Metabolic Panel at 2 weeks"]]></text>
+        </outputEntry>
+      </rule>
+
+      <rule id="rule_medication_without_ckd">
+        <description>Starting medication without chronic kidney disease requires a Basic Metabolic Panel at 4 weeks.</description>
+        <inputEntry id="entry_medication_without_ckd_action">
+          <text><![CDATA["Start medication"]]></text>
+        </inputEntry>
+        <inputEntry id="entry_medication_without_ckd_status">
+          <text><![CDATA[false]]></text>
+        </inputEntry>
+        <outputEntry id="result_medication_without_ckd">
+          <text><![CDATA["Basic Metabolic Panel at 4 weeks"]]></text>
+        </outputEntry>
+      </rule>
+
+      <rule id="rule_lifestyle_only">
+        <description>Lifestyle modification alone generates no additional routine laboratory order under Table 2, regardless of chronic kidney disease. Baseline testing and standard preventive care are not canceled.</description>
+        <inputEntry id="entry_lifestyle_only_action">
+          <text><![CDATA["Lifestyle modification only"]]></text>
+        </inputEntry>
+        <inputEntry id="entry_lifestyle_only_status">
+          <text><![CDATA[-]]></text>
+        </inputEntry>
+        <outputEntry id="result_lifestyle_only">
+          <text><![CDATA["No additional routine laboratory monitoring under Table 2"]]></text>
+        </outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

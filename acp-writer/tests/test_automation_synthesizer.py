@@ -26,6 +26,7 @@ from cpg_contracts.automation.validators.results import Finding, LadderResult
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.decisions import DecisionVariable
 from acp_writer import api
+from acp_writer.services import decision_engine
 from acp_writer.nodes.automation_synthesizer import (
     _instance_from_template,
     _validation_payload,
@@ -526,6 +527,79 @@ def test_business_rule_instance_uses_validation_service_xml_with_registered_name
         if item.findtext(f"{bpmn_ns}targetRef") == namespace_input_id
     )
     assert namespace_literal == registered_namespace
+
+
+def test_business_rule_instance_uses_template_dmn_summary_with_empty_registry(monkeypatch):
+    """E36: an instance's pinned snapshot carries the summary needed by L4."""
+    live = Path(__file__).parent / "fixtures/live"
+    template = AutomationTemplate.model_validate_json(
+        (live / "templates/treatment-linked-bmp-scheduling.template.json").read_text()
+    )
+    summary = api._parse_dmn_metadata(
+        (live / "dmn/decision-4.dmn").read_text()
+    )
+    template = template.model_copy(update={
+        "dmn_namespaces": {"monitoring-plan": summary.namespace},
+        "dmn_summaries": {"monitoring-plan": summary},
+    })
+    instance = _instance_from_template(template, "e36_monitoring_instance")
+    monkeypatch.setattr(api, "_dynamic_models", {})
+    monkeypatch.setattr(api, "validate_bpmn", lambda _xml: {"valid": True, "messages": []})
+
+    result = api._automation_validation_result({
+        "ir": instance.model_dump(mode="json", exclude_none=True),
+        "templates": [template.ir.model_dump(mode="json", exclude_none=True)],
+        "dmn_namespaces": template.dmn_namespaces,
+        "dmn_summaries": {
+            model_id: model_summary.model_dump(mode="json", exclude_none=True)
+            for model_id, model_summary in template.dmn_summaries.items()
+        },
+        "context": {"bindings": [], "evidence": {}, "dmn_audit_trail": []},
+    })
+
+    assert "L4" in result["rungs_passed"]
+    assert not any(
+        finding.get("rung") == "L4" and finding.get("severity") == "ERROR"
+        for finding in result.get("findings", [])
+    )
+
+
+def test_supplied_dmn_summary_overrides_registry_summary(monkeypatch):
+    live = Path(__file__).parent / "fixtures/live"
+    template = AutomationTemplate.model_validate_json(
+        (live / "templates/treatment-linked-bmp-scheduling.template.json").read_text()
+    )
+    summary = api._parse_dmn_metadata((live / "dmn/decision-4.dmn").read_text())
+    stale_summary = summary.model_copy(update={"inputs": []})
+    template = template.model_copy(update={
+        "dmn_namespaces": {"monitoring-plan": summary.namespace},
+        "dmn_summaries": {"monitoring-plan": summary},
+    })
+    instance = _instance_from_template(template, "e36_summary_override")
+    monkeypatch.setattr(api, "_dynamic_models", {
+        "monitoring-plan": {"summary": stale_summary, "dmn_xml": ""},
+    })
+    monkeypatch.setattr(api, "validate_bpmn", lambda _xml: {"valid": True, "messages": []})
+
+    payload = {
+        "ir": instance.model_dump(mode="json", exclude_none=True),
+        "templates": [template.ir.model_dump(mode="json", exclude_none=True)],
+        "dmn_namespaces": template.dmn_namespaces,
+        "dmn_summaries": {
+            model_id: model_summary.model_dump(mode="json", exclude_none=True)
+            for model_id, model_summary in template.dmn_summaries.items()
+        },
+        "context": {"bindings": [], "evidence": {}, "dmn_audit_trail": []},
+    }
+    response = TestClient(decision_engine.app).post("/api/v1/automation/validate", json=payload)
+    assert response.status_code == 200
+    result = response.json()
+
+    assert "L4" in result["rungs_passed"]
+    assert not any(
+        finding.get("code") == "dmn-input" and finding.get("severity") == "ERROR"
+        for finding in result.get("findings", [])
+    )
 
 
 def test_remote_validation_payload_excludes_patient_activity_and_phi_values():

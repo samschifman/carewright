@@ -725,5 +725,112 @@
   "dmn_namespaces": {
     "monitoring-plan": "https://redhat.com/cpg-to-acp/dmn/monitoring-plan",
     "treatment-recommendation": "https://redhat.com/cpg-to-acp/dmn/treatment-recommendation"
+  },
+  "dmn_summaries": {
+    "monitoring-plan": {
+      "id": "monitoring-plan",
+      "name": "Monitoring Plan",
+      "inputs": [
+        {
+          "name": "Treatment Action",
+          "type": "string",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        },
+        {
+          "name": "Has Kidney Disease",
+          "type": "boolean",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Lab Order",
+          "type": "string",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        },
+        {
+          "name": "Lab Timing Weeks",
+          "type": "number",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        }
+      ],
+      "deployed_at": null,
+      "source_cpg": null,
+      "category": null,
+      "modifies": null,
+      "source_location": null,
+      "namespace": "https://redhat.com/cpg-to-acp/dmn/monitoring-plan"
+    },
+    "treatment-recommendation": {
+      "id": "treatment-recommendation",
+      "name": "Treatment Recommendation",
+      "inputs": [
+        {
+          "name": "Systolic BP",
+          "type": "number",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        },
+        {
+          "name": "Has Diabetes",
+          "type": "boolean",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        },
+        {
+          "name": "Has Kidney Disease",
+          "type": "boolean",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Action",
+          "type": "string",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        },
+        {
+          "name": "Medication",
+          "type": "string",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        },
+        {
+          "name": "Dose",
+          "type": "string",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        },
+        {
+          "name": "Follow Up Weeks",
+          "type": "number",
+          "description": null,
+          "codes": null,
+          "extraction": null
+        }
+      ],
+      "deployed_at": null,
+      "source_cpg": null,
+      "category": null,
+      "modifies": null,
+      "source_location": null,
+      "namespace": "https://redhat.com/cpg-to-acp/dmn/treatment-recommendation"
+    }
   }
 }

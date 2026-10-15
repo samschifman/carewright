@@ -159,6 +159,53 @@ def test_prior_clinician_parameter_binding_is_preserved():
     assert next(binding for binding in bindings if binding.name == "reporting_interval") == prior
 
 
+def test_cpg_enum_parameter_binds_from_unambiguous_dmn_output():
+    template, instance = _template_and_instance()
+    parameter = Parameter(
+        name="treatment_action",
+        type="string",
+        required=True,
+        source=SourceRef(kind="cpg", source_text="Start medication or lifestyle modification only."),
+        constraints={"enum": ["Start medication", "Lifestyle modification only"]},
+    )
+    template.process.acp.parameters.append(parameter)
+    instance.process.acp.parameters.append(parameter.model_copy(deep=True))
+    version = ir_version(template)
+    instance.process.acp.template_refs = [TemplateRef(
+        template_id=template.process.id,
+        version=version,
+    )]
+    for element in instance.process.flowElements:
+        element.acp.template_ref.version = version
+
+    _, bindings, evidence, findings = bind_instance(
+        instance,
+        [template],
+        activity={"id": "activity-1"},
+        brief={"dmn_audit_trail": [{
+            "id": "audit-treatment",
+            "model_id": "treatment-recommendation",
+            "outputs": {
+                "Treatment Recommendation": (
+                    "Start medication: selected treatment with follow-up details"
+                ),
+            },
+        }]},
+        policy={"environment_default": "P90D"},
+    )
+
+    treatment_binding = next(binding for binding in bindings if binding.name == "treatment_action")
+    assert treatment_binding.value == "Start medication"
+    assert treatment_binding.source == "plan-derived"
+    assert evidence["ev-dmn-enum-treatment_action"].payload == {
+        "audit_id": "audit-treatment",
+        "model_id": "treatment-recommendation",
+        "output_name": "Treatment Recommendation",
+        "output_value": "Start medication: selected treatment with follow-up details",
+    }
+    assert not [finding for finding in findings if finding.element_id == "treatment_action"]
+
+
 def test_known_phi_values_collect_names_identifiers_and_birth_date():
     assert known_phi_values({
         "name": "Ada Patient",

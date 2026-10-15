@@ -1,0 +1,544 @@
+{
+  "contract_version": "1.1",
+  "summary": {
+    "id": "treatment-linked-bmp-scheduling",
+    "version": "af560d45485f",
+    "name": "Treatment-Linked BMP Scheduling",
+    "description": "Evaluate the Monitoring Plan using the selected treatment action and kidney disease status. Branch conditions mirror Decision Table 2 without assuming undocumented fields of its composite output. The human review tasks require an authorized reviewer to order and arrange the BMP for the applicable interval after medication initiation; review alone does not complete these tasks. The clinicians group is an authorization binding, not a source-specified ordering or scheduling actor. Lifestyle-only treatment creates no additional routine BMP under Table 2. Baseline testing and standard preventive care remain unaffected.",
+    "source_cpg": "SYN-HTN-2026-002",
+    "section": "3.3 Monitoring Plan; Decision Table 2; Key principles",
+    "source_location": {
+      "page_start": 3,
+      "page_end": 3
+    },
+    "triggers": [
+      {
+        "kind": "recommendation",
+        "recommendation_id": "2dde00bf-a9c8-458e-b64c-11f45d8719af"
+      },
+      {
+        "kind": "recommendation",
+        "recommendation_id": "96ea40c4-d53a-4a8c-9818-6189f25cf5e5"
+      },
+      {
+        "kind": "recommendation",
+        "recommendation_id": "da2adb48-858f-4778-b540-5ab5f70932ad"
+      }
+    ],
+    "linked_recommendation_ids": [
+      "2dde00bf-a9c8-458e-b64c-11f45d8719af",
+      "96ea40c4-d53a-4a8c-9818-6189f25cf5e5",
+      "da2adb48-858f-4778-b540-5ab5f70932ad"
+    ],
+    "linked_decision_model_ids": [
+      "monitoring-plan",
+      "treatment-recommendation"
+    ],
+    "parameters": [
+      {
+        "name": "treatment_action",
+        "type": "string",
+        "constraints": {
+          "enum": [
+            "Start medication",
+            "Lifestyle modification only"
+          ],
+          "source": {
+            "kind": "cpg",
+            "source_text": "| Start medication            | Yes                  | Basic Metabolic Panel | 2                    |\n| Start medication            | No                   | Basic Metabolic Panel | 4                    |\n| Lifestyle modification only | Yes                  | -                     | -                    |\n| Lifestyle modification only | No                   | -                     | -                    |",
+            "source_location": {
+              "page_start": 3,
+              "page_end": 3
+            }
+          }
+        },
+        "required": true,
+        "description": "Selected treatment action supplied to the monitoring decision.",
+        "source": {
+          "kind": "cpg",
+          "source_text": "The following table defines the recommended monitoring actions based on the treatment decision and comorbidity status:",
+          "source_location": {
+            "page_start": 3,
+            "page_end": 3
+          }
+        },
+        "reserved": false
+      },
+      {
+        "name": "has_kidney_disease",
+        "type": "boolean",
+        "required": true,
+        "description": "Kidney disease status supplied to the monitoring decision.",
+        "source": {
+          "kind": "cpg",
+          "source_text": "Patients initiating medication therapy require laboratory monitoring to assess for potential adverse effects, particularly in patients with pre-existing kidney disease.",
+          "source_location": {
+            "page_start": 3,
+            "page_end": 3
+          }
+        },
+        "reserved": false
+      },
+      {
+        "name": "max_duration",
+        "type": "duration",
+        "required": true,
+        "description": "Maximum duration of this automation, distinct from laboratory timing after medication initiation.",
+        "reserved": true
+      }
+    ],
+    "capabilities_used": [],
+    "catalog_version": "1.0",
+    "ir_version": "1.0",
+    "pattern_family": "other",
+    "automatability": {
+      "tier": "A",
+      "rationale": "The source describes a repeatable operational sequence with explicit timing or trigger: Medication initiation anchors laboratory timing, CKD: 2 weeks, No CKD: 4 weeks."
+    },
+    "validation": {
+      "status": "valid",
+      "rungs_passed": [
+        "L0",
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5a",
+        "L5b"
+      ],
+      "deferred_invariants": [],
+      "kogito_checked": false,
+      "warnings": [],
+      "errors": []
+    },
+    "artifact_id": "SYN-HTN-2026-002-bpmn-7633ca"
+  },
+  "ir": {
+    "ir_version": "1.0",
+    "process": {
+      "id": "treatment-linked-bmp-scheduling",
+      "name": "Treatment-Linked BMP Scheduling",
+      "description": "Evaluate the Monitoring Plan using the selected treatment action and kidney disease status. Branch conditions mirror Decision Table 2 without assuming undocumented fields of its composite output. The human review tasks require an authorized reviewer to order and arrange the BMP for the applicable interval after medication initiation; review alone does not complete these tasks. The clinicians group is an authorization binding, not a source-specified ordering or scheduling actor. Lifestyle-only treatment creates no additional routine BMP under Table 2. Baseline testing and standard preventive care remain unaffected.",
+      "isExecutable": true,
+      "kind": "template",
+      "properties": [],
+      "flowElements": [
+        {
+          "id": "start",
+          "name": "Treatment decision available",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "start-event",
+              "supports": [
+                "obtain_monitoring_plan"
+              ]
+            },
+            "structural_constant": false
+          },
+          "type": "startEvent"
+        },
+        {
+          "id": "obtain_monitoring_plan",
+          "name": "Evaluate laboratory monitoring",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "The following table defines the recommended monitoring actions based on the treatment decision and comorbidity status:",
+              "source_location": {
+                "page_start": 3,
+                "page_end": 3
+              }
+            },
+            "structural_constant": false
+          },
+          "type": "businessRuleTask",
+          "dmnModel": "monitoring-plan",
+          "inputs": {
+            "Treatment Action": {
+              "param": "treatment_action"
+            },
+            "Has Kidney Disease": {
+              "param": "has_kidney_disease"
+            }
+          },
+          "outputs": {}
+        },
+        {
+          "id": "select_lab_branch",
+          "name": "Which laboratory plan applies?",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "exclusive-split",
+              "supports": [
+                "obtain_monitoring_plan",
+                "f_two_week_bmp",
+                "f_four_week_bmp",
+                "f_no_additional_bmp"
+              ]
+            },
+            "structural_constant": false
+          },
+          "type": "exclusiveGateway",
+          "gatewayDirection": "Diverging",
+          "default": "f_no_additional_bmp"
+        },
+        {
+          "id": "review_two_week_bmp",
+          "name": "Review, order and arrange BMP for two weeks after initiation",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "| Start medication            | Yes                  | Basic Metabolic Panel | 2                    |",
+              "source_location": {
+                "page_start": 3,
+                "page_end": 3
+              }
+            },
+            "structural_constant": false
+          },
+          "type": "userTask",
+          "groupId": "clinicians",
+          "outputs": {}
+        },
+        {
+          "id": "review_four_week_bmp",
+          "name": "Review, order and arrange BMP for four weeks after initiation",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "| Start medication            | No                   | Basic Metabolic Panel | 4                    |",
+              "source_location": {
+                "page_start": 3,
+                "page_end": 3
+              }
+            },
+            "structural_constant": false
+          },
+          "type": "userTask",
+          "groupId": "clinicians",
+          "outputs": {}
+        },
+        {
+          "id": "end_two_week_arranged",
+          "name": "Two-week BMP ordered and arranged",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "end-event",
+              "supports": [
+                "review_two_week_bmp"
+              ]
+            },
+            "outcome": "two_week_bmp_arranged",
+            "structural_constant": false
+          },
+          "type": "endEvent"
+        },
+        {
+          "id": "end_four_week_arranged",
+          "name": "Four-week BMP ordered and arranged",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "end-event",
+              "supports": [
+                "review_four_week_bmp"
+              ]
+            },
+            "outcome": "four_week_bmp_arranged",
+            "structural_constant": false
+          },
+          "type": "endEvent"
+        },
+        {
+          "id": "end_no_additional_bmp",
+          "name": "No additional routine BMP created",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "end-event",
+              "supports": [
+                "f_no_additional_bmp"
+              ]
+            },
+            "outcome": "no_additional_bmp",
+            "structural_constant": false
+          },
+          "type": "endEvent"
+        },
+        {
+          "id": "period_elapsed",
+          "name": "Maximum process duration elapsed",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "plan-bound",
+              "supports": [
+                "obtain_monitoring_plan",
+                "review_two_week_bmp",
+                "review_four_week_bmp"
+              ]
+            },
+            "structural_constant": false
+          },
+          "type": "boundaryEvent",
+          "attachedToRef": "main",
+          "cancelActivity": true,
+          "timerEventDefinition": {
+            "timeDuration": {
+              "param": "max_duration"
+            }
+          }
+        },
+        {
+          "id": "end_timeout",
+          "name": "Process duration elapsed",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "end-event",
+              "supports": [
+                "period_elapsed"
+              ]
+            },
+            "outcome": "timed_out",
+            "structural_constant": false
+          },
+          "type": "endEvent"
+        },
+        {
+          "id": "f_start_plan",
+          "name": "",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "sequence",
+              "supports": [
+                "start",
+                "obtain_monitoring_plan"
+              ]
+            },
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "start",
+          "targetRef": "obtain_monitoring_plan"
+        },
+        {
+          "id": "f_plan_selection",
+          "name": "",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "sequence",
+              "supports": [
+                "obtain_monitoring_plan",
+                "select_lab_branch"
+              ]
+            },
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "obtain_monitoring_plan",
+          "targetRef": "select_lab_branch"
+        },
+        {
+          "id": "f_two_week_bmp",
+          "name": "Medication with kidney disease",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "| Start medication            | Yes                  | Basic Metabolic Panel | 2                    |",
+              "source_location": {
+                "page_start": 3,
+                "page_end": 3
+              }
+            },
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "select_lab_branch",
+          "targetRef": "review_two_week_bmp",
+          "conditionExpression": "defined(treatment_action) and treatment_action == \"Start medication\" and defined(has_kidney_disease) and has_kidney_disease == true"
+        },
+        {
+          "id": "f_four_week_bmp",
+          "name": "Medication without kidney disease",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "| Start medication            | No                   | Basic Metabolic Panel | 4                    |",
+              "source_location": {
+                "page_start": 3,
+                "page_end": 3
+              }
+            },
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "select_lab_branch",
+          "targetRef": "review_four_week_bmp",
+          "conditionExpression": "defined(treatment_action) and treatment_action == \"Start medication\" and defined(has_kidney_disease) and has_kidney_disease == false"
+        },
+        {
+          "id": "f_no_additional_bmp",
+          "name": "Lifestyle-only treatment",
+          "acp": {
+            "provenance": {
+              "kind": "source",
+              "source_text": "Patients on lifestyle modification alone do not require routine laboratory monitoring beyond standard preventive care.",
+              "source_location": {
+                "page_start": 3,
+                "page_end": 3
+              }
+            },
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "select_lab_branch",
+          "targetRef": "end_no_additional_bmp"
+        },
+        {
+          "id": "f_two_week_end",
+          "name": "",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "sequence",
+              "supports": [
+                "review_two_week_bmp",
+                "end_two_week_arranged"
+              ]
+            },
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "review_two_week_bmp",
+          "targetRef": "end_two_week_arranged"
+        },
+        {
+          "id": "f_four_week_end",
+          "name": "",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "sequence",
+              "supports": [
+                "review_four_week_bmp",
+                "end_four_week_arranged"
+              ]
+            },
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "review_four_week_bmp",
+          "targetRef": "end_four_week_arranged"
+        },
+        {
+          "id": "f_timeout",
+          "name": "",
+          "acp": {
+            "provenance": {
+              "kind": "structural",
+              "derivation_rule": "sequence",
+              "supports": [
+                "period_elapsed",
+                "end_timeout"
+              ]
+            },
+            "structural_constant": false
+          },
+          "type": "sequenceFlow",
+          "sourceRef": "period_elapsed",
+          "targetRef": "end_timeout"
+        }
+      ],
+      "acp": {
+        "triggers": [
+          {
+            "kind": "recommendation",
+            "recommendation_id": "2dde00bf-a9c8-458e-b64c-11f45d8719af"
+          },
+          {
+            "kind": "recommendation",
+            "recommendation_id": "96ea40c4-d53a-4a8c-9818-6189f25cf5e5"
+          },
+          {
+            "kind": "recommendation",
+            "recommendation_id": "da2adb48-858f-4778-b540-5ab5f70932ad"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "treatment_action",
+            "type": "string",
+            "constraints": {
+              "enum": [
+                "Start medication",
+                "Lifestyle modification only"
+              ],
+              "source": {
+                "kind": "cpg",
+                "source_text": "| Start medication            | Yes                  | Basic Metabolic Panel | 2                    |\n| Start medication            | No                   | Basic Metabolic Panel | 4                    |\n| Lifestyle modification only | Yes                  | -                     | -                    |\n| Lifestyle modification only | No                   | -                     | -                    |",
+                "source_location": {
+                  "page_start": 3,
+                  "page_end": 3
+                }
+              }
+            },
+            "required": true,
+            "description": "Selected treatment action supplied to the monitoring decision.",
+            "source": {
+              "kind": "cpg",
+              "source_text": "The following table defines the recommended monitoring actions based on the treatment decision and comorbidity status:",
+              "source_location": {
+                "page_start": 3,
+                "page_end": 3
+              }
+            },
+            "reserved": false
+          },
+          {
+            "name": "has_kidney_disease",
+            "type": "boolean",
+            "required": true,
+            "description": "Kidney disease status supplied to the monitoring decision.",
+            "source": {
+              "kind": "cpg",
+              "source_text": "Patients initiating medication therapy require laboratory monitoring to assess for potential adverse effects, particularly in patients with pre-existing kidney disease.",
+              "source_location": {
+                "page_start": 3,
+                "page_end": 3
+              }
+            },
+            "reserved": false
+          },
+          {
+            "name": "max_duration",
+            "type": "duration",
+            "required": true,
+            "description": "Maximum duration of this automation, distinct from laboratory timing after medication initiation.",
+            "reserved": true
+          }
+        ],
+        "invariants": [],
+        "produces": [],
+        "provenance": {
+          "source_cpg": "SYN-HTN-2026-002",
+          "section": "3.3 Monitoring Plan; Decision Table 2; Key principles",
+          "source_location": {
+            "page_start": 3,
+            "page_end": 3
+          }
+        },
+        "template_refs": [],
+        "unify": [],
+        "pruned": [],
+        "consolidated_boundaries": []
+      }
+    }
+  },
+  "bpmn_xml": "<?xml version='1.0' encoding='UTF-8'?>\n<bpmn2:definitions xmlns:bpmn2=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:drools=\"http://www.jboss.org/drools\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:acp=\"https://github.com/samschifman/cpg-to-acp/bpmn\" id=\"treatment-linked-bmp-scheduling_defs\" targetNamespace=\"https://github.com/samschifman/cpg-to-acp/bpmn/SYN-HTN-2026-002\">\n  <bpmn2:itemDefinition id=\"_strItem\" structureRef=\"String\"/>\n  <bpmn2:itemDefinition id=\"_boolItem\" structureRef=\"Boolean\"/>\n  <bpmn2:process id=\"treatment-linked-bmp-scheduling\" name=\"Treatment-Linked BMP Scheduling\" isExecutable=\"true\" processType=\"Public\" drools:packageName=\"org.carewright.automation\" drools:version=\"af560d45485f\">\n    <bpmn2:extensionElements>\n      <drools:metaData name=\"acp.catalogVersion\">1.0</drools:metaData>\n      <acp:template><![CDATA[{\"catalog_version\":\"1.0\",\"consolidated_boundaries\":[],\"description\":\"Evaluate the Monitoring Plan using the selected treatment action and kidney disease status. Branch conditions mirror Decision Table 2 without assuming undocumented fields of its composite output. The human review tasks require an authorized reviewer to order and arrange the BMP for the applicable interval after medication initiation; review alone does not complete these tasks. The clinicians group is an authorization binding, not a source-specified ordering or scheduling actor. Lifestyle-only treatment creates no additional routine BMP under Table 2. Baseline testing and standard preventive care remain unaffected.\",\"invariants\":[],\"ir_version\":\"1.0\",\"kind\":\"template\",\"parameters\":[{\"constraints\":{\"enum\":[\"Start medication\",\"Lifestyle modification only\"],\"source\":{\"kind\":\"cpg\",\"source_location\":{\"page_end\":3,\"page_start\":3},\"source_text\":\"| Start medication            | Yes                  | Basic Metabolic Panel | 2                    |\\n| Start medication            | No                   | Basic Metabolic Panel | 4                    |\\n| Lifestyle modification only | Yes                  | -                     | -                    |\\n| Lifestyle modification only | No                   | -                     | -                    |\"}},\"description\":\"Selected treatment action supplied to the monitoring decision.\",\"name\":\"treatment_action\",\"required\":true,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_location\":{\"page_end\":3,\"page_start\":3},\"source_text\":\"The following table defines the recommended monitoring actions based on the treatment decision and comorbidity status:\"},\"type\":\"string\"},{\"description\":\"Kidney disease status supplied to the monitoring decision.\",\"name\":\"has_kidney_disease\",\"required\":true,\"reserved\":false,\"source\":{\"kind\":\"cpg\",\"source_location\":{\"page_end\":3,\"page_start\":3},\"source_text\":\"Patients initiating medication therapy require laboratory monitoring to assess for potential adverse effects, particularly in patients with pre-existing kidney disease.\"},\"type\":\"boolean\"},{\"description\":\"Maximum duration of this automation, distinct from laboratory timing after medication initiation.\",\"name\":\"max_duration\",\"required\":true,\"reserved\":true,\"type\":\"duration\"}],\"produces\":[],\"profile\":\"kogito-10.2\",\"provenance\":{\"section\":\"3.3 Monitoring Plan; Decision Table 2; Key principles\",\"source_cpg\":\"SYN-HTN-2026-002\",\"source_location\":{\"page_end\":3,\"page_start\":3}},\"pruned\":[],\"template_id\":\"treatment-linked-bmp-scheduling\",\"template_refs\":[],\"triggers\":[{\"kind\":\"recommendation\",\"recommendation_id\":\"2dde00bf-a9c8-458e-b64c-11f45d8719af\"},{\"kind\":\"recommendation\",\"recommendation_id\":\"96ea40c4-d53a-4a8c-9818-6189f25cf5e5\"},{\"kind\":\"recommendation\",\"recommendation_id\":\"da2adb48-858f-4778-b540-5ab5f70932ad\"}],\"unify\":[],\"version\":\"af560d45485f\"}]]></acp:template>\n    </bpmn2:extensionElements>\n    <bpmn2:property id=\"treatment_action\" itemSubjectRef=\"_strItem\" name=\"treatment_action\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"has_kidney_disease\" itemSubjectRef=\"_boolItem\" name=\"has_kidney_disease\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">boolean</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"max_duration\" itemSubjectRef=\"_strItem\" name=\"max_duration\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">duration</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:property id=\"outcome\" itemSubjectRef=\"_strItem\" name=\"outcome\">\n      <bpmn2:extensionElements>\n        <drools:metaData name=\"acp.type\">string</drools:metaData>\n      </bpmn2:extensionElements>\n    </bpmn2:property>\n    <bpmn2:startEvent id=\"start\" name=\"Treatment decision available\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"start-event\",\"kind\":\"structural\",\"supports\":[\"obtain_monitoring_plan\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:outgoing>f_init</bpmn2:outgoing>\n    </bpmn2:startEvent>\n    <bpmn2:scriptTask id=\"init\" name=\"Initialise\" scriptFormat=\"http://www.java.com/java\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_init</bpmn2:incoming>\n      <bpmn2:outgoing>f_main</bpmn2:outgoing>\n      <bpmn2:script>kcontext.setVariable(\"outcome\", \"\");</bpmn2:script>\n    </bpmn2:scriptTask>\n    <bpmn2:subProcess id=\"main\" name=\"Monitoring\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_main</bpmn2:incoming>\n      <bpmn2:outgoing>f_after</bpmn2:outgoing>\n      <bpmn2:startEvent id=\"main_start\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:outgoing>f_start_plan</bpmn2:outgoing>\n      </bpmn2:startEvent>\n      <bpmn2:scriptTask id=\"end_four_week_arranged_outcome\" name=\"Outcome: four_week_bmp_arranged\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_four_week_end</bpmn2:incoming>\n        <bpmn2:outgoing>end_four_week_arranged_outcome_out</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"outcome\", \"four_week_bmp_arranged\");</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:endEvent id=\"main_end_four_week_arranged\" name=\"Four-week BMP ordered and arranged\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"outcome\":\"four_week_bmp_arranged\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"review_four_week_bmp\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>end_four_week_arranged_outcome_out</bpmn2:incoming>\n      </bpmn2:endEvent>\n      <bpmn2:scriptTask id=\"end_no_additional_bmp_outcome\" name=\"Outcome: no_additional_bmp\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_no_additional_bmp</bpmn2:incoming>\n        <bpmn2:outgoing>end_no_additional_bmp_outcome_out</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"outcome\", \"no_additional_bmp\");</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:endEvent id=\"main_end_no_additional_bmp\" name=\"No additional routine BMP created\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"outcome\":\"no_additional_bmp\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"f_no_additional_bmp\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>end_no_additional_bmp_outcome_out</bpmn2:incoming>\n      </bpmn2:endEvent>\n      <bpmn2:scriptTask id=\"end_two_week_arranged_outcome\" name=\"Outcome: two_week_bmp_arranged\" scriptFormat=\"http://www.java.com/java\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_two_week_end</bpmn2:incoming>\n        <bpmn2:outgoing>end_two_week_arranged_outcome_out</bpmn2:outgoing>\n        <bpmn2:script>kcontext.setVariable(\"outcome\", \"two_week_bmp_arranged\");</bpmn2:script>\n      </bpmn2:scriptTask>\n      <bpmn2:endEvent id=\"main_end_two_week_arranged\" name=\"Two-week BMP ordered and arranged\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"outcome\":\"two_week_bmp_arranged\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"review_two_week_bmp\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>end_two_week_arranged_outcome_out</bpmn2:incoming>\n      </bpmn2:endEvent>\n      <bpmn2:businessRuleTask id=\"obtain_monitoring_plan\" name=\"Evaluate laboratory monitoring\" implementation=\"http://www.jboss.org/drools/dmn\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_location\":{\"page_end\":3,\"page_start\":3},\"source_text\":\"The following table defines the recommended monitoring actions based on the treatment decision and comorbidity status:\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_start_plan</bpmn2:incoming>\n        <bpmn2:outgoing>f_plan_selection</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"obtain_monitoring_plan_namespace\" name=\"namespace\" drools:dtype=\"Object\"/>\n          <bpmn2:dataInput id=\"obtain_monitoring_plan_model\" name=\"model\" drools:dtype=\"Object\"/>\n          <bpmn2:dataInput id=\"obtain_monitoring_plan_Has_Kidney_Disease_input\" name=\"Has Kidney Disease\"/>\n          <bpmn2:dataInput id=\"obtain_monitoring_plan_Treatment_Action_input\" name=\"Treatment Action\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>obtain_monitoring_plan_namespace</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>obtain_monitoring_plan_model</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>obtain_monitoring_plan_Has_Kidney_Disease_input</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>obtain_monitoring_plan_Treatment_Action_input</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>obtain_monitoring_plan_namespace</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">https://redhat.com/cpg-to-acp/dmn/monitoring-plan</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">obtain_monitoring_plan_namespace</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>obtain_monitoring_plan_model</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">monitoring-plan</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">obtain_monitoring_plan_model</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>has_kidney_disease</bpmn2:sourceRef>\n          <bpmn2:targetRef>obtain_monitoring_plan_Has_Kidney_Disease_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:sourceRef>treatment_action</bpmn2:sourceRef>\n          <bpmn2:targetRef>obtain_monitoring_plan_Treatment_Action_input</bpmn2:targetRef>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:businessRuleTask>\n      <bpmn2:userTask id=\"review_four_week_bmp\" name=\"Review, order and arrange BMP for four weeks after initiation\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_location\":{\"page_end\":3,\"page_start\":3},\"source_text\":\"| Start medication            | No                   | Basic Metabolic Panel | 4                    |\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_four_week_bmp</bpmn2:incoming>\n        <bpmn2:outgoing>f_four_week_end</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"review_four_week_bmp_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:dataInput id=\"review_four_week_bmp_Skippable\" name=\"Skippable\" drools:dtype=\"Object\"/>\n          <bpmn2:dataInput id=\"review_four_week_bmp_GroupId\" name=\"GroupId\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>review_four_week_bmp_TaskName</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>review_four_week_bmp_Skippable</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>review_four_week_bmp_GroupId</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>review_four_week_bmp_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">review_four_week_bmp</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">review_four_week_bmp_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>review_four_week_bmp_Skippable</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">false</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">review_four_week_bmp_Skippable</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>review_four_week_bmp_GroupId</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">clinicians</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">review_four_week_bmp_GroupId</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:userTask>\n      <bpmn2:userTask id=\"review_two_week_bmp\" name=\"Review, order and arrange BMP for two weeks after initiation\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_location\":{\"page_end\":3,\"page_start\":3},\"source_text\":\"| Start medication            | Yes                  | Basic Metabolic Panel | 2                    |\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_two_week_bmp</bpmn2:incoming>\n        <bpmn2:outgoing>f_two_week_end</bpmn2:outgoing>\n        <bpmn2:ioSpecification>\n          <bpmn2:dataInput id=\"review_two_week_bmp_TaskName\" name=\"TaskName\" drools:dtype=\"Object\"/>\n          <bpmn2:dataInput id=\"review_two_week_bmp_Skippable\" name=\"Skippable\" drools:dtype=\"Object\"/>\n          <bpmn2:dataInput id=\"review_two_week_bmp_GroupId\" name=\"GroupId\" drools:dtype=\"Object\"/>\n          <bpmn2:inputSet>\n            <bpmn2:dataInputRefs>review_two_week_bmp_TaskName</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>review_two_week_bmp_Skippable</bpmn2:dataInputRefs>\n            <bpmn2:dataInputRefs>review_two_week_bmp_GroupId</bpmn2:dataInputRefs>\n          </bpmn2:inputSet>\n          <bpmn2:outputSet/>\n        </bpmn2:ioSpecification>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>review_two_week_bmp_TaskName</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">review_two_week_bmp</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">review_two_week_bmp_TaskName</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>review_two_week_bmp_Skippable</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">false</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">review_two_week_bmp_Skippable</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n        <bpmn2:dataInputAssociation>\n          <bpmn2:targetRef>review_two_week_bmp_GroupId</bpmn2:targetRef>\n          <bpmn2:assignment>\n            <bpmn2:from xsi:type=\"bpmn2:tFormalExpression\">clinicians</bpmn2:from>\n            <bpmn2:to xsi:type=\"bpmn2:tFormalExpression\">review_two_week_bmp_GroupId</bpmn2:to>\n          </bpmn2:assignment>\n        </bpmn2:dataInputAssociation>\n      </bpmn2:userTask>\n      <bpmn2:exclusiveGateway id=\"select_lab_branch\" name=\"Which laboratory plan applies?\" gatewayDirection=\"Diverging\" default=\"f_no_additional_bmp\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"exclusive-split\",\"kind\":\"structural\",\"supports\":[\"obtain_monitoring_plan\",\"f_two_week_bmp\",\"f_four_week_bmp\",\"f_no_additional_bmp\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:incoming>f_plan_selection</bpmn2:incoming>\n        <bpmn2:outgoing>f_four_week_bmp</bpmn2:outgoing>\n        <bpmn2:outgoing>f_no_additional_bmp</bpmn2:outgoing>\n        <bpmn2:outgoing>f_two_week_bmp</bpmn2:outgoing>\n      </bpmn2:exclusiveGateway>\n      <bpmn2:sequenceFlow id=\"f_four_week_bmp\" sourceRef=\"select_lab_branch\" targetRef=\"review_four_week_bmp\" name=\"Medication without kidney disease\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"conditionExpression\":\"defined(treatment_action) and treatment_action == \\\"Start medication\\\" and defined(has_kidney_disease) and has_kidney_disease == false\",\"provenance\":{\"kind\":\"source\",\"source_location\":{\"page_end\":3,\"page_start\":3},\"source_text\":\"| Start medication            | No                   | Basic Metabolic Panel | 4                    |\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return treatment_action != null && has_kidney_disease != null && \"Start medication\".equals(treatment_action) && !Boolean.TRUE.equals(has_kidney_disease);]]></bpmn2:conditionExpression>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_four_week_end\" sourceRef=\"review_four_week_bmp\" targetRef=\"end_four_week_arranged_outcome\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"sequence\",\"kind\":\"structural\",\"supports\":[\"review_four_week_bmp\",\"end_four_week_arranged\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"end_four_week_arranged_outcome_out\" sourceRef=\"end_four_week_arranged_outcome\" targetRef=\"main_end_four_week_arranged\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_no_additional_bmp\" sourceRef=\"select_lab_branch\" targetRef=\"end_no_additional_bmp_outcome\" name=\"Lifestyle-only treatment\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"kind\":\"source\",\"source_location\":{\"page_end\":3,\"page_start\":3},\"source_text\":\"Patients on lifestyle modification alone do not require routine laboratory monitoring beyond standard preventive care.\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"end_no_additional_bmp_outcome_out\" sourceRef=\"end_no_additional_bmp_outcome\" targetRef=\"main_end_no_additional_bmp\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_plan_selection\" sourceRef=\"obtain_monitoring_plan\" targetRef=\"select_lab_branch\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"sequence\",\"kind\":\"structural\",\"supports\":[\"obtain_monitoring_plan\",\"select_lab_branch\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_start_plan\" sourceRef=\"main_start\" targetRef=\"obtain_monitoring_plan\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"sequence\",\"kind\":\"structural\",\"supports\":[\"start\",\"obtain_monitoring_plan\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_two_week_bmp\" sourceRef=\"select_lab_branch\" targetRef=\"review_two_week_bmp\" name=\"Medication with kidney disease\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"conditionExpression\":\"defined(treatment_action) and treatment_action == \\\"Start medication\\\" and defined(has_kidney_disease) and has_kidney_disease == true\",\"provenance\":{\"kind\":\"source\",\"source_location\":{\"page_end\":3,\"page_start\":3},\"source_text\":\"| Start medication            | Yes                  | Basic Metabolic Panel | 2                    |\"}}]]></acp:element>\n        </bpmn2:extensionElements>\n        <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return treatment_action != null && has_kidney_disease != null && \"Start medication\".equals(treatment_action) && Boolean.TRUE.equals(has_kidney_disease);]]></bpmn2:conditionExpression>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"f_two_week_end\" sourceRef=\"review_two_week_bmp\" targetRef=\"end_two_week_arranged_outcome\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"sequence\",\"kind\":\"structural\",\"supports\":[\"review_two_week_bmp\",\"end_two_week_arranged\"]}}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n      <bpmn2:sequenceFlow id=\"end_two_week_arranged_outcome_out\" sourceRef=\"end_two_week_arranged_outcome\" targetRef=\"main_end_two_week_arranged\">\n        <bpmn2:extensionElements>\n          <acp:element><![CDATA[{}]]></acp:element>\n        </bpmn2:extensionElements>\n      </bpmn2:sequenceFlow>\n    </bpmn2:subProcess>\n    <bpmn2:boundaryEvent id=\"period_elapsed\" name=\"Maximum process duration elapsed\" attachedToRef=\"main\" cancelActivity=\"true\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"plan-bound\",\"kind\":\"structural\",\"supports\":[\"obtain_monitoring_plan\",\"review_two_week_bmp\",\"review_four_week_bmp\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:outgoing>f_timeout</bpmn2:outgoing>\n      <bpmn2:timerEventDefinition>\n        <bpmn2:timeDuration xsi:type=\"bpmn2:tFormalExpression\">#{max_duration}</bpmn2:timeDuration>\n      </bpmn2:timerEventDefinition>\n    </bpmn2:boundaryEvent>\n    <bpmn2:exclusiveGateway id=\"gw_outcome\" name=\"Outcome\" gatewayDirection=\"Diverging\" default=\"f_completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_after</bpmn2:incoming>\n      <bpmn2:outgoing>end_four_week_arranged_route</bpmn2:outgoing>\n      <bpmn2:outgoing>end_no_additional_bmp_route</bpmn2:outgoing>\n      <bpmn2:outgoing>end_two_week_arranged_route</bpmn2:outgoing>\n      <bpmn2:outgoing>f_completed</bpmn2:outgoing>\n    </bpmn2:exclusiveGateway>\n    <bpmn2:endEvent id=\"end_four_week_arranged\" name=\"Four-week BMP ordered and arranged\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>end_four_week_arranged_route</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_no_additional_bmp\" name=\"No additional routine BMP created\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>end_no_additional_bmp_route</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_two_week_arranged\" name=\"Two-week BMP ordered and arranged\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>end_two_week_arranged_route</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_completed\" name=\"Completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_completed</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:endEvent id=\"end_timeout\" name=\"Process duration elapsed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"outcome\":\"timed_out\",\"provenance\":{\"derivation_rule\":\"end-event\",\"kind\":\"structural\",\"supports\":[\"period_elapsed\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:incoming>f_timeout</bpmn2:incoming>\n    </bpmn2:endEvent>\n    <bpmn2:sequenceFlow id=\"f_init\" sourceRef=\"start\" targetRef=\"init\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_main\" sourceRef=\"init\" targetRef=\"main\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_after\" sourceRef=\"main\" targetRef=\"gw_outcome\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"end_four_week_arranged_route\" sourceRef=\"gw_outcome\" targetRef=\"end_four_week_arranged\" name=\"four_week_bmp_arranged\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return \"four_week_bmp_arranged\".equals(outcome);]]></bpmn2:conditionExpression>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"end_no_additional_bmp_route\" sourceRef=\"gw_outcome\" targetRef=\"end_no_additional_bmp\" name=\"no_additional_bmp\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return \"no_additional_bmp\".equals(outcome);]]></bpmn2:conditionExpression>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"end_two_week_arranged_route\" sourceRef=\"gw_outcome\" targetRef=\"end_two_week_arranged\" name=\"two_week_bmp_arranged\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n      <bpmn2:conditionExpression xsi:type=\"bpmn2:tFormalExpression\" language=\"http://www.java.com/java\"><![CDATA[return \"two_week_bmp_arranged\".equals(outcome);]]></bpmn2:conditionExpression>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_completed\" sourceRef=\"gw_outcome\" targetRef=\"end_completed\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n    <bpmn2:sequenceFlow id=\"f_timeout\" sourceRef=\"period_elapsed\" targetRef=\"end_timeout\">\n      <bpmn2:extensionElements>\n        <acp:element><![CDATA[{\"provenance\":{\"derivation_rule\":\"sequence\",\"kind\":\"structural\",\"supports\":[\"period_elapsed\",\"end_timeout\"]}}]]></acp:element>\n      </bpmn2:extensionElements>\n    </bpmn2:sequenceFlow>\n  </bpmn2:process>\n</bpmn2:definitions>\n"
+}

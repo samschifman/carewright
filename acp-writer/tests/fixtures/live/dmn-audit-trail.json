@@ -1,0 +1,133 @@
+[
+  {
+    "model_id": "blood-pressure-classification",
+    "model_name": "Blood Pressure Classification",
+    "inputs": {},
+    "outputs": {},
+    "fhir_references": [],
+    "timestamp": "2026-10-15T17:44:10.268721Z",
+    "error": "DMN evaluation errors (HTTP 422)",
+    "error_status": 422,
+    "error_messages": [
+      {
+        "severity": "ERROR",
+        "text": "Required dependency 'Office Systolic BP' not found on node 'Blood Pressure Classification'",
+        "source_id": "decision_blood_pressure_classification"
+      },
+      {
+        "severity": "ERROR",
+        "text": "Required dependency 'Office Diastolic BP' not found on node 'Blood Pressure Classification'",
+        "source_id": "decision_blood_pressure_classification"
+      }
+    ]
+  },
+  {
+    "model_id": "blood-pressure-confirmation-sufficiency",
+    "model_name": "Blood Pressure Confirmation Sufficiency",
+    "inputs": {},
+    "outputs": {},
+    "fhir_references": [],
+    "timestamp": "2026-10-15T17:44:15.591923Z",
+    "error": "DMN evaluation errors (HTTP 422)",
+    "error_status": 422,
+    "error_messages": [
+      {
+        "severity": "ERROR",
+        "text": "Required dependency 'Distinct Measurement Occasions' not found on node 'Blood Pressure Confirmation Sufficiency'",
+        "source_id": "decision_confirmation_sufficiency"
+      }
+    ]
+  },
+  {
+    "model_id": "treatment-recommendation",
+    "model_name": "Treatment Recommendation",
+    "inputs": {
+      "Systolic BP": 142,
+      "Has Diabetes": true,
+      "Has Kidney Disease": false
+    },
+    "outputs": {
+      "Treatment Recommendation": "Start medication: lisinopril 10 mg daily; follow-up in 2 weeks"
+    },
+    "fhir_references": [
+      "urn:uuid:89a8adf1-187a-55e8-a89a-d969df1d0121",
+      "urn:uuid:3df5aa68-644f-54fc-a532-8a53962a1751"
+    ],
+    "timestamp": "2026-10-15T17:44:19.616067Z"
+  },
+  {
+    "model_id": "monitoring-plan",
+    "model_name": "Monitoring Plan",
+    "inputs": {
+      "Has Kidney Disease": false
+    },
+    "outputs": {},
+    "fhir_references": [],
+    "timestamp": "2026-10-15T17:44:28.626860Z",
+    "error": "DMN evaluation errors (HTTP 422)",
+    "error_status": 422,
+    "error_messages": [
+      {
+        "severity": "ERROR",
+        "text": "Required dependency 'Treatment Action' not found on node 'Monitoring Plan'",
+        "source_id": "decision_monitoring_plan"
+      }
+    ]
+  },
+  {
+    "model_id": "severely-elevated-home-reading-response",
+    "model_name": "Severely Elevated Home Reading Response",
+    "inputs": {
+      "Repeat Reading Available": false
+    },
+    "outputs": {},
+    "fhir_references": [],
+    "timestamp": "2026-10-15T17:44:56.374485Z",
+    "error": "DMN evaluation errors (HTTP 422)",
+    "error_status": 422,
+    "error_messages": [
+      {
+        "severity": "ERROR",
+        "text": "Required dependency 'Initial Home Systolic BP' not found on node 'Severely Elevated Home Reading Response'",
+        "source_id": "decision_reading_response"
+      },
+      {
+        "severity": "ERROR",
+        "text": "Required dependency 'Initial Home Diastolic BP' not found on node 'Severely Elevated Home Reading Response'",
+        "source_id": "decision_reading_response"
+      },
+      {
+        "severity": "ERROR",
+        "text": "Required dependency 'Repeat Home Systolic BP' not found on node 'Severely Elevated Home Reading Response'",
+        "source_id": "decision_reading_response"
+      },
+      {
+        "severity": "ERROR",
+        "text": "Required dependency 'Repeat Home Diastolic BP' not found on node 'Severely Elevated Home Reading Response'",
+        "source_id": "decision_reading_response"
+      }
+    ]
+  },
+  {
+    "model_id": "missing-home-readings-outreach",
+    "model_name": "Missing Home Readings Outreach",
+    "inputs": {
+      "Week without Readings": false,
+      "Readings Still Absent": false,
+      "Starting or Changing Medication": false,
+      "Lifestyle Modification Alone": false
+    },
+    "outputs": {},
+    "fhir_references": [],
+    "timestamp": "2026-10-15T17:45:28.523637Z",
+    "error": "DMN evaluation errors (HTTP 422)",
+    "error_status": 422,
+    "error_messages": [
+      {
+        "severity": "ERROR",
+        "text": "Required dependency 'Reminder Attempts on Different Days' not found on node 'Missing Home Readings Outreach'",
+        "source_id": "decision_outreach"
+      }
+    ]
+  }
+]

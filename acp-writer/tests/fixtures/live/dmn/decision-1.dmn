@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="blood-pressure-classification"
+             name="Blood Pressure Classification"
+             namespace="https://redhat.com/cpg-to-acp/dmn/blood-pressure-classification">
+
+  <itemDefinition id="type_bp_classification" name="tBloodPressureClassification">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["Normal", "Elevated", "Stage 1 Hypertension", "Stage 2 Hypertension", null]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <inputData id="input_office_systolic_bp" name="Office Systolic BP">
+    <variable id="var_office_systolic_bp" name="Office Systolic BP" typeRef="number"/>
+  </inputData>
+
+  <inputData id="input_office_diastolic_bp" name="Office Diastolic BP">
+    <variable id="var_office_diastolic_bp" name="Office Diastolic BP" typeRef="number"/>
+  </inputData>
+
+  <decision id="decision_blood_pressure_classification" name="Blood Pressure Classification">
+    <description>Classifies office blood pressure for combinations explicitly represented in the published grid. The grid does not specify how to assign a stage when systolic and diastolic categories differ. Such combinations return null, representing no source-defined classification, rather than an added clinical disposition or an assumed higher-category rule.</description>
+    <variable id="var_blood_pressure_classification"
+              name="Blood Pressure Classification"
+              typeRef="tBloodPressureClassification"/>
+
+    <informationRequirement id="ir_office_systolic_bp">
+      <requiredInput href="#input_office_systolic_bp"/>
+    </informationRequirement>
+    <informationRequirement id="ir_office_diastolic_bp">
+      <requiredInput href="#input_office_diastolic_bp"/>
+    </informationRequirement>
+
+    <decisionTable id="dt_blood_pressure_classification"
+                   hitPolicy="UNIQUE"
+                   preferredOrientation="Rule-as-Row">
+      <input id="column_systolic_bp" label="Office Systolic BP (mmHg)">
+        <inputExpression id="expression_systolic_bp" typeRef="number">
+          <text><![CDATA[Office Systolic BP]]></text>
+        </inputExpression>
+      </input>
+      <input id="column_diastolic_bp" label="Office Diastolic BP (mmHg)">
+        <inputExpression id="expression_diastolic_bp" typeRef="number">
+          <text><![CDATA[Office Diastolic BP]]></text>
+        </inputExpression>
+      </input>
+      <output id="column_classification"
+              name="Classification"
+              typeRef="tBloodPressureClassification">
+        <outputValues>
+          <text><![CDATA["Normal", "Elevated", "Stage 1 Hypertension", "Stage 2 Hypertension", null]]></text>
+        </outputValues>
+      </output>
+
+      <rule id="rule_normal">
+        <description>Both readings satisfy the normal row of the published grid.</description>
+        <inputEntry id="normal_sbp"><text><![CDATA[< 120]]></text></inputEntry>
+        <inputEntry id="normal_dbp"><text><![CDATA[< 80]]></text></inputEntry>
+        <outputEntry id="normal_result"><text><![CDATA["Normal"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_elevated">
+        <description>Systolic pressure is in the elevated range and diastolic pressure is below 80.</description>
+        <inputEntry id="elevated_sbp"><text><![CDATA[[120..130)]]></text></inputEntry>
+        <inputEntry id="elevated_dbp"><text><![CDATA[< 80]]></text></inputEntry>
+        <outputEntry id="elevated_result"><text><![CDATA["Elevated"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_stage_1">
+        <description>Both readings satisfy the Stage 1 ranges of the published grid.</description>
+        <inputEntry id="stage_1_sbp"><text><![CDATA[[130..140)]]></text></inputEntry>
+        <inputEntry id="stage_1_dbp"><text><![CDATA[[80..90)]]></text></inputEntry>
+        <outputEntry id="stage_1_result"><text><![CDATA["Stage 1 Hypertension"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_stage_2">
+        <description>Both readings satisfy the Stage 2 thresholds of the published grid.</description>
+        <inputEntry id="stage_2_sbp"><text><![CDATA[>= 140]]></text></inputEntry>
+        <inputEntry id="stage_2_dbp"><text><![CDATA[>= 90]]></text></inputEntry>
+        <outputEntry id="stage_2_result"><text><![CDATA["Stage 2 Hypertension"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_unclassified_lower_systolic">
+        <description>The published grid does not assign a category when systolic pressure is below 130 and diastolic pressure is at least 80.</description>
+        <inputEntry id="unclassified_lower_sbp"><text><![CDATA[< 130]]></text></inputEntry>
+        <inputEntry id="unclassified_higher_dbp"><text><![CDATA[>= 80]]></text></inputEntry>
+        <outputEntry id="unclassified_lower_systolic_result"><text><![CDATA[null]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_unclassified_stage_1_systolic_low_diastolic">
+        <description>The published grid does not assign a category when systolic pressure is in the Stage 1 range and diastolic pressure is below 80.</description>
+        <inputEntry id="unclassified_stage_1_low_sbp"><text><![CDATA[[130..140)]]></text></inputEntry>
+        <inputEntry id="unclassified_stage_1_low_dbp"><text><![CDATA[< 80]]></text></inputEntry>
+        <outputEntry id="unclassified_stage_1_low_result"><text><![CDATA[null]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_unclassified_stage_1_systolic_high_diastolic">
+        <description>The published grid does not assign a category when systolic pressure is in the Stage 1 range and diastolic pressure meets the Stage 2 threshold.</description>
+        <inputEntry id="unclassified_stage_1_high_sbp"><text><![CDATA[[130..140)]]></text></inputEntry>
+        <inputEntry id="unclassified_stage_1_high_dbp"><text><![CDATA[>= 90]]></text></inputEntry>
+        <outputEntry id="unclassified_stage_1_high_result"><text><![CDATA[null]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_unclassified_stage_2_systolic">
+        <description>The published grid does not assign a category when systolic pressure meets the Stage 2 threshold and diastolic pressure is below 90.</description>
+        <inputEntry id="unclassified_stage_2_sbp"><text><![CDATA[>= 140]]></text></inputEntry>
+        <inputEntry id="unclassified_stage_2_dbp"><text><![CDATA[< 90]]></text></inputEntry>
+        <outputEntry id="unclassified_stage_2_result"><text><![CDATA[null]]></text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

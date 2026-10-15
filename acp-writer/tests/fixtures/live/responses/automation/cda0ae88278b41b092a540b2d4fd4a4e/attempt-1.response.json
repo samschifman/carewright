@@ -1,0 +1,4 @@
+{
+  "role": "synthesizer",
+  "content": "{\"bindings\":[{\"name\":\"has_kidney_disease\",\"value\":false,\"reason\":\"The plan-derived Monitoring Plan decision facts explicitly set Has Kidney Disease to false.\"}]}"
+}

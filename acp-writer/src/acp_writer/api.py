@@ -370,6 +370,35 @@ def _automation_validation_result(payload: dict) -> dict:
     dmn_namespaces = _automation_dmn_namespaces()
     dmn_namespaces.update(supplied_namespaces)
 
+    supplied_summaries = payload.get("dmn_summaries", {})
+    if not isinstance(supplied_summaries, dict) or any(
+        not isinstance(model_id, str) for model_id in supplied_summaries
+    ):
+        return {"valid": False, "rungs_passed": [], "findings": [], "errors": [
+            "dmn_summaries must map model ids to decision model summaries"
+        ]}
+    try:
+        normalized_supplied_summaries = {
+            model_id: normalize_decision_model_summary(summary)
+            for model_id, summary in supplied_summaries.items()
+        }
+    except (TypeError, ValueError) as exc:
+        return {"valid": False, "rungs_passed": [], "findings": [], "errors": [
+            f"invalid dmn_summaries: {exc}"
+        ]}
+    if any(
+        model_id != summary.id
+        for model_id, summary in normalized_supplied_summaries.items()
+    ):
+        return {"valid": False, "rungs_passed": [], "findings": [], "errors": [
+            "dmn_summaries keys must match each summary's model id"
+        ]}
+    dmn_summaries = _automation_dmn_summaries()
+    dmn_summaries.update(normalized_supplied_summaries)
+    for model_id, summary in normalized_supplied_summaries.items():
+        if summary.namespace is not None:
+            dmn_namespaces[model_id] = summary.namespace
+
     validation_xml = xml
     if validation_xml is None:
         try:
@@ -405,7 +434,7 @@ def _automation_validation_result(payload: dict) -> dict:
         stage=stage,
         templates=templates if stage == "instance" else None,
         context=context,
-        dmn_summaries=_automation_dmn_summaries(),
+        dmn_summaries=dmn_summaries,
         dmn_namespaces=dmn_namespaces,
         phi_known_values=payload.get("phi_known_values", ()),
     )

@@ -14,7 +14,7 @@ from cpg_contracts.automation.compiler import compile
 from cpg_contracts.automation.ir import BusinessRuleTask, ir_version
 from cpg_contracts.automation.templates import AutomationTemplate
 from cpg_contracts.automation.validators.ladder import run_static_ladder
-from cpg_contracts.decisions import DecisionModelSummary
+from cpg_contracts.decisions import DecisionModelSummary, normalize_decision_model_summary
 
 
 @dataclass(frozen=True)
@@ -73,12 +73,19 @@ class AutomationRegistry:
             if isinstance(element, BusinessRuleTask)
         )
         registered_namespaces = dmn_namespaces or {}
+        registered_summaries = dmn_summaries or {}
+        captured_summaries = {
+            model_id: normalize_decision_model_summary(registered_summaries[model_id])
+            for model_id in sorted(linked_model_ids)
+            if model_id in registered_summaries
+        }
         template = template.model_copy(update={
             "dmn_namespaces": {
                 model_id: registered_namespaces[model_id]
                 for model_id in sorted(linked_model_ids)
                 if model_id in registered_namespaces
-            }
+            },
+            "dmn_summaries": captured_summaries,
         })
 
         try:
@@ -92,7 +99,7 @@ class AutomationRegistry:
             template.ir,
             catalog=load_catalog(),
             stage="template",
-            dmn_summaries=dmn_summaries,
+            dmn_summaries=template.dmn_summaries,
             dmn_namespaces=template.dmn_namespaces,
         )
         if not ladder.ok:

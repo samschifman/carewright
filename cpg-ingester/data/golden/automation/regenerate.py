@@ -102,9 +102,15 @@ def _build_template(
     result,
     catalog,
     dmn_namespaces: dict[str, str],
+    dmn_summaries: dict[str, DecisionModelSummary],
 ) -> AutomationTemplate:
     process = ir.process
     linked_decision_ids = _linked_decision_ids(ir)
+    linked_summaries = {
+        model_id: dmn_summaries[model_id]
+        for model_id in linked_decision_ids
+        if model_id in dmn_summaries
+    }
     warning_messages = [
         f"{finding.rung}/{finding.code}: {finding.message}"
         for finding in result.warnings()
@@ -155,6 +161,7 @@ def _build_template(
             for model_id in linked_decision_ids
             if model_id in dmn_namespaces
         },
+        dmn_summaries=linked_summaries,
     )
 
 
@@ -195,6 +202,7 @@ def render_outputs() -> dict[str, str]:
             result=result,
             catalog=catalog,
             dmn_namespaces=dmn_namespaces,
+            dmn_summaries=dmn_summaries,
         )
         outputs[f"{ir.process.id}.bpmn"] = xml
         outputs[f"{ir.process.id}.template.json"] = json.dumps(

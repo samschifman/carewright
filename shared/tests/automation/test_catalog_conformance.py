@@ -355,6 +355,12 @@ def test_dmn_task_model_must_resolve_when_summaries_are_supplied() -> None:
     assert "dmn-model" in codes(findings)
 
 
+def test_dmn_task_resolution_is_deferred_when_summaries_are_unavailable() -> None:
+    findings = validate_catalog(ir_with_dmn_task(), load_catalog(), None)
+
+    assert "dmn-model" not in codes(findings)
+
+
 def test_dmn_task_inputs_and_outputs_must_match_model_variables() -> None:
     ir = ir_with_dmn_task()
     dmn = task_by_id(ir, "decide_monitoring")

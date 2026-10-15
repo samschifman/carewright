@@ -789,94 +789,23 @@ for expected in planning-brief.json fhir-bundle.json; do
   fi
 done
 
-HAS_VALID_AUTOMATION="$("$INGESTER_PYTHON" - \
+GUARD_RESULT="$(PYTHONPATH="$ROOT_DIR/scripts${PYTHONPATH:+:$PYTHONPATH}" "$INGESTER_PYTHON" - \
   "$CAREPLAN_ARTIFACT_DIR/planning-brief.json" \
   "$RUN_ROOT/generated-careplan-bundle.json" \
   "$CAREPLAN_ARTIFACT_DIR/automation-guard.json" <<'PY'
 import json
 import sys
 from pathlib import Path
+from slice_automation_guard import write_automation_guard_or_raise
 
 brief_path, bundle_path, result_path = map(Path, sys.argv[1:])
 brief = json.loads(brief_path.read_text())
 bundle = json.loads(bundle_path.read_text())
-attached = []
-for activity in brief.get("activities", []):
-    for automation in activity.get("automations", []) or []:
-        if automation.get("template_refs"):
-            attached.append((activity, automation))
-if not attached:
-    raise SystemExit("Generated planning brief has no attached live automations")
-
-issues = []
-for activity, automation in attached:
-    validation = automation.get("validation") or {}
-    status = validation.get("status")
-    errors = validation.get("errors") or []
-    if status not in {"valid", "incomplete"} or errors:
-        issues.append({
-            "activity_id": activity.get("id"),
-            "status": status,
-            "errors": errors,
-        })
-if issues:
-    raise SystemExit(
-        "Attached automation validation failed: " + json.dumps(issues, ensure_ascii=False)
-    )
-
-valid = [item for item in attached if (item[1].get("validation") or {}).get("status") == "valid"]
-if valid:
-    careplan = next(
-        item.get("resource", {}) for item in bundle.get("entry", [])
-        if item.get("resource", {}).get("resourceType") == "CarePlan"
-    )
-    entries = {
-        entry.get("fullUrl"): entry.get("resource", {})
-        for entry in bundle.get("entry", [])
-    }
-    links = []
-    for activity in careplan.get("activity", []):
-        for extension in activity.get("extension", []) or []:
-            if extension.get("url", "").endswith("/activity-automation"):
-                links.append({
-                    child.get("url"): child.get("valueReference", {}).get("reference")
-                    for child in extension.get("extension", []) or []
-                })
-    if len(links) < len(valid):
-        raise SystemExit(
-            "Generated CarePlan is missing an activity automation extension for a valid instance"
-        )
-    for link in links:
-        task_ref = link.get("instance")
-        document_ref = link.get("definition")
-        if not task_ref or not document_ref:
-            raise SystemExit("Activity automation extension must reference a Task and DocumentReference")
-        if entries.get(task_ref, {}).get("resourceType") != "Task":
-            raise SystemExit("Valid activity automation extension has no matching Task in the bundle")
-        if entries.get(document_ref, {}).get("resourceType") != "DocumentReference":
-            raise SystemExit(
-                "Valid activity automation extension has no matching DocumentReference in the bundle"
-            )
-
-result = {
-    "attached": [
-        {
-            "activity_id": activity.get("id"),
-            "activity_description": activity.get("description", ""),
-            "automation_id": automation.get("id"),
-            "template_refs": automation.get("template_refs", []),
-            "status": (automation.get("validation") or {}).get("status"),
-            "errors": (automation.get("validation") or {}).get("errors", []),
-        }
-        for activity, automation in attached
-    ],
-    "valid_instances": len(valid),
-    "attached_count": len(attached),
-}
-result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
-print("1" if valid else "0")
+result = write_automation_guard_or_raise(brief, bundle, result_path)
+print("1" if result["valid_instances"] else "0")
 PY
 )"
+HAS_VALID_AUTOMATION="$(printf '%s\n' "$GUARD_RESULT" | tail -n 1)"
 ATTACHED_AUTOMATION_COUNT="$("$INGESTER_PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["attached_count"])' "$CAREPLAN_ARTIFACT_DIR/automation-guard.json")"
 echo "Attached $ATTACHED_AUTOMATION_COUNT live automation(s); valid instances present: $HAS_VALID_AUTOMATION."
 

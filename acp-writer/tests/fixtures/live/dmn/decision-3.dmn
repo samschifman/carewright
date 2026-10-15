@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+             xmlns:feel="https://www.omg.org/spec/DMN/20211108/FEEL/"
+             id="treatment-recommendation"
+             name="Treatment Recommendation"
+             namespace="https://redhat.com/cpg-to-acp/dmn/treatment-recommendation">
+
+  <itemDefinition id="type_treatment_recommendation" name="tTreatmentRecommendation">
+    <typeRef>string</typeRef>
+    <allowedValues>
+      <text><![CDATA["Start medication: lisinopril 10 mg daily; follow-up in 4 weeks", "Start medication: lisinopril 10 mg daily; follow-up in 2 weeks", "Lifestyle modification only; follow-up in 8 weeks", "Lifestyle modification only; follow-up in 12 weeks"]]></text>
+    </allowedValues>
+  </itemDefinition>
+
+  <inputData id="input_systolic_bp" name="Systolic BP">
+    <variable id="var_systolic_bp" name="Systolic BP" typeRef="number"/>
+  </inputData>
+
+  <inputData id="input_has_diabetes" name="Has Diabetes">
+    <variable id="var_has_diabetes" name="Has Diabetes" typeRef="boolean"/>
+  </inputData>
+
+  <inputData id="input_has_kidney_disease" name="Has Kidney Disease">
+    <variable id="var_has_kidney_disease" name="Has Kidney Disease" typeRef="boolean"/>
+  </inputData>
+
+  <decision id="decision_treatment_recommendation" name="Treatment Recommendation">
+    <description>Determines initial action, lisinopril dose, and follow-up interval from systolic BP and the presence of diabetes or chronic kidney disease. The unqualified SBP below 130 key principle applies to all comorbidity combinations, including patients with both diabetes and chronic kidney disease.</description>
+    <variable id="var_treatment_recommendation" name="Treatment Recommendation" typeRef="tTreatmentRecommendation"/>
+
+    <informationRequirement id="ir_systolic_bp">
+      <requiredInput href="#input_systolic_bp"/>
+    </informationRequirement>
+    <informationRequirement id="ir_has_diabetes">
+      <requiredInput href="#input_has_diabetes"/>
+    </informationRequirement>
+    <informationRequirement id="ir_has_kidney_disease">
+      <requiredInput href="#input_has_kidney_disease"/>
+    </informationRequirement>
+
+    <decisionTable id="dt_treatment_recommendation" hitPolicy="UNIQUE" preferredOrientation="Rule-as-Row">
+      <input id="column_systolic_bp" label="Systolic BP (mmHg)">
+        <inputExpression id="expr_systolic_bp" typeRef="number">
+          <text><![CDATA[Systolic BP]]></text>
+        </inputExpression>
+      </input>
+      <input id="column_has_diabetes" label="Has Diabetes">
+        <inputExpression id="expr_has_diabetes" typeRef="boolean">
+          <text><![CDATA[Has Diabetes]]></text>
+        </inputExpression>
+      </input>
+      <input id="column_has_kidney_disease" label="Has Kidney Disease">
+        <inputExpression id="expr_has_kidney_disease" typeRef="boolean">
+          <text><![CDATA[Has Kidney Disease]]></text>
+        </inputExpression>
+      </input>
+
+      <output id="column_recommendation" name="Recommendation" typeRef="tTreatmentRecommendation"/>
+
+      <rule id="rule_sbp_high_no_comorbidities">
+        <description>SBP at least 140 without diabetes or chronic kidney disease: start lisinopril 10 mg daily and follow up in 4 weeks.</description>
+        <inputEntry id="r1_sbp"><text><![CDATA[>= 140]]></text></inputEntry>
+        <inputEntry id="r1_diabetes"><text><![CDATA[false]]></text></inputEntry>
+        <inputEntry id="r1_kidney"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r1_recommendation"><text><![CDATA["Start medication: lisinopril 10 mg daily; follow-up in 4 weeks"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_sbp_elevated_diabetes_only">
+        <description>SBP at least 130 with diabetes and without chronic kidney disease: start lisinopril 10 mg daily and follow up in 2 weeks.</description>
+        <inputEntry id="r2_sbp"><text><![CDATA[>= 130]]></text></inputEntry>
+        <inputEntry id="r2_diabetes"><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry id="r2_kidney"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r2_recommendation"><text><![CDATA["Start medication: lisinopril 10 mg daily; follow-up in 2 weeks"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_sbp_elevated_kidney_disease_only">
+        <description>SBP at least 130 with chronic kidney disease and without diabetes: start lisinopril 10 mg daily and follow up in 2 weeks.</description>
+        <inputEntry id="r3_sbp"><text><![CDATA[>= 130]]></text></inputEntry>
+        <inputEntry id="r3_diabetes"><text><![CDATA[false]]></text></inputEntry>
+        <inputEntry id="r3_kidney"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="r3_recommendation"><text><![CDATA["Start medication: lisinopril 10 mg daily; follow-up in 2 weeks"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_sbp_elevated_both_comorbidities">
+        <description>SBP at least 130 with both diabetes and chronic kidney disease: start lisinopril 10 mg daily and follow up in 2 weeks.</description>
+        <inputEntry id="r4_sbp"><text><![CDATA[>= 130]]></text></inputEntry>
+        <inputEntry id="r4_diabetes"><text><![CDATA[true]]></text></inputEntry>
+        <inputEntry id="r4_kidney"><text><![CDATA[true]]></text></inputEntry>
+        <outputEntry id="r4_recommendation"><text><![CDATA["Start medication: lisinopril 10 mg daily; follow-up in 2 weeks"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_stage_one_no_comorbidities">
+        <description>SBP from 130 to below 140 without diabetes or chronic kidney disease: lifestyle modification only and follow up in 8 weeks.</description>
+        <inputEntry id="r5_sbp"><text><![CDATA[[130..140)]]></text></inputEntry>
+        <inputEntry id="r5_diabetes"><text><![CDATA[false]]></text></inputEntry>
+        <inputEntry id="r5_kidney"><text><![CDATA[false]]></text></inputEntry>
+        <outputEntry id="r5_recommendation"><text><![CDATA["Lifestyle modification only; follow-up in 8 weeks"]]></text></outputEntry>
+      </rule>
+
+      <rule id="rule_sbp_below_130">
+        <description>SBP below 130: lifestyle modification only and follow up in 12 weeks, regardless of comorbidity status, as specified by the unqualified key principle.</description>
+        <inputEntry id="r6_sbp"><text><![CDATA[< 130]]></text></inputEntry>
+        <inputEntry id="r6_diabetes"><text><![CDATA[-]]></text></inputEntry>
+        <inputEntry id="r6_kidney"><text><![CDATA[-]]></text></inputEntry>
+        <outputEntry id="r6_recommendation"><text><![CDATA["Lifestyle modification only; follow-up in 12 weeks"]]></text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

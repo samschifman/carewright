@@ -928,6 +928,7 @@ import sys
 from pathlib import Path
 
 from cpg_ingester.mlflow_usage import summarize_trace_usage
+from mlflow.exceptions import RestException
 from mlflow.tracking import MlflowClient
 
 ingester_dir = Path(sys.argv[1])
@@ -995,28 +996,32 @@ for filename, key, label in (
     json.dumps(excerpt, indent=2, ensure_ascii=False) + "\n"
 )
 
-client = MlflowClient(tracking_uri=tracking_uri)
-experiment = client.get_experiment_by_name(experiment_name)
 trace_ids = []
 all_traces = []
-if experiment is not None:
-    traces = client.search_traces(
-        experiment_ids=[experiment.experiment_id],
-        max_results=1000,
-        flush=True,
-    )
-    trace_ids.extend(trace.info.trace_id for trace in traces)
-    all_traces.extend(traces)
-trace_ids = list(dict.fromkeys(trace_ids))
-token_usage = summarize_trace_usage(all_traces) if all_traces else {}
 trace_note = ""
-if not trace_ids:
-    if run_summary.get("downstream_mode") != "from-golden":
-        raise SystemExit(f"No MLflow trace IDs were available in {experiment_name}")
-    trace_note = (
-        f"No traces were returned for the downstream experiment `{experiment_name}`; "
-        "the slice acceptance checks below do not depend on token accounting."
-    )
+token_usage = {}
+try:
+    client = MlflowClient(tracking_uri=tracking_uri)
+    experiment = client.get_experiment_by_name(experiment_name)
+    if experiment is not None:
+        traces = client.search_traces(
+            experiment_ids=[experiment.experiment_id],
+            max_results=1000,
+            flush=True,
+        )
+        trace_ids.extend(trace.info.trace_id for trace in traces)
+        all_traces.extend(traces)
+    trace_ids = list(dict.fromkeys(trace_ids))
+    token_usage = summarize_trace_usage(all_traces) if all_traces else {}
+    if not trace_ids:
+        if run_summary.get("downstream_mode") != "from-golden":
+            raise SystemExit(f"No MLflow trace IDs were available in {experiment_name}")
+        trace_note = (
+            f"No traces were returned for the downstream experiment `{experiment_name}`; "
+            "the slice acceptance checks below do not depend on token accounting."
+        )
+except RestException as exc:
+    trace_note = f"token usage unavailable: {exc}"
 
 manifest_processes = [
     item for item in analysis.get("item_manifest", []) if item.get("type") == "process"

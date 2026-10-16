@@ -155,7 +155,7 @@ services:
       - ./platform/litellm/deploy/.env
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.21.3
+    image: ghcr.io/mlflow/mlflow:v3.14.0
     ports:
       - "5000:5000"
     command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]

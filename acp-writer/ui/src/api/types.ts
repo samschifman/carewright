@@ -267,7 +267,7 @@ export interface components {
                 name: string;
                 value: unknown;
                 /** @enum {string} */
-                source: "cpg-default" | "clinician" | "plan-derived" | "reviewer" | "authored";
+                source: "cpg-default" | "clinician" | "plan-derived" | "reviewer" | "authored" | "policy";
                 unit?: string;
                 note?: string;
             }[];

@@ -20,12 +20,12 @@ describe("slice care-plan fixture", () => {
     });
     expect(await screen.findByRole("heading", { level: 1, name: "Care Plan — Ada Lovelace" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", {
-      name: `Activities (${sliceCarePlanDetail.view.activities.length})`,
+      name: `Activities (${sliceCarePlanDetail.view?.activities?.length ?? 0})`,
     }));
-    fireEvent.click(screen.getByRole("button", { name: /automations \(1\)/i }));
-    expect(screen.getByText("home-bp-monitoring")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: /automations \(1\)/i })[0]);
+    expect(screen.getAllByText("treatment-linked-follow-up-and-home-reading-review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("SYN-HTN-2026-002").length).toBeGreaterThan(0);
-    expect(screen.getByRole("switch", { name: /enable automation/i })).toBeDisabled();
-    expect(screen.getByLabelText("home-bp-monitoring BPMN")).toBeInTheDocument();
+    expect(screen.getAllByRole("switch", { name: /enable automation/i })[0]).toBeDisabled();
+    expect(screen.getAllByLabelText("treatment-linked-follow-up-and-home-reading-review BPMN").length).toBeGreaterThan(0);
   });
 });

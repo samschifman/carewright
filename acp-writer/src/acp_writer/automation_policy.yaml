@@ -1,0 +1,13 @@
+# Operational defaults only. Sam reviews every change to this file.
+automation_policy:
+  parameters:
+    max_duration:
+      value: P90D
+      note: Operational fallback for the maximum lifetime of an automation run.
+    notification_urgency:
+      value: routine
+      enum: [routine]
+      note: Operational default for notification delivery urgency.
+    repeat_reminder_interval:
+      value: P1D
+      note: Operational interval between repeated reminders.

@@ -14,6 +14,8 @@ from cpg_contracts.automation.validators.grounding import (
     validate_template_structure,
     validate_template_text,
 )
+from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.validators.ladder import run_static_ladder
 from cpg_contracts.automation.validators.textmatch import contains, normalize
 
 
@@ -88,19 +90,70 @@ def test_week_duration_grounds_against_a_week_phrase() -> None:
     ir = fixture_ir()
     timer = next(item for item in ir.process.flowElements if item.id == "wait_interval")
     timer.timerEventDefinition.timeDuration = Literal_(literal="P7D", type="duration")
-    timer.acp.provenance.source_text = (
-        "If a week passes without readings, a reminder should be sent to the patient."
-    )
+    cited_text = "If a week passes without readings, a reminder should be sent to the patient."
+    timer.acp.provenance.source_text = cited_text
 
-    findings = findings_for(
-        ir,
-        "If a week passes without readings, a reminder should be sent to the patient.",
-    )
+    findings = findings_for(ir, cited_text)
 
     assert not any(
-        finding.code == "T4" and finding.element_id == "wait_interval"
+        finding.element_id == "wait_interval"
+        and finding.code in {"T4", "T4-value-uncorroborated"}
         for finding in findings
     )
+
+    ladder = run_static_ladder(
+        ir,
+        catalog=load_catalog(),
+        stage="template",
+        section_text=f"{SECTION}\n\n{cited_text}",
+    )
+    assert ladder.ok
+    assert not any(item.code == "T4-value-uncorroborated" for item in ladder.findings)
+
+
+def test_three_day_duration_warns_against_a_week_phrase() -> None:
+    ir = fixture_ir()
+    timer = next(item for item in ir.process.flowElements if item.id == "wait_interval")
+    timer.timerEventDefinition.timeDuration = Literal_(literal="P3D", type="duration")
+    cited_text = "If a week passes without readings, a reminder should be sent to the patient."
+    timer.acp.provenance.source_text = cited_text
+
+    warning = next(
+        finding for finding in findings_for(ir, cited_text)
+        if finding.code == "T4-value-uncorroborated"
+        and finding.element_id == "wait_interval"
+    )
+    assert warning.severity == "WARNING"
+    assert "P3D" in warning.message
+    assert cited_text in warning.message
+
+
+def test_numeric_literal_without_citation_remains_an_error() -> None:
+    ir = fixture_ir()
+    flow = next(item for item in ir.process.flowElements if item.id == "f_escalate")
+    flow.acp.provenance = None
+    flow.conditionExpression = "reminder_attempts >= 9"
+
+    finding = next(
+        finding for finding in findings_for(ir)
+        if finding.code == "T4" and finding.element_id == "f_escalate"
+    )
+    assert finding.severity == "ERROR"
+    assert "no source citation" in finding.message
+
+
+def test_duration_literal_without_citation_remains_an_error() -> None:
+    ir = fixture_ir()
+    timer = next(item for item in ir.process.flowElements if item.id == "wait_interval")
+    timer.timerEventDefinition.timeDuration = Literal_(literal="P7D", type="duration")
+    timer.acp.provenance = None
+
+    finding = next(
+        item for item in findings_for(ir)
+        if item.code == "T4" and item.element_id == "wait_interval"
+    )
+    assert finding.severity == "ERROR"
+    assert "no source citation" in finding.message
 
 
 def test_catalog_enum_input_is_not_required_to_appear_in_cpg_text() -> None:
@@ -197,7 +250,11 @@ def test_source_derived_numeric_literals_must_be_cited() -> None:
     flow = next(item for item in ir.process.flowElements if item.id == "f_escalate")
     flow.conditionExpression = "reminder_attempts >= 9"
 
-    assert "T4" in codes(findings_for(ir))
+    finding = next(
+        item for item in findings_for(ir)
+        if item.element_id == "f_escalate" and item.code == "T4-value-uncorroborated"
+    )
+    assert finding.severity == "WARNING"
 
 
 def test_enum_literals_must_match_catalog_and_be_grounded() -> None:

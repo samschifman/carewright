@@ -37,7 +37,7 @@ def _automation(*, enabled: bool = True) -> ActivityAutomation:
         ParameterBinding(name="repeat_due", value="PT5M", source="cpg-default"),
         ParameterBinding(name="notify_systolic_threshold", value=135, source="clinician", unit="mm[Hg]"),
         ParameterBinding(name="max_reminder_attempts", value=3, source="cpg-default"),
-        ParameterBinding(name="max_duration", value="P90D", source="plan-derived"),
+        ParameterBinding(name="max_duration", value="P90D", source="policy", note="Policy parameter 'max_duration': operational fallback."),
         ParameterBinding(name="reminder_text", value="Submit home readings.", source="authored"),
         ParameterBinding(name="request_readings__code", value="http://loinc.org|85354-9", source="plan-derived"),
         ParameterBinding(name="query_systolic__code", value="http://loinc.org|8480-6", source="plan-derived"),
@@ -209,6 +209,7 @@ def test_persisted_bundle_reconstructs_activity_automation_for_the_ui():
     assert bindings["reporting_interval"]["value"] == 7
     assert bindings["reporting_interval"]["unit"] == "d"
     assert bindings["reporting_interval"]["source"] == "cpg-default"
+    assert bindings["max_duration"]["source"] == "policy"
 
 
 def test_inline_activity_does_not_add_task_focus():

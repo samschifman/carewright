@@ -626,6 +626,21 @@ def test_single_template_instance_passes_all_instance_checks() -> None:
     assert validate_instance(instance, [template], context) == []
 
 
+def test_policy_is_an_allowed_instance_binding_source() -> None:
+    instance, template, context = make_instance()
+    context.bindings = [
+        ParameterBinding(
+            name=binding.name,
+            value=binding.value,
+            source="policy" if binding.name == "max_duration" else binding.source,
+            note="Policy parameter 'max_duration': operational fallback.",
+        )
+        for binding in context.bindings
+    ]
+
+    assert validate_instance(instance, [template], context) == []
+
+
 def test_retained_element_must_resolve_to_its_template_element() -> None:
     instance, template, context = make_instance()
     task = next(item for item in instance.process.flowElements if item.id == "notify")

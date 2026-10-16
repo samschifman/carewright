@@ -7,6 +7,7 @@ with ``__mlflow_traced__`` — assert it is present.
 """
 
 from acp_writer.planning_brief import coerce_conflicts
+from acp_writer.automation_policy import load_automation_policy, validate_automation_policy
 from acp_writer.services.ai_transparency import (
     build_conflict_provenance,
     plan_conflict_from_provenance,
@@ -36,5 +37,7 @@ def test_conflict_functions_are_traced():
         enrich_run_detail,
         _automation_view_from_fhir_extension,
         _extract_view_from_bundle,
+        load_automation_policy,
+        validate_automation_policy,
     ):
         assert getattr(fn, "__mlflow_traced__", False), f"{fn.__name__} is not @mlflow.trace-decorated"

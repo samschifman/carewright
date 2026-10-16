@@ -153,6 +153,110 @@ def _normalize_template_ir(raw_ir: dict, state: dict) -> dict:
         existing_ids.update((gateway_id, flow_id))
 
     elements.extend(joins)
+
+    # Structural annotations and node labels are deterministic contract data.
+    # Fill omissions here so the validator sees a complete IR, while preserving
+    # any values authored by the creator. Behaviour-changing elements are
+    # deliberately excluded: their source provenance must come from the CPG.
+    flow_nodes = [
+        element for element in elements
+        if isinstance(element, dict) and element.get("type") != "sequenceFlow"
+    ]
+    by_id = {
+        element.get("id"): element
+        for element in elements
+        if isinstance(element, dict) and isinstance(element.get("id"), str)
+    }
+    incoming_by_node: dict[str, list[dict]] = {}
+    outgoing_by_node: dict[str, list[dict]] = {}
+    for element in elements:
+        if not isinstance(element, dict) or element.get("type") != "sequenceFlow":
+            continue
+        source = element.get("sourceRef")
+        target = element.get("targetRef")
+        if isinstance(source, str):
+            outgoing_by_node.setdefault(source, []).append(element)
+        if isinstance(target, str):
+            incoming_by_node.setdefault(target, []).append(element)
+
+    def add_structural_provenance(element: dict, rule: str, supports: list[str]) -> None:
+        acp = element.get("acp")
+        if not isinstance(acp, dict):
+            acp = {}
+            element["acp"] = acp
+        if acp.get("provenance") is None:
+            acp["provenance"] = {
+                "kind": "structural",
+                "derivation_rule": rule,
+                "supports": supports,
+            }
+
+    for element in flow_nodes:
+        element_id = element.get("id")
+        if not isinstance(element_id, str):
+            continue
+        if not isinstance(element.get("name"), str) or not element["name"].strip():
+            element["name"] = element_id.replace("_", " ").capitalize()
+
+        element_type = element.get("type")
+        if element_type == "startEvent":
+            supports = sorted(
+                flow.get("targetRef") for flow in outgoing_by_node.get(element_id, [])
+                if isinstance(flow.get("targetRef"), str)
+            )
+            add_structural_provenance(element, "start-event", supports)
+        elif element_type == "endEvent":
+            supports = sorted(
+                flow.get("sourceRef") for flow in incoming_by_node.get(element_id, [])
+                if isinstance(flow.get("sourceRef"), str)
+            )
+            add_structural_provenance(element, "end-event", supports)
+        elif (
+            element_type == "exclusiveGateway"
+            and element.get("gatewayDirection") == "Converging"
+        ):
+            supports = sorted(
+                flow.get("sourceRef") for flow in incoming_by_node.get(element_id, [])
+                if isinstance(flow.get("sourceRef"), str)
+            )
+            add_structural_provenance(element, "exclusive-join", supports)
+
+        if element_type == "task":
+            acp = element.get("acp")
+            counter = acp.get("counter") if isinstance(acp, dict) else None
+            properties = process.get("properties")
+            if not isinstance(properties, list):
+                properties = []
+                process["properties"] = properties
+            if (
+                isinstance(counter, str)
+                and counter
+                and not any(
+                    isinstance(prop, dict) and prop.get("name") == counter
+                    for prop in properties
+                )
+            ):
+                properties.append({"name": counter, "type": "integer"})
+
+    for element in elements:
+        if not isinstance(element, dict) or element.get("type") != "sequenceFlow":
+            continue
+        source_id = element.get("sourceRef")
+        target_id = element.get("targetRef")
+        if not isinstance(source_id, str) or not isinstance(target_id, str):
+            continue
+        source = by_id.get(source_id, {})
+        is_default = (
+            isinstance(element.get("id"), str)
+            and source.get("type") == "exclusiveGateway"
+            and source.get("gatewayDirection") == "Diverging"
+            and source.get("default") == element.get("id")
+        )
+        if is_default:
+            add_structural_provenance(element, "default-flow", [source_id, target_id])
+        elif element.get("conditionExpression") is None:
+            add_structural_provenance(element, "sequence", [source_id, target_id])
+
     return raw_ir
 
 

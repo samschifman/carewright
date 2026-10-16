@@ -337,10 +337,14 @@ def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp
             goals=[],
             activities=[activity],
         )
-        # This is the PHI-safe projection of saved attempt-3: retain its
-        # max_duration proposal, drop the model-authored IR and defaulted text,
-        # and replace the free-text reason with a non-patient-specific summary.
+        # This is the PHI-safe projection of saved attempt-3: drop the
+        # model-authored IR, defaulted text, and max_duration proposal so the
+        # packaged operational policy supplies the reserved run window.
         saved_bindings = json.loads((REPLAY / "automation-bindings.json").read_text())
+        saved_bindings["bindings"] = [
+            binding for binding in saved_bindings.get("bindings", [])
+            if binding.get("name") != "max_duration"
+        ]
         llm = SavedResponseLLM(saved_bindings)
 
         def validate_through_registry(payload):
@@ -360,6 +364,10 @@ def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp
         )
         assert len(activity.automations) == 1
         assert activity.automations[0].validation.status == "valid"
+        assert next(
+            binding for binding in activity.automations[0].bindings
+            if binding.name == "max_duration"
+        ).source == "policy"
 
         generated = fhir_bundle_generator({
             "planning_brief": brief.model_dump(mode="json", exclude_none=True),
@@ -589,8 +597,6 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
                 found=False, system=system, code=None,
             ),
         )
-        monkeypatch.setenv("ACP_AUTOMATION_DEFAULT_MONITORING_PERIOD", "P90D")
-
         def validate_registered_template_summaries(payload):
             response = decision_client.post("/api/v1/automation/validate", json=payload)
             assert response.status_code == 200
@@ -637,6 +643,10 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
         assert valid_payload["validation"]["rungs_passed"] == [
             "L0", "L1", "L2", "L3", "L4", "L5a", "L6", "L7",
         ]
+        assert next(
+            binding for binding in valid_payload["bindings"]
+            if binding["name"] == "max_duration"
+        )["source"] == "policy"
 
         approved = fhir_writer_client.put(
             f"/api/v1/careplans/{CAREPLAN_ID}/status",

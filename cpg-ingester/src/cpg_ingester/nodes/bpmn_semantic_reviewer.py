@@ -62,6 +62,10 @@ def bpmn_semantic_reviewer(state: dict) -> dict:
     process_ir = state.get("process_ir", {})
     item = state.get("item", {})
     sibling_items = state.get("sibling_items", []) or []
+    mechanical_warnings = [
+        finding for finding in (state.get("static_findings", []) or [])
+        if isinstance(finding, dict) and str(finding.get("severity", "")).upper() == "WARNING"
+    ]
     source_pages = state.get("source_pages", "")
     output_dir = state.get("output_dir", "output")
     retry_count = state.get("semantic_retry_count", 0)
@@ -95,6 +99,12 @@ def bpmn_semantic_reviewer(state: dict) -> dict:
                 sibling_items,
                 indent=2,
                 ensure_ascii=False,
+            ),
+            mechanical_warnings=json.dumps(
+                mechanical_warnings,
+                indent=2,
+                ensure_ascii=False,
+                default=str,
             ),
             process_ir=json.dumps(process_ir, indent=2, ensure_ascii=False, default=str),
             source_pages=source_pages,

@@ -35,6 +35,8 @@ Classify discrepancies:
 - MINOR: naming or organizational differences that do not change behavior.
 
 Only CRITICAL discrepancies trigger repair. Return the required JSON schema.
+Mechanical warnings are claims to verify against the source, not findings to
+repeat; report only independently verified clinical discrepancies.
 """
 
 BPMN_SEMANTIC_REVIEWER_USER = """\
@@ -50,6 +52,11 @@ This item's scope (steps, trigger hint, timing cues, and actors):
 Sibling process items from overlapping source sections:
 ```json
 {sibling_items}
+```
+
+Mechanical warnings to judge:
+```json
+{mechanical_warnings}
 ```
 
 Generated ProcessIR:

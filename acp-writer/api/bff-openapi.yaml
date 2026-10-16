@@ -396,7 +396,7 @@ components:
             properties:
               name: { type: string }
               value: {}
-              source: { type: string, enum: [cpg-default, clinician, plan-derived, reviewer, authored] }
+              source: { type: string, enum: [cpg-default, clinician, plan-derived, reviewer, authored, policy] }
               unit: { type: string }
               note: { type: string }
         validation:

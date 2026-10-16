@@ -23,6 +23,7 @@ from cpg_contracts.automation.validators.ladder import run_static_ladder
 from cpg_contracts.automation.validators.results import Finding
 
 from acp_writer.llm_json import loads_json
+from acp_writer.automation_policy import load_automation_policy
 from acp_writer.nodes.automation_binding import bind_instance, known_phi_values
 from acp_writer.nodes.automation_selection import select_templates
 from acp_writer.prompts.automation_reviewer import (
@@ -514,6 +515,10 @@ def synthesize_for_activity(
 
     for template in selected:
         template_ir = _template_ir(template)
+        automation_policy = load_automation_policy(
+            [template_ir],
+            configured=_field(state, "automation_policy", {}) or {},
+        )
         template_json = _json(template_ir)
         automation_id = _new_automation_id()
         instance_base = _instance_from_template(template, automation_id)
@@ -522,7 +527,7 @@ def synthesize_for_activity(
             [template_ir],
             activity=activity,
             brief=brief,
-            policy=_field(state, "automation_policy", {}) or {},
+            policy=automation_policy,
         )
         requested_bindings_json = _json(_binding_requests(template_ir, plan_facts))
         record_attempt = _artifact_response_recorder(
@@ -574,7 +579,7 @@ def synthesize_for_activity(
                 [template_ir],
                 activity=activity,
                 brief=brief,
-                policy=_field(state, "automation_policy", {}) or {},
+                policy=automation_policy,
                 initial_bindings=raw_bindings,
             )
             context = _context(candidate_bindings, evidence, brief, activity)

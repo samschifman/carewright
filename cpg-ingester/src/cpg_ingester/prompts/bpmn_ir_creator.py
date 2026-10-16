@@ -47,7 +47,8 @@ elements to the IR:
    TaskName work parameter.
 2. M2 binds a businessRuleTask to the named DMN model and maps its inputs and
    outputs.
-3. M3 adds counter properties/scripts and reset scripts for repeated work.
+3. M3 adds the increment, init and reset scripts for a task's acp.counter; the
+   counter is an integer property (declared by you or added for you).
 4. M4 wraps the flow in the `main` sub-process and adds outcome routing.
 5. M5 serializes provenance and template metadata as `acp` extension blocks.
 6. M6 turns timer parameter references into Kogito timer expressions.
@@ -63,6 +64,7 @@ The source quote must support the element's meaning. Structural elements use
 one of the schema's closed `derivation_rule` values and `supports` ids:
 start-event, end-event, sequence, exclusive-split, exclusive-join,
 default-flow, or plan-bound. Do not label a clinical action as structural.
+Structural provenance and flow-node names are filled when omitted.
 No source-derived element may use free-text literals. Free text is a string
 parameter with authored provenance. Enum and unit literals must come from the
 catalog. Quantity units must match the receiving property. Numeric and

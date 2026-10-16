@@ -19,6 +19,7 @@ from cpg_contracts.automation.ir import (
     Task,
 )
 from cpg_contracts.automation.validators.results import Finding
+from acp_writer.automation_policy import validate_automation_policy
 from acp_writer.tools.concept_resolver import resolve as resolve_concept
 from acp_writer.tools.terminology_lookup import LOINC_SYSTEM, find as find_terminology_concept
 
@@ -220,6 +221,8 @@ def bind_instance(
     result_ir = instance_ir.model_copy(deep=True)
     process = result_ir.process
     template_processes = _template_processes(templates)
+    policy = validate_automation_policy(list(template_processes.values()), policy)
+    policy_parameters = policy.get("parameters", {})
     bindings: dict[str, ParameterBinding] = {}
     findings: list[Finding] = []
     evidence: dict[str, Evidence] = {}
@@ -362,9 +365,14 @@ def bind_instance(
             max_source = "plan-derived"
             max_note = "Bound from CarePlan.period."
         else:
-            raw_default = policy.get(
-                "environment_default",
-                os.getenv("ACP_AUTOMATION_DEFAULT_MONITORING_PERIOD", "P90D"),
+            configured_max_duration = policy_parameters.get("max_duration")
+            raw_default = (
+                configured_max_duration.get("value")
+                if isinstance(configured_max_duration, Mapping)
+                else policy.get(
+                    "environment_default",
+                    os.getenv("ACP_AUTOMATION_DEFAULT_MONITORING_PERIOD", "P90D"),
+                )
             )
             try:
                 max_duration = normalize_duration(str(raw_default))
@@ -375,8 +383,15 @@ def bind_instance(
                     message="policy monitoring-period default is not a supported ISO duration",
                     element_id="max_duration",
                 ))
-            max_source = "plan-derived"
-            max_note = "Bound from policy automation.default_monitoring_period."
+            if isinstance(configured_max_duration, Mapping):
+                max_source = "policy"
+                max_note = (
+                    "Policy parameter 'max_duration': "
+                    f"{configured_max_duration['note']}"
+                )
+            else:
+                max_source = "plan-derived"
+                max_note = "Bound from policy automation.default_monitoring_period."
 
     if max_duration is not None and any(p.name == "max_duration" for p in process.acp.parameters):
         bindings["max_duration"] = ParameterBinding(
@@ -384,7 +399,40 @@ def bind_instance(
         )
         evidence["ev-monitoring-period"] = Evidence(
             kind="monitoring-period",
-            payload={"value": max_duration, "source": max_source, "note": max_note},
+            payload={
+                "value": max_duration,
+                "source": max_source,
+                "note": max_note,
+                **({"policy_key": "max_duration"} if max_source == "policy" else {}),
+            },
+        )
+
+    for parameter in process.acp.parameters:
+        entry = policy_parameters.get(parameter.name)
+        if (
+            not parameter.required
+            or parameter.default is not None
+            or parameter.name in bindings
+            or not isinstance(entry, Mapping)
+        ):
+            continue
+        note = f"Policy parameter '{parameter.name}': {entry['note']}"
+        binding = ParameterBinding(
+            name=parameter.name,
+            value=entry["value"],
+            source="policy",
+            unit=entry.get("unit"),
+            note=note,
+        )
+        bindings[parameter.name] = binding
+        evidence[f"ev-policy-{parameter.name}"] = Evidence(
+            kind="policy-parameter",
+            payload={
+                "policy_key": parameter.name,
+                "value": entry["value"],
+                "note": entry["note"],
+                **({"unit": entry["unit"]} if entry.get("unit") is not None else {}),
+            },
         )
 
     for parameter in process.acp.parameters:

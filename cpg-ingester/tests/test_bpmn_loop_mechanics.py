@@ -14,10 +14,12 @@ from cpg_ingester.generation import (
     _bpmn_escalate,
     _bpmn_source_sections,
     _route_after_bpmn_engine,
+    _route_after_bpmn_validation,
     bpmn_engine_preflight,
     generate_all,
 )
 from cpg_ingester.nodes.bpmn_ir_creator import _normalize_template_ir, bpmn_ir_creator
+from cpg_ingester.nodes.bpmn_semantic_reviewer import bpmn_semantic_reviewer
 from cpg_ingester.nodes.dmn_creator import dmn_creator
 from cpg_ingester.nodes.rec_extractor import rec_extractor
 
@@ -160,6 +162,126 @@ def test_implicit_join_is_normalized_before_l0(tmp_path):
     assert elements["request_readings_join"]["gatewayDirection"] == "Converging"
     assert elements["request_readings_join_in"]["sourceRef"] == "request_readings_join"
     assert elements["request_readings_join_in"]["targetRef"] == "request_readings"
+
+
+def test_normalizer_fills_omitted_structural_data_before_l0(tmp_path):
+    raw = _ir()
+    process = raw["process"]
+    counter_names = {
+        element.get("acp", {}).get("counter")
+        for element in process["flowElements"]
+        if element.get("type") == "task"
+    }
+    process["properties"] = [
+        prop for prop in process.get("properties", [])
+        if prop.get("name") not in counter_names
+    ]
+    by_id = {element["id"]: element for element in process["flowElements"]}
+    for element in process["flowElements"]:
+        if element["type"] != "sequenceFlow":
+            element.pop("name", None)
+        if element["type"] in {"startEvent", "endEvent"}:
+            element.get("acp", {}).pop("provenance", None)
+        elif (
+            element["type"] == "exclusiveGateway"
+            and element.get("gatewayDirection") == "Converging"
+        ):
+            element.get("acp", {}).pop("provenance", None)
+        elif element["type"] == "sequenceFlow":
+            source = by_id.get(element.get("sourceRef"), {})
+            is_default = source.get("default") == element["id"]
+            if is_default or element.get("conditionExpression") is None:
+                element.get("acp", {}).pop("provenance", None)
+
+    normalized = _normalize_template_ir(raw, _state(tmp_path))
+    result = run_static_ladder(
+        ProcessIR.model_validate(normalized),
+        catalog=load_catalog(),
+        stage="template",
+        section_text=SOURCE_TEXT,
+    )
+    normalized_process = normalized["process"]
+    normalized_by_id = {element["id"]: element for element in normalized_process["flowElements"]}
+
+    assert result.rungs_passed and result.rungs_passed[0] == "L0"
+    assert normalized_by_id["start"]["name"] == "Start"
+    assert normalized_by_id["start"]["acp"]["provenance"]["derivation_rule"] == "start-event"
+    assert normalized_by_id["end_period"]["acp"]["provenance"]["derivation_rule"] == "end-event"
+    assert any(
+        element.get("acp", {}).get("provenance", {}).get("derivation_rule") == "sequence"
+        for element in normalized_process["flowElements"]
+        if element["type"] == "sequenceFlow"
+    )
+    sequence_flow = next(
+        element for element in normalized_process["flowElements"]
+        if element["type"] == "sequenceFlow"
+        and element.get("acp", {}).get("provenance", {}).get("derivation_rule") == "sequence"
+    )
+    assert sequence_flow["acp"]["provenance"]["supports"] == [
+        sequence_flow["sourceRef"], sequence_flow["targetRef"],
+    ]
+    assert all(
+        normalized_by_id[gateway["default"]]["acp"]["provenance"]["derivation_rule"] == "default-flow"
+        for gateway in normalized_process["flowElements"]
+        if gateway["type"] == "exclusiveGateway" and gateway.get("default")
+    )
+    assert all(
+        prop["type"] == "integer"
+        for prop in normalized_process["properties"]
+        if prop["name"] in counter_names
+    )
+
+
+def test_normalizer_leaves_populated_structural_data_unchanged(tmp_path):
+    once = _normalize_template_ir(_ir(), _state(tmp_path))
+    twice = _normalize_template_ir(deepcopy(once), _state(tmp_path))
+
+    assert twice == once
+
+
+def test_normalizer_does_not_invent_source_provenance(tmp_path):
+    raw = _ir()
+    task = next(
+        element for element in raw["process"]["flowElements"]
+        if element["id"] == "request_readings"
+    )
+    task["acp"].pop("provenance", None)
+
+    normalized = _normalize_template_ir(raw, _state(tmp_path))
+    normalized_task = next(
+        element for element in normalized["process"]["flowElements"]
+        if element["id"] == "request_readings"
+    )
+
+    assert "provenance" not in normalized_task["acp"]
+
+
+def test_l5b_warning_is_nonblocking_and_is_given_to_reviewer(tmp_path, monkeypatch):
+    warning = {
+        "rung": "L5b",
+        "severity": "WARNING",
+        "code": "T4-value-uncorroborated",
+        "element_id": "wait_interval",
+        "message": "literal 'P7D' is not corroborated by its cited text",
+    }
+    assert _route_after_bpmn_validation({"static_findings": [warning]}) == "bpmn_semantic_reviewer"
+
+    llm = ScriptedLLM([_review()])
+    monkeypatch.setattr(
+        "cpg_ingester.nodes.bpmn_semantic_reviewer.get_llm", lambda _state: llm
+    )
+    bpmn_semantic_reviewer({
+        "process_ir": _ir(),
+        "item": {"name": "Home BP monitoring"},
+        "source_pages": "Source text for the saved replay.",
+        "static_findings": [warning],
+        "output_dir": str(tmp_path),
+    })
+
+    user_prompt = llm.calls[0][1]["content"]
+    assert "Mechanical warnings to judge" in user_prompt
+    assert "T4-value-uncorroborated" in user_prompt
+    assert "P7D" in user_prompt
 
 
 def test_creator_reports_when_join_normalizer_fires(tmp_path, monkeypatch):
@@ -415,9 +537,12 @@ def test_existing_converging_gateway_is_not_rewritten(tmp_path):
 
     assert normalized_elements["loop_entry"] == original_gateway
     assert {
-        element_id: normalized_elements[element_id]
+        element_id: normalized_elements[element_id]["targetRef"]
         for element_id in original_incoming
-    } == original_incoming
+    } == {
+        element_id: element["targetRef"]
+        for element_id, element in original_incoming.items()
+    }
 
 
 def test_model_named_join_gateway_is_valid_and_unchanged(tmp_path):

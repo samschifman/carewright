@@ -51,4 +51,14 @@ describe("AutomationSection", () => {
     expect(screen.getByRole("switch", { name: /enable automation/i })).toBeDisabled();
     expect(screen.getByText("Review needed")).toBeInTheDocument();
   });
+
+  it("shows a policy badge for operational defaults", () => {
+    render(<AutomationSection automations={[automation({
+      bindings: [{ name: "max_duration", value: "P90D", source: "policy" }],
+    })]} />);
+    fireEvent.click(screen.getByRole("button", { name: /automations \(1\)/i }));
+
+    expect(screen.getByText("Policy")).toBeInTheDocument();
+    expect(screen.getByText(/max_duration/)).toBeInTheDocument();
+  });
 });

@@ -719,14 +719,43 @@ def _text_literal_checks(
             for candidate in candidates
         )
 
+    def check_source_bound_literal(
+        element: FlowElement,
+        value: Any,
+        label: str,
+        candidates: Sequence[str | Sequence[str]] | None = None,
+    ) -> None:
+        source_text = _source_for(element)
+        if source_text is None or not source_text.strip():
+            findings.append(
+                _finding(
+                    "T4",
+                    f"literal {value!r} on {element.id!r}.{label} has no source citation",
+                    element_id=element.id,
+                    rung="L5b",
+                )
+            )
+        elif not _contains_any(
+            source_text,
+            candidates or [str(value)],
+            abbreviations,
+        ):
+            findings.append(
+                _finding(
+                    "T4-value-uncorroborated",
+                    f"literal {value!r} on {element.id!r}.{label} is not corroborated by its cited text: {source_text!r}",
+                    element_id=element.id,
+                    severity="WARNING",
+                    rung="L5b",
+                )
+            )
+
     for element in process.flowElements:
         source_text = _source_for(element)
-        if source_text is None:
-            continue
         if isinstance(element, Task):
             for input_name, value in element.inputs.items():
                 if isinstance(value, ConceptRef):
-                    if not concept_in_text(value.concept, source_text):
+                    if source_text is not None and not concept_in_text(value.concept, source_text):
                         findings.append(
                             _finding(
                                 "T4",
@@ -743,20 +772,24 @@ def _text_literal_checks(
                         # not clinical values that must appear in CPG prose.
                         cited = True
                     elif value.type in _NUMERIC_TYPES:
-                        cited = _contains_any(
-                            source_text,
+                        check_source_bound_literal(
+                            element,
+                            value.literal,
+                            input_name,
                             _numeric_aliases(value.literal),
-                            abbreviations,
                         )
+                        continue
                     elif value.type == "duration":
-                        cited = _contains_any(
-                            source_text,
+                        check_source_bound_literal(
+                            element,
+                            value.literal,
+                            input_name,
                             _duration_alias_groups(value.literal),
-                            abbreviations,
                         )
+                        continue
                     else:
                         cited = True
-                    if not cited:
+                    if source_text is not None and not cited:
                         findings.append(
                             _finding(
                                 "T4",
@@ -768,21 +801,14 @@ def _text_literal_checks(
         if isinstance(element, (IntermediateCatchEvent, BoundaryEvent)):
             timer = element.timerEventDefinition.timeDuration or element.timerEventDefinition.timeCycle
             if isinstance(timer, Literal_) and timer.type in {"duration", "quantity", "integer", "decimal"}:
-                if not _contains_any(
-                    source_text,
+                check_source_bound_literal(
+                    element,
+                    timer.literal,
+                    "timer",
                     _duration_alias_groups(timer.literal)
                     if timer.type == "duration"
                     else _numeric_aliases(timer.literal),
-                    abbreviations,
-                ):
-                    findings.append(
-                        _finding(
-                            "T4",
-                            f"timer literal {timer.literal!r} on {element.id!r} is absent from its source text",
-                            element_id=element.id,
-                            rung="L5b",
-                        )
-                    )
+                )
         if isinstance(element, SequenceFlow) and element.conditionExpression:
             try:
                 expression_literals = literals(parse(element.conditionExpression))
@@ -797,20 +823,14 @@ def _text_literal_checks(
                     and value in (0, 1)
                 ):
                     continue
-                candidates = (
+                check_source_bound_literal(
+                    element,
+                    value,
+                    "condition",
                     _duration_alias_groups(value)
                     if literal_type == "duration"
-                    else _numeric_aliases(value)
+                    else _numeric_aliases(value),
                 )
-                if not _contains_any(source_text, candidates, abbreviations):
-                    findings.append(
-                        _finding(
-                            "T4",
-                            f"condition literal {value!r} on {element.id!r} is absent from its source text",
-                            element_id=element.id,
-                            rung="L5b",
-                        )
-                    )
     return findings
 
 
@@ -1643,7 +1663,7 @@ def _check_bindings_and_invariants(
     findings: list[Finding] = []
     indexed, _ = _binding_index(context)
     known_parameters = {parameter.name for parameter in process.acp.parameters}
-    allowed_sources = {"cpg-default", "clinician", "plan-derived", "reviewer", "authored"}
+    allowed_sources = {"cpg-default", "clinician", "plan-derived", "reviewer", "authored", "policy"}
     for binding_name, bindings in indexed.items():
         if binding_name not in known_parameters and not binding_name.endswith("__code"):
             findings.append(

@@ -206,6 +206,133 @@ def test_cpg_enum_parameter_binds_from_unambiguous_dmn_output():
     assert not [finding for finding in findings if finding.element_id == "treatment_action"]
 
 
+def test_policy_binds_required_operational_parameter_and_records_evidence():
+    template, instance = _template_and_instance()
+    parameter = Parameter(
+        name="delivery_check_window",
+        type="duration",
+        required=True,
+        description="Operational window for checking delivery status.",
+    )
+    template.process.acp.parameters.append(parameter)
+    instance.process.acp.parameters.append(parameter.model_copy(deep=True))
+    version = ir_version(template)
+    instance.process.acp.template_refs = [TemplateRef(
+        template_id=template.process.id,
+        version=version,
+    )]
+    for element in instance.process.flowElements:
+        element.acp.template_ref.version = version
+
+    _, bindings, evidence, findings = bind_instance(
+        instance,
+        [template],
+        activity={"id": "activity-1"},
+        brief={},
+        policy={"parameters": {
+            "delivery_check_window": {
+                "value": "PT1H",
+                "note": "Operational check window.",
+            },
+        }},
+    )
+
+    binding = next(item for item in bindings if item.name == "delivery_check_window")
+    assert binding.source == "policy"
+    assert "delivery_check_window" in binding.note
+    assert evidence["ev-policy-delivery_check_window"].payload["policy_key"] == "delivery_check_window"
+    assert not [item for item in findings if item.element_id == "delivery_check_window"]
+
+
+def test_threshold_parameter_is_rejected_from_policy():
+    for parameter in (
+        Parameter(
+            name="review_threshold_window",
+            type="duration",
+            required=True,
+            description="A threshold used to determine review urgency.",
+        ),
+        Parameter(
+            name="review_threshold_window",
+            type="duration",
+            required=True,
+            description="Operational scheduling window.",
+            source=SourceRef(kind="cpg", source_text="The review threshold is source-defined."),
+        ),
+    ):
+        template, instance = _template_and_instance()
+        template.process.acp.parameters.append(parameter)
+        instance.process.acp.parameters.append(parameter.model_copy(deep=True))
+        version = ir_version(template)
+        instance.process.acp.template_refs = [TemplateRef(
+            template_id=template.process.id,
+            version=version,
+        )]
+        for element in instance.process.flowElements:
+            element.acp.template_ref.version = version
+
+        with pytest.raises(ValueError, match="threshold parameter"):
+            bind_instance(
+                instance,
+                [template],
+                activity={"id": "activity-1"},
+                brief={},
+                policy={"parameters": {
+                    "review_threshold_window": {"value": "PT1H", "note": "Operational."},
+                }},
+            )
+
+
+def test_packaged_policy_contains_only_valid_operational_parameters():
+    from acp_writer.automation_policy import load_automation_policy
+
+    template, instance = _template_and_instance()
+    policy = load_automation_policy([template])
+
+    assert policy["parameters"]["max_duration"]["value"] == "P90D"
+    assert policy["parameters"]["notification_urgency"]["value"] == "routine"
+    assert policy["parameters"]["notification_urgency"]["enum"] == ["routine"]
+    assert policy["parameters"]["repeat_reminder_interval"]["value"] == "P1D"
+
+    _, bindings, _, _ = bind_instance(
+        instance,
+        [template],
+        activity={"id": "activity-1"},
+        brief={},
+        policy=policy,
+    )
+    bound_names = {binding.name for binding in bindings}
+    assert "notification_urgency" not in bound_names
+    assert "repeat_reminder_interval" not in bound_names
+
+
+def test_policy_loader_rejects_quantity_and_code_entries():
+    from acp_writer.automation_policy import validate_automation_policy
+
+    template, _ = _template_and_instance()
+    quantity = Parameter(
+        name="weight",
+        type="quantity",
+        required=True,
+        unit="kg",
+        description="Operational measurement.",
+    )
+    template.process.acp.parameters.append(quantity)
+
+    with pytest.raises(ValueError, match="cannot bind quantity"):
+        validate_automation_policy(
+            [template],
+            {"parameters": {"weight": {"value": 70, "unit": "kg", "note": "Operational."}}},
+        )
+    with pytest.raises(ValueError, match="quantity/code entry"):
+        validate_automation_policy(
+            [template],
+            {"parameters": {
+                "request_readings__code": {"value": "system|code", "note": "No codes."},
+            }},
+        )
+
+
 def test_known_phi_values_collect_names_identifiers_and_birth_date():
     assert known_phi_values({
         "name": "Ada Patient",

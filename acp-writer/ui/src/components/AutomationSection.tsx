@@ -78,13 +78,14 @@ export function AutomationSection({ automations }: AutomationSectionProps) {
                         <dd>
                           {String(binding.value)}{binding.unit ? ` ${binding.unit}` : ""}
                           {` · ${binding.source}`}
+                          {binding.source === "policy" && <Label color="blue">Policy</Label>}
                         </dd>
                       </div>
                     ))}
                   </dl>
                 )}
-                {automation.validation.warnings?.map((warning) => (
-                  <p key={warning}><Label color="orange">Warning</Label> {warning}</p>
+                {automation.validation.warnings?.map((warning, index) => (
+                  <p key={`${warning}-${index}`}><Label color="orange">Warning</Label> {warning}</p>
                 ))}
                 <BpmnViewer
                   xml={automation.bpmnXml}

@@ -141,7 +141,10 @@ class TestPlanActivityFromEntry:
                 "revision": "b" * 12,
                 "bpmn_xml": "<bpmn:definitions />",
                 "capabilities_used": ["patient.request_observation"],
-                "bindings": [{"name": "reporting_interval", "value": "P1W", "source": "cpg-default"}],
+                "bindings": [
+                    {"name": "reporting_interval", "value": "P1W", "source": "cpg-default"},
+                    {"name": "max_duration", "value": "P90D", "source": "policy"},
+                ],
                 "validation": {"status": "valid", "rungs_passed": ["L0"], "warnings": [], "errors": []},
                 "review_notes": [],
             }],
@@ -150,6 +153,7 @@ class TestPlanActivityFromEntry:
         assert automation["enabled"] is True
         assert automation["templateRefs"][0]["sourceCpg"] == "SYN-HTN-2026-002"
         assert automation["bindings"][0]["name"] == "reporting_interval"
+        assert automation["bindings"][1]["source"] == "policy"
         assert automation["validation"]["status"] == "valid"
 
 

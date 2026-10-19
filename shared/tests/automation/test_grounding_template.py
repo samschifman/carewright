@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from pathlib import Path
 
+import pytest
+
 from cpg_contracts.automation.ir import (
+    Constraints,
     Literal_,
+    Parameter,
     SourceRef,
     StructuralProvenance,
 )
@@ -176,21 +179,129 @@ def test_authored_defaults_are_only_allowed_for_string_parameters() -> None:
     assert "T2" in codes(validate_template_structure(ir))
 
 
-def test_reviewer_default_must_keep_cpg_citation_and_satisfy_constraints() -> None:
+def test_reviewer_numeric_default_keeps_cpg_citation_but_is_not_token_checked() -> None:
     ir = fixture_ir()
     parameter = next(item for item in ir.process.acp.parameters if item.name == "max_reminder_attempts")
     parameter.source = SourceRef(
         kind="reviewer",
         reviewer="Reviewer",
         note="Updated after review",
-        previous=deepcopy(parameter.source),
+        previous=SourceRef(
+            kind="cpg",
+            source_text="After four attempts the team should contact the patient.",
+        ),
     )
-    parameter.default = 8
+    parameter.default = 3
 
-    assert "T2" in codes(validate_template_structure(ir))
+    assert "T2" not in codes(validate_template_structure(ir))
+    assert not any(
+        finding.code == "T2" and finding.element_id == parameter.name
+        for finding in findings_for(ir)
+    )
 
 
-def test_reviewer_default_without_previous_cpg_citation_is_rejected() -> None:
+@pytest.mark.parametrize(
+    ("parameter_type", "default", "constraints"),
+    [
+        ("duration", "PT1S", None),
+        ("boolean", True, None),
+        ("string", "selected", Constraints(enum=["selected", "other"])),
+    ],
+)
+def test_reviewer_cpg_citation_is_valid_for_non_numeric_default_types(
+    parameter_type, default, constraints
+) -> None:
+    ir = fixture_ir()
+    parameter = Parameter(
+        name=f"reviewed_{parameter_type}_value",
+        type=parameter_type,
+        required=True,
+        default=default,
+        constraints=constraints,
+        source=SourceRef(
+            kind="reviewer",
+            reviewer="Reviewer",
+            note="Updated after review",
+            previous=SourceRef(kind="cpg", source_text="The original citation."),
+        ),
+    )
+    ir.process.acp.parameters.append(parameter)
+
+    assert not any(
+        finding.code == "T2" and finding.element_id == parameter.name
+        for finding in validate_template_structure(ir)
+    )
+    assert not any(
+        finding.code == "T2" and finding.element_id == parameter.name
+        for finding in findings_for(ir)
+    )
+
+
+def test_reviewer_string_default_may_replace_authored_text() -> None:
+    ir = fixture_ir()
+    parameter = next(item for item in ir.process.acp.parameters if item.name == "instructions_text")
+    parameter.default = "Review the available information."
+    parameter.source = SourceRef(
+        kind="reviewer",
+        reviewer="Reviewer",
+        note="Clarified the authored text.",
+        previous=SourceRef(kind="authored"),
+    )
+
+    assert "T2" not in codes(validate_template_structure(ir))
+    assert not any(
+        finding.code == "T2" and finding.element_id == parameter.name
+        for finding in findings_for(ir)
+    )
+
+
+def test_reviewer_previous_chain_retains_cpg_citation() -> None:
+    ir = fixture_ir()
+    parameter = next(item for item in ir.process.acp.parameters if item.name == "max_reminder_attempts")
+    parameter.default = 3
+    parameter.source = SourceRef(
+        kind="reviewer",
+        reviewer="Second reviewer",
+        note="Confirmed the prior review.",
+        previous=SourceRef(
+            kind="reviewer",
+            reviewer="First reviewer",
+            note="Updated after review.",
+            previous=SourceRef(
+                kind="cpg",
+                source_text="After four attempts the team should contact the patient.",
+            ),
+        ),
+    )
+
+    assert not any(
+        finding.code == "T2" and finding.element_id == parameter.name
+        for finding in validate_template_structure(ir)
+    )
+
+
+def test_reviewer_edited_text_still_passes_through_l3_phi_scan() -> None:
+    ir = fixture_ir()
+    parameter = next(item for item in ir.process.acp.parameters if item.name == "instructions_text")
+    parameter.default = "Review reference ZZ12345."
+    parameter.source = SourceRef(
+        kind="reviewer",
+        reviewer="Reviewer",
+        note="Edited the authored text.",
+        previous=SourceRef(kind="authored"),
+    )
+
+    result = run_static_ladder(
+        ir,
+        catalog=load_catalog(),
+        stage="template",
+        section_text=SECTION,
+    )
+
+    assert any(item.rung == "L3" and item.code == "mrn-like" for item in result.findings)
+
+
+def test_reviewer_authored_previous_is_rejected_for_non_string_parameter() -> None:
     ir = fixture_ir()
     parameter = next(item for item in ir.process.acp.parameters if item.name == "max_reminder_attempts")
     parameter.source = SourceRef(
@@ -200,7 +311,19 @@ def test_reviewer_default_without_previous_cpg_citation_is_rejected() -> None:
         previous=SourceRef(kind="authored"),
     )
 
-    assert "T2" in codes(validate_template_structure(ir))
+    assert any(
+        finding.code == "T2" and parameter.name in finding.message
+        for finding in validate_template_structure(ir)
+    )
+
+
+def test_reviewer_source_without_previous_is_rejected_by_contract() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="reviewer source requires previous"):
+        SourceRef.model_validate(
+            {"kind": "reviewer", "reviewer": "Reviewer", "note": "Edited"}
+        )
 
 
 def test_policy_default_source_is_limited_to_reserved_parameters() -> None:

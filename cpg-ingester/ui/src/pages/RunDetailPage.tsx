@@ -174,13 +174,13 @@ export function RunDetailPage() {
 
           {showDecisions && (
             <Tab eventKey={2} title={<TabTitleText>Decisions</TabTitleText>}>
-              <DecisionReviewPage run={run} />
+              <DecisionReviewPage run={run} onOpenAutomations={() => setActiveTab(6)} />
             </Tab>
           )}
 
           {showRecommendations && (
             <Tab eventKey={3} title={<TabTitleText>Recommendations</TabTitleText>}>
-              <RecommendationReviewPage run={run} />
+              <RecommendationReviewPage run={run} onOpenAutomations={() => setActiveTab(6)} />
             </Tab>
           )}
 

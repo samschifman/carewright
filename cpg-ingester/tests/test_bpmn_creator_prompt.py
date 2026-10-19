@@ -57,7 +57,7 @@ def test_prompt_renders_human_feedback_on_first_attempt():
     )
 
     assert "Keep the weekly interval from the CPG." in prompt
-    assert "PREVIOUS HUMAN REVIEW FEEDBACK" in prompt
+    assert "## Reviewer feedback from round 1" in prompt
 
 
 def test_prompt_declares_required_parameters_for_unspecified_values():

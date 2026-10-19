@@ -83,6 +83,7 @@ export interface AutomationResult {
     source_cpg?: string;
     section?: string;
     triggers: Array<Record<string, unknown>>;
+    parameters?: AutomationParameter[];
     linked_recommendation_ids: string[];
     linked_decision_model_ids: string[];
     capabilities_used: string[];
@@ -125,6 +126,7 @@ export interface RecommendationResult {
   content: string;
   recommendation_type: string;
   section?: string;
+  automation_template_ids?: string[] | null;
   certainty?: {
     strength: string;
     evidence_quality?: string;
@@ -191,10 +193,41 @@ export interface ReviewFeedbackItem {
   comment: string;
 }
 
+export interface AutomationParameter {
+  name: string;
+  type: 'duration' | 'integer' | 'decimal' | 'boolean' | 'string' | 'quantity' | string;
+  unit?: string;
+  default?: string | number | boolean | null;
+  required?: boolean;
+  description?: string;
+  source?: { kind?: string; source_text?: string; note?: string };
+  constraints?: {
+    min?: number;
+    max?: number;
+    enum?: string[];
+    pattern?: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface ParameterEdit {
+  templateId: string;
+  parameter: string;
+  value: string | number | boolean;
+  note?: string;
+}
+
+export interface AutomationAcknowledgement {
+  templateId: string;
+  note: string;
+}
+
 export interface ReviewAction {
   action: 'approve' | 'request_changes';
   feedback?: ReviewFeedbackItem[];
   overallComment?: string;
+  parameterEdits?: ParameterEdit[];
+  acknowledgements?: AutomationAcknowledgement[];
 }
 
 export interface StepError {

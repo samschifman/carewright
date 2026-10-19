@@ -8,6 +8,7 @@ import time
 import mlflow
 from cpg_contracts import content_to_text, get_llm
 from cpg_ingester.output import write_artifact
+from cpg_ingester.review_feedback import render_reviewer_feedback
 from cpg_ingester.prompts.structure_analyzer import (
     ARCHETYPE_DETECTION_SYSTEM,
     ARCHETYPE_DETECTION_USER,
@@ -147,11 +148,31 @@ def structure_analyzer(state: dict) -> dict:
         f"- Page {s['page_no']}: \"{s['heading']}\""
         for s in sections
     )
+    previous_sections = state.get("prior_section_map") or sections
+    section_context = {
+        f"section-{index}": str(section.get("heading", ""))
+        for index, section in enumerate(previous_sections)
+    }
+    section_context.update({
+        str(item.get("id")): str(item.get("name") or item.get("title") or item.get("id"))
+        for item in state.get("prior_item_manifest", [])
+        if isinstance(item, dict) and item.get("id")
+    })
+    feedback_block = render_reviewer_feedback(
+        state.get("review_feedback"),
+        state.get("review_comment", ""),
+        state.get("review_iteration", 0),
+        item_types={"classification", "process"},
+        item_context=section_context,
+    )
+    classification_user = SECTION_CLASSIFICATION_USER.format(section_list=section_list)
+    if feedback_block:
+        classification_user += "\n\n" + feedback_block
     logger.info("Classifying %d sections (LLM)...", len(sections))
     t0 = time.time()
     classification_response = llm.invoke([
         {"role": "system", "content": SECTION_CLASSIFICATION_SYSTEM},
-        {"role": "user", "content": SECTION_CLASSIFICATION_USER.format(section_list=section_list)},
+        {"role": "user", "content": classification_user},
     ])
     logger.info("Section classification: %.1fs", time.time() - t0)
     try:

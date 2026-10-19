@@ -89,3 +89,32 @@ def test_escalated_template_is_not_published(tmp_path):
     )
     assert store.put.call_count == 0
     assert store.put_raw.call_count == 0
+
+
+def test_acknowledged_l7_template_is_published_with_validation_note(tmp_path):
+    store = _store()
+    template = _template()
+    template["summary"]["validation"].update({
+        "status": "escalated",
+        "errors": ["Review was inconclusive."],
+        "acknowledgement": "The care team accepted the remaining review note.",
+    })
+    result = delivery({
+        "cpg_metadata": {"cpg_id": "SYN-HTN-2026-002"},
+        "bpmn_results": [{
+            "escalated": False,
+            "automation_template": template,
+            "template_summary": template["summary"],
+        }],
+        "artifact_store": store,
+        "output_dir": str(tmp_path),
+    })
+
+    assert any(item["type"] == "bpmn" for item in result["delivery_status"]["artifacts"])
+    published = next(
+        call.args[1] for call in store.put.call_args_list
+        if call.args[0].endswith(".template.json")
+    )
+    assert published["summary"]["validation"]["acknowledgement"] == (
+        "The care team accepted the remaining review note."
+    )

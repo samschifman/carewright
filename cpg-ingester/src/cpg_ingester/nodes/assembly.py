@@ -2,16 +2,21 @@
 
 import json
 import logging
+import os
+import re
+import xml.etree.ElementTree as ET
 from collections import Counter
 from copy import deepcopy
 from pathlib import Path
+from urllib.parse import urlencode
 
 import mlflow
+import requests
 
 from cpg_contracts import CONTRACT_VERSION
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.automation.compiler import compile
-from cpg_contracts.automation.ir import ProcessIR, Task, ir_version
+from cpg_contracts.automation.ir import ProcessIR, SourceRef, Task, ir_version
 from cpg_contracts.automation.templates import AutomationTemplate
 from cpg_contracts.automation.validators.ladder import run_static_ladder
 from cpg_contracts.decisions import DecisionModelSummary
@@ -19,6 +24,11 @@ from cpg_ingester.artifact_id import make_artifact_id
 from cpg_ingester.output import write_artifact
 
 logger = logging.getLogger(__name__)
+_L7_ESCALATION_REASONS = frozenset({
+    "semantic-budget-exhausted",
+    "no-source-text",
+    "reviewer-unparseable",
+})
 
 
 def _resolve_cross_references(recommendations: list[dict], dmn_results: list[dict]) -> list[dict]:
@@ -139,12 +149,252 @@ def _template_escalation(result: dict, reason: str, errors: list[str]) -> dict:
     return result
 
 
+def _normalized_name(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value).casefold()).strip("_")
+
+
+def _feel_string_literal(value: str | None) -> str | None:
+    """Return a string for a FEEL string literal, skipping expressions."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if len(text) < 2 or text[0] != '"' or text[-1] != '"':
+        return None
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, str) else None
+    except json.JSONDecodeError:
+        # FEEL escapes a quote by doubling it.
+        return text[1:-1].replace('""', '"')
+
+
+def _dmn_string_outputs(dmn_xml: str) -> dict[str, set[str]]:
+    """Extract literal string values by DMN decision-table output name."""
+    try:
+        root = ET.fromstring(dmn_xml)
+    except ET.ParseError:
+        return {}
+
+    outputs: dict[str, set[str]] = {}
+    for table in root.iter():
+        if table.tag.rsplit("}", 1)[-1] != "decisionTable":
+            continue
+        columns = [
+            child for child in table
+            if child.tag.rsplit("}", 1)[-1] == "output"
+        ]
+        for column in columns:
+            name = column.attrib.get("name")
+            if name:
+                values = outputs.setdefault(_normalized_name(name), set())
+                for child in column.iter():
+                    if child.tag.rsplit("}", 1)[-1] == "text":
+                        literal = _feel_string_literal(child.text)
+                        if literal is not None:
+                            values.add(literal)
+
+        for row in table:
+            if row.tag.rsplit("}", 1)[-1] != "rule":
+                continue
+            entries = [
+                child for child in row
+                if child.tag.rsplit("}", 1)[-1] == "outputEntry"
+            ]
+            for index, entry in enumerate(entries):
+                if index >= len(columns):
+                    continue
+                name = columns[index].attrib.get("name")
+                if not name:
+                    continue
+                text = next(
+                    (child.text for child in entry
+                     if child.tag.rsplit("}", 1)[-1] == "text"),
+                    None,
+                )
+                literal = _feel_string_literal(text)
+                if literal is not None:
+                    outputs.setdefault(_normalized_name(name), set()).add(literal)
+    return outputs
+
+
+def _parameter_decision_output_mismatches(
+    process: dict,
+    linked_dmn_ids: set[str],
+    dmn_results: list[dict],
+) -> list[str]:
+    """Check enum parameters used by linked rules against literal DMN outputs."""
+    linked_outputs: dict[str, dict[str, set[str]]] = {}
+    for result in dmn_results:
+        summary = result.get("decision_model_summary") or {}
+        model_id = summary.get("id")
+        xml = result.get("dmn_xml")
+        if model_id in linked_dmn_ids and isinstance(xml, str):
+            linked_outputs[model_id] = _dmn_string_outputs(xml)
+
+    parameter_models: dict[str, set[str]] = {}
+    for element in process.get("flowElements", []):
+        if not isinstance(element, dict) or element.get("type") != "businessRuleTask":
+            continue
+        model_id = element.get("dmnModel")
+        if model_id not in linked_dmn_ids:
+            continue
+        inputs = element.get("inputs", {})
+        if not isinstance(inputs, dict):
+            continue
+        for input_name, value in inputs.items():
+            parameter_name = value.get("param") if isinstance(value, dict) else None
+            if not isinstance(parameter_name, str):
+                parameter_name = str(input_name)
+            parameter_models.setdefault(_normalized_name(parameter_name), set()).add(model_id)
+
+    # A parameter named for a declared decision output is also checked, even
+    # when it is not explicitly mapped as a rule-task input.
+    for model_id, outputs in linked_outputs.items():
+        for output_name in outputs:
+            parameter_models.setdefault(output_name, set()).add(model_id)
+
+    mismatches = []
+    for parameter in (process.get("acp", {}).get("parameters", []) or []):
+        if not isinstance(parameter, dict):
+            continue
+        constraints = parameter.get("constraints") or {}
+        enum_values = constraints.get("enum") if isinstance(constraints, dict) else None
+        if not isinstance(enum_values, list) or not enum_values:
+            continue
+        parameter_name = parameter.get("name")
+        if not isinstance(parameter_name, str):
+            continue
+        normalized = _normalized_name(parameter_name)
+        model_ids = parameter_models.get(normalized)
+        if not model_ids:
+            model_ids = {
+                model_id for model_id, outputs in linked_outputs.items()
+                if normalized in outputs
+            }
+        for model_id in sorted(model_ids or ()):
+            model_outputs = linked_outputs.get(model_id, {})
+            output_name = normalized if normalized in model_outputs else None
+            declared = (
+                model_outputs[output_name]
+                if output_name
+                else set().union(*model_outputs.values()) if model_outputs else set()
+            )
+            if declared and not set(enum_values).issubset(declared):
+                mismatches.append(
+                    f"Parameter {parameter_name!r} enum values {sorted(set(enum_values))!r} "
+                    f"are not a subset of linked decision model {model_id!r} output values "
+                    f"{sorted(declared)!r}."
+                )
+    return mismatches
+
+
+def _review_items(review: dict, key: str, template_id: str) -> list[dict]:
+    values = review.get(key) or []
+    if not isinstance(values, list):
+        return []
+    return [
+        item for item in values
+        if isinstance(item, dict) and item.get("templateId") == template_id
+    ]
+
+
+@mlflow.trace(name="assembly.apply_parameter_edits")
+def _apply_parameter_edits(ir: ProcessIR, edits: list[dict], review: dict) -> None:
+    """Apply reviewer defaults while retaining the original parameter source."""
+    for edit in edits:
+        name = str(edit.get("parameter", ""))
+        parameter = next(
+            (item for item in ir.process.acp.parameters if item.name == name),
+            None,
+        )
+        if parameter is None:
+            raise ValueError(f"parameter edit references unknown parameter {name!r}")
+        if "value" not in edit or edit["value"] is None:
+            raise ValueError(f"parameter edit for {name!r} requires a value")
+
+        previous = parameter.source
+        if previous is not None and previous.kind == "reviewer":
+            previous = previous.previous
+        if previous is None:
+            raise ValueError(f"parameter {name!r} has no source provenance to preserve")
+
+        note = str(edit.get("note") or review.get("overallComment") or "").strip()
+        if not note:
+            note = "Edited during pre-delivery review."
+        parameter.default = edit["value"]
+        parameter.source = SourceRef(
+            kind="reviewer",
+            reviewer=(str(review["reviewer"]) if review.get("reviewer") else None),
+            note=note,
+            previous=previous,
+        )
+
+
+@mlflow.trace(name="assembly.template_preflight")
+def _preflight_template(
+    template: AutomationTemplate,
+    *,
+    source_cpg: str,
+) -> tuple[list[str], list[str], bool]:
+    """Optionally validate a reviewer-edited BPMN artifact with the engine."""
+    url = os.environ.get("BPMN_PREFLIGHT_URL", "").strip()
+    if not url:
+        return [], [], False
+    query = urlencode({
+        "validate_only": "true",
+        **({"source_cpg": source_cpg} if source_cpg else {}),
+    })
+    separator = "&" if "?" in url else "?"
+    try:
+        response = requests.post(
+            f"{url}{separator}{query}",
+            json=template.model_dump(mode="json", exclude_none=True),
+            headers={"Content-Type": "application/json"},
+            timeout=15,
+        )
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {}
+        is_validation = isinstance(payload, dict) and any(
+            key in payload for key in ("valid", "messages", "errors")
+        )
+        messages = payload.get("messages", payload.get("errors", [])) if is_validation else []
+        if isinstance(messages, (str, dict)):
+            messages = [messages]
+        errors: list[str] = []
+        warnings: list[str] = []
+        for message in messages or []:
+            if isinstance(message, dict):
+                text = message.get("text", message.get("message", str(message)))
+                target = errors if message.get("severity", "ERROR").upper() == "ERROR" else warnings
+                target.append(str(text))
+            else:
+                errors.append(str(message))
+        invalid = response.status_code == 422 or (
+            is_validation and payload.get("valid") is False
+        )
+        if invalid and not errors:
+            errors.append(str(payload.get("detail") or "Kogito rejected the BPMN template"))
+        if invalid:
+            return errors, warnings, True
+        if response.ok and is_validation:
+            return errors, warnings, True
+        warning = (
+            f"BPMN preflight unavailable (HTTP {response.status_code}; no validation result)"
+        )
+        return [], [warning, *warnings], False
+    except requests.RequestException as exc:
+        return [], [f"BPMN preflight unavailable: {exc}"], False
+
+
 def _resolve_template_links(
     bpmn_results: list[dict],
     recommendations: list[dict],
     dmn_results: list[dict],
     manifest: list[dict],
     cpg_id: str,
+    artifact_review: dict | None = None,
 ) -> list[dict]:
     """Resolve template links, normalize IR, and compile publishable versions."""
     for recommendation in recommendations:
@@ -216,14 +466,44 @@ def _resolve_template_links(
     )
     resolved_results = []
     catalog = load_catalog()
+    review = artifact_review if isinstance(artifact_review, dict) else {}
     for original in bpmn_results:
         result = deepcopy(original)
         item = result.get("item", {})
         summary = result.get("template_summary", {})
         template_id = summary.get("id") or item.get("template_id")
+        l7_acknowledgements = _review_items(review, "acknowledgements", template_id)
+        acknowledgement_note = (
+            str(l7_acknowledgements[0].get("note", "")).strip()
+            if l7_acknowledgements else ""
+        )
+        acknowledged_l7 = False
         if result.get("escalated"):
-            resolved_results.append(result)
-            continue
+            if result.get("escalation_reason") != "undelivered-decision-reference":
+                if (
+                    result.get("escalation_reason") in _L7_ESCALATION_REASONS
+                    and acknowledgement_note
+                ):
+                    acknowledged_l7 = True
+                    validation = summary.setdefault("validation", {})
+                    validation["status"] = "escalated"
+                    validation["errors"] = list(result.get("escalation_errors", []))
+                    validation["acknowledgement"] = acknowledgement_note
+                    result["escalated"] = False
+                else:
+                    resolved_results.append(result)
+                    continue
+            else:
+                # This is dependency-state, not a permanent template defect. Run
+                # the same link resolution and ladder again against this assembly's
+                # delivered decisions; it will re-escalate if the reference remains
+                # unavailable.
+                result.pop("escalated", None)
+                result.pop("escalation_reason", None)
+                result.pop("escalation_errors", None)
+                validation = summary.setdefault("validation", {})
+                validation["status"] = "valid"
+                validation["errors"] = []
         if not template_id or id_counts[template_id] > 1:
             resolved_results.append(_template_escalation(
                 result,
@@ -363,8 +643,19 @@ def _resolve_template_links(
             ))
             continue
 
+        decision_output_errors = _parameter_decision_output_mismatches(
+            process, set(linked_dmn_ids), dmn_results
+        )
+        if decision_output_errors:
+            resolved_results.append(_template_escalation(
+                result, "decision-output-mismatch", decision_output_errors
+            ))
+            continue
+
         try:
             ir = ProcessIR.model_validate(raw_ir)
+            parameter_edits = _review_items(review, "parameterEdits", template_id)
+            _apply_parameter_edits(ir, parameter_edits, review)
             summaries = {
                 model_id: DecisionModelSummary.model_validate(summary_value)
                 for model_id, summary_value in dmn_summary_values.items()
@@ -416,11 +707,53 @@ def _resolve_template_links(
                         if finding.severity == "WARNING"
                     ],
                 ]))
+            if acknowledged_l7:
+                validation["status"] = "escalated"
+                validation["errors"] = list(result.get("escalation_errors", []))
+                validation["acknowledgement"] = acknowledgement_note
+            else:
+                validation["status"] = "valid"
+                validation["errors"] = []
+            linked_summaries = {
+                model_id: value
+                for model_id, value in summaries.items()
+                if model_id in set(linked_dmn_ids)
+            }
+            linked_namespaces = {
+                model_id: namespace
+                for model_id, namespace in namespaces.items()
+                if model_id in linked_summaries
+            }
             template = AutomationTemplate.model_validate({
                 "summary": summary,
                 "ir": ir,
                 "bpmn_xml": bpmn_xml,
+                "dmn_namespaces": linked_namespaces,
+                "dmn_summaries": linked_summaries,
             })
+            engine_errors, engine_warnings, engine_checked = _preflight_template(
+                template,
+                source_cpg=cpg_id,
+            )
+            validation["kogito_checked"] = engine_checked
+            template.summary.validation.kogito_checked = engine_checked
+            if engine_warnings:
+                validation["warnings"] = list(dict.fromkeys([
+                    *(validation.get("warnings", []) or []),
+                    *engine_warnings,
+                ]))
+                template.summary.validation.warnings = list(validation["warnings"])
+            if engine_errors:
+                validation["status"] = "escalated"
+                validation["errors"] = engine_errors
+                result["process_ir"] = ir.model_dump(mode="json", exclude_none=True)
+                result["template_summary"] = summary
+                resolved_results.append(_template_escalation(
+                    result,
+                    "engine-validation-failed",
+                    engine_errors,
+                ))
+                continue
         except Exception as exc:
             resolved_results.append(_template_escalation(
                 result, "invalid-template", [str(exc)]
@@ -524,6 +857,7 @@ def assembly(state: dict) -> dict:
         dmn_results,
         state.get("item_manifest", []) or [],
         cpg_id,
+        state.get("artifact_review"),
     )
 
     # Per-recommendation escalations travel on recommendation objects. Empty or

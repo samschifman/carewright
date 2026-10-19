@@ -61,6 +61,9 @@ pods:
     image: cpg-ingester-assembly
     tag: latest
     port: 8080
+    env:
+      # Optional validation preflight endpoint; unset in the default deployment.
+      bpmnPreflightUrl: ""
     secrets:
       minio: true
     resources:

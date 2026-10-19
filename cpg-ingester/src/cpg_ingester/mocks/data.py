@@ -187,6 +187,87 @@ DELIVERY_STATUS: dict[str, Any] = {
     "escalated_items_count": 1,
 }
 
+_MOCK_AUTOMATIONS = [
+    {
+        "artifact_id": "sample-valid-automation",
+        "bpmn_xml": "",
+        "process_ir": {"process": {"id": "sample_valid_process"}},
+        "item": {
+            "id": "process-sample-routing",
+            "type": "process",
+            "name": "Sample routing flow",
+            "linked_recommendations": ["recommendation-sample-handoff"],
+            "linked_decisions": ["decision-sample-routing"],
+        },
+        "template_summary": {
+            "id": "sample-routing-flow",
+            "version": "0123456789ab",
+            "name": "Sample routing flow",
+            "description": "Routes a submitted item to its selected destination.",
+            "triggers": [],
+            "linked_recommendation_ids": ["recommendation-sample-handoff"],
+            "linked_decision_model_ids": ["decision-sample-routing"],
+            "capabilities_used": [],
+            "pattern_family": "other",
+            "validation": {"status": "valid", "warnings": [], "errors": []},
+        },
+    },
+    {
+        "artifact_id": "sample-review-escalation",
+        "bpmn_xml": "",
+        "process_ir": {"process": {"id": "sample_review_process"}},
+        "item": {"id": "process-sample-review", "type": "process", "name": "Sample review flow"},
+        "escalated": True,
+        "escalation_reason": "semantic-budget-exhausted",
+        "escalation_errors": ["The review result needs a human decision."],
+        "template_summary": {
+            "id": "sample-review-flow",
+            "version": "112233445566",
+            "name": "Sample review flow",
+            "triggers": [],
+            "linked_recommendation_ids": [],
+            "linked_decision_model_ids": [],
+            "capabilities_used": [],
+            "pattern_family": "other",
+            "validation": {"status": "escalated", "warnings": [], "errors": []},
+        },
+    },
+    {
+        "artifact_id": "sample-mechanical-escalation",
+        "bpmn_xml": "",
+        "process_ir": {"process": {"id": "sample_mechanical_process"}},
+        "item": {"id": "process-sample-check", "type": "process", "name": "Sample check flow"},
+        "escalated": True,
+        "escalation_reason": "static-budget-exhausted",
+        "escalation_errors": ["A structural validation check failed."],
+        "template_summary": {
+            "id": "sample-check-flow",
+            "version": "aabbccddeeff",
+            "name": "Sample check flow",
+            "triggers": [],
+            "linked_recommendation_ids": [],
+            "linked_decision_model_ids": [],
+            "capabilities_used": [],
+            "pattern_family": "other",
+            "validation": {"status": "escalated", "warnings": [], "errors": []},
+        },
+    },
+]
+
+_MOCK_PROCESS = {
+    "id": "process-sample-routing",
+    "type": "process",
+    "name": "Sample routing flow",
+    "section": "Workflow",
+    "steps": ["Select a destination", "Route the submitted item"],
+    "tier_hint": "A",
+    "trigger_hint": "When an item is submitted",
+    "timing_cues": [],
+    "actors": ["operator"],
+    "linked_recommendations": ["recommendation-sample-handoff"],
+    "linked_decisions": ["decision-sample-routing"],
+}
+
 
 def _make_steps(up_to: str) -> list[dict[str, Any]]:
     all_steps = [
@@ -319,6 +400,13 @@ RUNS: dict[str, dict[str, Any]] = {
         "createdAt": "2026-08-04T08:00:00Z",
         "currentStep": "Analyze",
     },
+    "run-006": {
+        "id": "run-006",
+        "status": "awaiting_artifact_review",
+        "cpgName": "Sample workflow",
+        "createdAt": "2026-10-16T12:00:00Z",
+        "currentStep": "ReviewArtifacts",
+    },
 }
 
 RUN_DETAILS: dict[str, dict[str, Any]] = {
@@ -378,5 +466,34 @@ RUN_DETAILS: dict[str, dict[str, Any]] = {
     "run-005": {
         **RUNS["run-005"],
         "steps": _failed_steps(),
+    },
+    "run-006": {
+        **RUNS["run-006"],
+        "steps": _make_steps("ReviewArtifacts"),
+        "awaitingReview": "pre-delivery",
+        "reviewIteration": 1,
+        "metadata": {"cpg_id": "SAMPLE-001", "title": "Sample workflow"},
+        "sectionMap": [{"heading": "Workflow", "classification": "process"}],
+        "manifest": [_MOCK_PROCESS],
+        "decisions": [{
+            "dmn_xml": "",
+            "item": {"name": "Routing decision", "type": "decision_table", "category": "Workflow"},
+            "decision_model_summary": {
+                "id": "decision-sample-routing",
+                "name": "Routing decision",
+                "inputs": [{"name": "category", "type": "string"}],
+                "outputs": [{"name": "destination", "type": "string"}],
+                "category": "Workflow",
+            },
+        }],
+        "recommendations": [{
+            "id": "recommendation-sample-handoff",
+            "source_cpg": "SAMPLE-001",
+            "title": "Sample handoff",
+            "content": "Route each submitted item to its selected destination.",
+            "recommendation_type": "process",
+            "automation_template_ids": ["sample-routing-flow"],
+        }],
+        "automations": _MOCK_AUTOMATIONS,
     },
 }

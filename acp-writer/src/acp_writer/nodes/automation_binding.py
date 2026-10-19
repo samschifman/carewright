@@ -63,7 +63,11 @@ def _instance_parameter_name(process: Process, source_name: str) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
-def _matching_enum_outputs(parameter: Parameter, dmn_audit_trail: Sequence[Any]) -> list[dict[str, Any]]:
+def _matching_enum_outputs(
+    parameter: Parameter,
+    dmn_audit_trail: Sequence[Any],
+    linked_model_ids: set[str],
+) -> list[dict[str, Any]]:
     """Find DMN string outputs that state one declared CPG enum value verbatim."""
     if (
         parameter.source is None
@@ -75,6 +79,8 @@ def _matching_enum_outputs(parameter: Parameter, dmn_audit_trail: Sequence[Any])
 
     matches: list[dict[str, Any]] = []
     for audit in dmn_audit_trail:
+        if _field(audit, "model_id") not in linked_model_ids:
+            continue
         outputs = _field(audit, "outputs", {}) or {}
         if not isinstance(outputs, Mapping):
             continue
@@ -95,6 +101,24 @@ def _matching_enum_outputs(parameter: Parameter, dmn_audit_trail: Sequence[Any])
                             "output_value": output_value,
                         })
     return matches
+
+
+def _linked_decision_model_ids(
+    templates: Sequence[Any], selected_template_ids: set[str]
+) -> set[str]:
+    linked: set[str] = set()
+    for template in templates:
+        process = _process(template)
+        if process is None or process.id not in selected_template_ids:
+            continue
+        summary = _field(template, "summary", {}) or {}
+        linked_ids = _field(summary, "linked_decision_model_ids", []) or []
+        linked.update(value for value in linked_ids if isinstance(value, str))
+        if not linked_ids:
+            dmn_summaries = _field(template, "dmn_summaries", {}) or {}
+            if isinstance(dmn_summaries, Mapping):
+                linked.update(str(value) for value in dmn_summaries)
+    return linked
 
 
 def _duration_from_period(value: Any, *, as_of: str | None = None) -> str | None:
@@ -221,6 +245,10 @@ def bind_instance(
     result_ir = instance_ir.model_copy(deep=True)
     process = result_ir.process
     template_processes = _template_processes(templates)
+    selected_template_ids = {
+        ref.template_id for ref in process.acp.template_refs
+    }
+    linked_model_ids = _linked_decision_model_ids(templates, selected_template_ids)
     policy = validate_automation_policy(list(template_processes.values()), policy)
     policy_parameters = policy.get("parameters", {})
     bindings: dict[str, ParameterBinding] = {}
@@ -245,7 +273,9 @@ def bind_instance(
     for parameter in process.acp.parameters:
         if parameter.name in bindings:
             continue
-        matches = _matching_enum_outputs(parameter, dmn_audit_trail)
+        matches = _matching_enum_outputs(
+            parameter, dmn_audit_trail, linked_model_ids
+        )
         enum_values = {item["enum_value"] for item in matches}
         if len(enum_values) != 1:
             continue

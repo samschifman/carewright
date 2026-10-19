@@ -3,18 +3,28 @@ import {
   Card,
   CardBody,
   CardTitle,
+  Checkbox,
   CodeBlock,
   CodeBlockCode,
   Content,
   ExpandableSection,
   Label,
   LabelGroup,
+  TextArea,
 } from '@patternfly/react-core';
 import { useCallback, useState } from 'react';
 import { BpmnViewer } from '@cpg-to-acp/ui-shared';
 
-import type { AutomationResult, ReviewFeedbackItem, RunDetail } from '../api/types';
+import type {
+  AutomationAcknowledgement,
+  AutomationParameter,
+  AutomationResult,
+  ParameterEdit,
+  ReviewFeedbackItem,
+  RunDetail,
+} from '../api/types';
 import { FeedbackInput } from '../components/FeedbackInput';
+import { ParameterDefaultsForm } from '../components/ParameterDefaultsForm';
 import { ReviewActionBar } from '../components/ReviewActionBar';
 import { useReviewGate } from '../hooks/useReviewGate';
 
@@ -33,16 +43,40 @@ function describeTrigger(trigger: Record<string, unknown>): string {
     .join(' · ');
 }
 
+function automationParameters(automation: AutomationResult): AutomationParameter[] {
+  if (automation.template_summary.parameters?.length) return automation.template_summary.parameters;
+  const process = (automation.process_ir as {
+    process?: { acp?: { parameters?: AutomationParameter[] } };
+  }).process;
+  return process?.acp?.parameters ?? [];
+}
+
+function isL7Escalation(automation: AutomationResult): boolean {
+  return automation.escalated === true && new Set([
+    'semantic-budget-exhausted',
+    'no-source-text',
+    'reviewer-unparseable',
+  ]).has(automation.escalation_reason ?? '');
+}
+
 function AutomationCard({
   automation,
   feedback,
   onFeedbackChange,
   canFeedback,
+  parameterEdits,
+  onParameterEdit,
+  acknowledgement,
+  onAcknowledgementChange,
 }: {
   automation: AutomationResult;
   feedback?: string;
   onFeedbackChange: (id: string, comment: string) => void;
   canFeedback: boolean;
+  parameterEdits: ParameterEdit[];
+  onParameterEdit: (templateId: string, edit: ParameterEdit | null, error: string | null, parameter: string) => void;
+  acknowledgement?: AutomationAcknowledgement;
+  onAcknowledgementChange: (templateId: string, checked: boolean, note: string) => void;
 }) {
   const [showXml, setShowXml] = useState(false);
   const [showIr, setShowIr] = useState(false);
@@ -52,6 +86,10 @@ function AutomationCard({
   const statusColor = status === 'valid' ? 'green' : status === 'incomplete' ? 'orange' : 'red';
   const warnings = summary.validation?.warnings ?? [];
   const deferred = summary.validation?.deferred_invariants ?? [];
+  const templateId = summary.id;
+  const parameters = automationParameters(automation);
+  const feedbackId = automation.item.id ?? templateId;
+  const l7Escalated = isL7Escalation(automation);
 
   return (
     <Card data-testid={`automation-${id}`} style={{ marginBottom: 16 }}>
@@ -110,6 +148,39 @@ function AutomationCard({
           </>
         )}
 
+        {canFeedback && parameters.length > 0 && (
+          <ParameterDefaultsForm
+            templateId={templateId}
+            parameters={parameters}
+            edits={parameterEdits.filter(edit => edit.templateId === templateId)}
+            onEditChange={onParameterEdit}
+          />
+        )}
+
+        {canFeedback && l7Escalated && (
+          <section aria-label={`Acknowledgement for ${summary.name}`} style={{ marginTop: 12 }}>
+            <Checkbox
+              id={`acknowledge-${templateId}`}
+              label="Acknowledge and deliver"
+              isChecked={!!acknowledgement}
+              onChange={(_event, checked) => onAcknowledgementChange(
+                templateId,
+                checked,
+                acknowledgement?.note ?? '',
+              )}
+            />
+            {acknowledgement && (
+              <TextArea
+                value={acknowledgement.note}
+                onChange={(_event, note) => onAcknowledgementChange(templateId, true, note)}
+                aria-label={`Acknowledgement note for ${summary.name}`}
+                placeholder="Add the review note required to deliver this template."
+                rows={2}
+              />
+            )}
+          </section>
+        )}
+
         {summary.capabilities_used?.length > 0 && (
           <>
             <Content component="h4">Capabilities</Content>
@@ -140,7 +211,7 @@ function AutomationCard({
         </ExpandableSection>
 
         {canFeedback && (
-          <FeedbackInput itemId={id} onFeedbackChange={onFeedbackChange} existingComment={feedback} />
+          <FeedbackInput itemId={feedbackId} onFeedbackChange={onFeedbackChange} existingComment={feedback} />
         )}
       </CardBody>
     </Card>
@@ -150,6 +221,9 @@ function AutomationCard({
 export function AutomationReviewPage({ run }: AutomationReviewPageProps) {
   const review = useReviewGate(run);
   const [feedbackMap, setFeedbackMap] = useState<Map<string, { itemType: ReviewFeedbackItem['itemType']; comment: string }>>(new Map());
+  const [parameterEdits, setParameterEdits] = useState<ParameterEdit[]>([]);
+  const [parameterErrors, setParameterErrors] = useState<Map<string, string>>(new Map());
+  const [acknowledgements, setAcknowledgements] = useState<AutomationAcknowledgement[]>([]);
   const canFeedback = review.isReviewActive && review.gate === 'pre-delivery';
 
   const handleFeedbackChange = useCallback((itemId: string, comment: string) => {
@@ -159,6 +233,32 @@ export function AutomationReviewPage({ run }: AutomationReviewPageProps) {
       else next.delete(itemId);
       return next;
     });
+  }, []);
+
+  const handleParameterEdit = useCallback((
+    templateId: string,
+    edit: ParameterEdit | null,
+    error: string | null,
+    parameter: string,
+  ) => {
+    const key = `${templateId}:${parameter}`;
+    setParameterEdits(previous => {
+      const next = previous.filter(item => `${item.templateId}:${item.parameter}` !== key);
+      return edit ? [...next, edit] : next;
+    });
+    setParameterErrors(previous => {
+      const next = new Map(previous);
+      if (error) next.set(key, error);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const handleAcknowledgementChange = useCallback((templateId: string, checked: boolean, note: string) => {
+    setAcknowledgements(previous => [
+      ...previous.filter(item => item.templateId !== templateId),
+      ...(checked ? [{ templateId, note }] : []),
+    ]);
   }, []);
 
   if (!run.automations?.length) {
@@ -171,20 +271,31 @@ export function AutomationReviewPage({ run }: AutomationReviewPageProps) {
         <AutomationCard
           key={automation.artifact_id ?? automation.template_summary.id ?? index}
           automation={automation}
-          feedback={feedbackMap.get(automation.artifact_id ?? automation.template_summary.id)?.comment}
+          feedback={feedbackMap.get(automation.item.id ?? automation.template_summary.id)?.comment}
           onFeedbackChange={handleFeedbackChange}
           canFeedback={canFeedback}
+          parameterEdits={parameterEdits}
+          onParameterEdit={handleParameterEdit}
+          acknowledgement={acknowledgements.find(item => item.templateId === automation.template_summary.id)}
+          onAcknowledgementChange={handleAcknowledgementChange}
         />
       ))}
       {canFeedback && (
         <ReviewActionBar
-          onApprove={() => review.approveMutation.mutate()}
-          onRequestChanges={(feedback, comment) => review.requestChangesMutation.mutate({ feedback, overallComment: comment })}
+          onApprove={extras => review.approveMutation.mutate(extras)}
+          onRequestChanges={(feedback, comment, extras) => review.requestChangesMutation.mutate({
+            feedback,
+            overallComment: comment,
+            ...extras,
+          })}
           isApproving={review.approveMutation.isPending}
           isRequestingChanges={review.requestChangesMutation.isPending}
           error={review.approveMutation.error ?? review.requestChangesMutation.error}
           itemFeedback={feedbackMap}
           reviewIteration={review.reviewIteration}
+          parameterEdits={parameterEdits}
+          acknowledgements={acknowledgements}
+          hasInvalidParameters={parameterErrors.size > 0}
         />
       )}
     </div>

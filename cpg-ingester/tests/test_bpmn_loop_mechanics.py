@@ -671,7 +671,8 @@ def test_generate_all_passes_linked_dmn_namespace_and_recommendation():
     sibling_state = bpmn_graph.invoke.call_args_list[1].args[0]
     assert bpmn_state["dmn_summaries"][0]["namespace"] == "https://example.org/treatment-plan"
     assert bpmn_state["linked_recs"][0]["id"] == "recommendation-guid"
-    assert bpmn_state["human_feedback"] == "Retain the source's follow-up interval."
+    assert bpmn_state["human_feedback"].startswith("## Reviewer feedback from round 1")
+    assert "Retain the source's follow-up interval." in bpmn_state["human_feedback"]
     assert bpmn_state["sibling_items"] == [{
         "name": "Missing Reading Outreach",
         "steps": ["Send a reminder after a week without readings"],
@@ -680,8 +681,8 @@ def test_generate_all_passes_linked_dmn_namespace_and_recommendation():
         "name": "Home BP Monitoring",
         "steps": ["Review weekly readings"],
     }]
-    assert dmn_graph.invoke.call_args.args[0]["review_feedback"] == "Retain the source's follow-up interval."
-    assert rec_graph.invoke.call_args.args[0]["review_feedback"] == "Retain the source's follow-up interval."
+    assert "Reviewer feedback from round 1" in dmn_graph.invoke.call_args.args[0]["human_feedback"]
+    assert "Retain the source's follow-up interval." in rec_graph.invoke.call_args.args[0]["human_feedback"]
     assert len(result["bpmn_results"]) == 2
 
 

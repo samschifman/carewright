@@ -125,7 +125,7 @@ export function ApprovalDeliveryPage({ run }: ApprovalDeliveryPageProps) {
 
           {review.isReviewActive && review.gate === 'pre-delivery' ? (
             <ReviewActionBar
-              onApprove={() => review.approveMutation.mutate()}
+              onApprove={() => review.approveMutation.mutate({})}
               onRequestChanges={(feedback, comment) =>
                 review.requestChangesMutation.mutate({ feedback, overallComment: comment })
               }

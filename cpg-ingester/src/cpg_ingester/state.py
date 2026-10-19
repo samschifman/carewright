@@ -1,6 +1,6 @@
 """LangGraph state definitions for the cpg-ingester pipeline."""
 
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
 class CPGIngesterState(TypedDict, total=False):
@@ -27,6 +27,11 @@ class CPGIngesterState(TypedDict, total=False):
     cpg_metadata: dict
     classification_review_count: int
     classification_review_feedback: str
+    review_feedback: Any
+    review_comment: str
+    review_iteration: int
+    prior_analysis_result: dict
+    prior_generate_result: dict
 
     # Phase 2 outputs
     dmn_results: list[dict]
@@ -47,8 +52,10 @@ class DMNPipelineState(TypedDict, total=False):
     litellm_url: str
     llm_model: str
     output_dir: str
-    review_feedback: str
+    review_feedback: Any
     review_comment: str
+    human_feedback: str
+    review_iteration: int
     dmn_xml: str
     cpg_metadata: dict
     syntax_errors: list[str]
@@ -74,8 +81,10 @@ class RecPipelineState(TypedDict, total=False):
     litellm_url: str
     llm_model: str
     output_dir: str
-    review_feedback: str
+    review_feedback: Any
     review_comment: str
+    human_feedback: str
+    review_iteration: int
     recommendations: list[dict]
     schema_errors: list[str]
     semantic_discrepancies: list[str]

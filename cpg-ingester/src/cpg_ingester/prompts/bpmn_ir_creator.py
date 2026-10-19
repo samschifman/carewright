@@ -189,7 +189,10 @@ def build_bpmn_ir_creator_user(
         "\n## Abbreviations\n" + (abbreviations or "(none)"),
     ]
     if human_feedback.strip():
-        parts.append("\n## PREVIOUS HUMAN REVIEW FEEDBACK\n" + human_feedback)
+        if human_feedback.lstrip().startswith("## Reviewer feedback from round "):
+            parts.append("\n" + human_feedback)
+        else:
+            parts.append("\n## Reviewer feedback from round 1\n" + human_feedback)
     if repair_feedback.strip():
         parts.append("\n## REPAIR MODE — CORRECT THESE FINDINGS\n" + repair_feedback)
     parts.append(

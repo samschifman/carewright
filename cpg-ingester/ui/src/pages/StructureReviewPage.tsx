@@ -23,8 +23,9 @@ import { useReviewGate } from '../hooks/useReviewGate';
 const CLASSIFICATION_COLORS: Record<string, 'blue' | 'green' | 'grey' | 'orange'> = {
   decision: 'blue',
   recommendation: 'green',
-  background: 'grey',
-  methods: 'grey',
+  both: 'orange',
+  reference: 'grey',
+  skip: 'grey',
 };
 
 interface StructureReviewPageProps {
@@ -35,11 +36,15 @@ export function StructureReviewPage({ run }: StructureReviewPageProps) {
   const review = useReviewGate(run);
   const [feedbackMap, setFeedbackMap] = useState<Map<string, { itemType: ReviewFeedbackItem['itemType']; comment: string }>>(new Map());
 
-  const handleFeedbackChange = useCallback((itemId: string, comment: string) => {
+  const handleFeedbackChange = useCallback((
+    itemId: string,
+    comment: string,
+    itemType: ReviewFeedbackItem['itemType'] = 'classification',
+  ) => {
     setFeedbackMap(prev => {
       const next = new Map(prev);
       if (comment) {
-        next.set(itemId, { itemType: 'classification', comment });
+        next.set(itemId, { itemType, comment });
       } else {
         next.delete(itemId);
       }
@@ -74,7 +79,7 @@ export function StructureReviewPage({ run }: StructureReviewPageProps) {
             name: (
               <FeedbackInput
                 itemId={`section-${i}`}
-                onFeedbackChange={handleFeedbackChange}
+                onFeedbackChange={(id, comment) => handleFeedbackChange(id, comment, 'classification')}
                 existingComment={feedbackMap.get(`section-${i}`)?.comment}
               />
             ),
@@ -126,6 +131,13 @@ export function StructureReviewPage({ run }: StructureReviewPageProps) {
                                 Linked: {[...(item.linked_recommendations ?? []), ...(item.linked_decisions ?? [])].join(', ')}
                               </div>
                             ) : null}
+                            {review.isReviewActive && review.gate === 'manifest' && (
+                              <FeedbackInput
+                                itemId={item.id}
+                                onFeedbackChange={(id, comment) => handleFeedbackChange(id, comment, 'process')}
+                                existingComment={feedbackMap.get(item.id)?.comment}
+                              />
+                            )}
                           </>
                         )}
                       </li>
@@ -199,7 +211,7 @@ export function StructureReviewPage({ run }: StructureReviewPageProps) {
 
       {review.isReviewActive && review.gate === 'manifest' && (
         <ReviewActionBar
-          onApprove={() => review.approveMutation.mutate()}
+          onApprove={() => review.approveMutation.mutate({})}
           onRequestChanges={(feedback, comment) =>
             review.requestChangesMutation.mutate({ feedback, overallComment: comment })
           }

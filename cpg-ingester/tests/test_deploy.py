@@ -77,3 +77,31 @@ def test_template_422_prints_response_and_exits_nonzero():
 
     assert result.exit_code == 1
     assert "invalid BPMN" in result.output
+
+
+def test_template_rejection_does_not_prevent_later_registration(tmp_path):
+    first = tmp_path / "rejected.template.json"
+    second = tmp_path / "accepted.template.json"
+    first.write_text(GOLDEN_TEMPLATE.read_text())
+    second.write_text(GOLDEN_TEMPLATE.read_text())
+    rejected = _response(
+        status=422,
+        body='{"messages":[{"severity":"ERROR","text":"enum mismatch"}]}',
+    )
+    accepted = _response({"summary": {"name": "Accepted template"}})
+    runner = CliRunner()
+
+    with patch(
+        "cpg_ingester.deploy.requests.post", side_effect=[rejected, accepted]
+    ) as post:
+        result = runner.invoke(main, [
+            "--template", str(first),
+            "--template", str(second),
+        ])
+
+    assert result.exit_code == 1
+    assert post.call_count == 2
+    assert "enum mismatch" in result.output
+    assert "Deployed template: Accepted template" in result.output
+    assert "Template registration failures:" in result.output
+    assert str(first) in result.output

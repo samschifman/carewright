@@ -524,7 +524,7 @@ def synthesize_for_activity(
         instance_base = _instance_from_template(template, automation_id)
         candidate, candidate_bindings, evidence, initial_binding_findings = bind_instance(
             instance_base,
-            [template_ir],
+            [template],
             activity=activity,
             brief=brief,
             policy=automation_policy,
@@ -576,7 +576,7 @@ def synthesize_for_activity(
 
             candidate, candidate_bindings, evidence, binding_findings = bind_instance(
                 instance_base,
-                [template_ir],
+                [template],
                 activity=activity,
                 brief=brief,
                 policy=automation_policy,

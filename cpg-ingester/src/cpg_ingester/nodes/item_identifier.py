@@ -18,6 +18,7 @@ from cpg_contracts.automation.ir import automation_template_id
 from cpg_ingester.validators.dmn_syntax import VALID_HIT_POLICIES
 from cpg_ingester.nodes.structure_analyzer import _parse_llm_json
 from cpg_ingester.output import write_artifact
+from cpg_ingester.review_feedback import render_reviewer_feedback
 from cpg_ingester.prompts.item_identifier import (
     ITEM_IDENTIFIER_SYSTEM,
     ITEM_IDENTIFIER_USER,
@@ -199,6 +200,25 @@ def item_identifier(state: dict) -> dict:
     abbr_str = "\n".join(f"- {k}: {v}" for k, v in abbreviations.items()) if abbreviations else "(none extracted)"
 
     content = markdown
+    prior_manifest = state.get("prior_item_manifest") or []
+    feedback_context = {
+        str(item.get("id")): str(item.get("name") or item.get("title") or item.get("id"))
+        for item in prior_manifest
+        if isinstance(item, dict) and item.get("id")
+    }
+    feedback_context.update({
+        f"section-{index}": str(section.get("heading", ""))
+        for index, section in enumerate(state.get("prior_section_map") or section_map)
+    })
+    reviewer_feedback = render_reviewer_feedback(
+        state.get("review_feedback"),
+        state.get("review_comment", ""),
+        state.get("review_iteration", 0),
+        item_types={"classification", "process"},
+        item_context=feedback_context,
+    )
+    if reviewer_feedback:
+        content = reviewer_feedback + "\n\n---\n\n" + content
     if feedback:
         content = f"REVIEWER FEEDBACK FROM PREVIOUS ITERATION — address these issues:\n{feedback}\n\n---\n\n{content}"
 

@@ -8,6 +8,7 @@ import mlflow
 from cpg_contracts import content_to_text, get_llm
 from cpg_ingester.nodes.structure_analyzer import _parse_llm_json
 from cpg_ingester.output import write_artifact
+from cpg_ingester.review_feedback import render_reviewer_feedback
 from cpg_ingester.prompts.rec_extractor import (
     REC_EXTRACTOR_SYSTEM,
     REC_EXTRACTOR_USER,
@@ -45,14 +46,13 @@ def rec_extractor(state: dict) -> dict:
             "PREVIOUS ATTEMPT HAD SEMANTIC ISSUES — fix these:\n"
             + "\n".join(f"- {d}" for d in semantic_discrepancies)
         )
-    review_feedback = state.get("review_feedback", "") or ""
-    review_comment = state.get("review_comment", "") or ""
-    if review_feedback or review_comment:
-        feedback_sections.append(
-            "HUMAN REVIEW FEEDBACK:\n" + "\n".join(
-                value for value in (review_feedback, review_comment) if value
-            )
-        )
+    human_feedback = state.get("human_feedback", "") or render_reviewer_feedback(
+        state.get("review_feedback"),
+        state.get("review_comment", ""),
+        state.get("review_iteration", 0),
+    )
+    if human_feedback:
+        feedback_sections.append(human_feedback)
     feedback = "\n\n".join(feedback_sections)
 
     llm = get_llm(state)

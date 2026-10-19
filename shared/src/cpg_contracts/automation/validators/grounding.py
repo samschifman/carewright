@@ -202,17 +202,6 @@ def _property_by_name(process: Process) -> dict[str, Property]:
     return {prop.name: prop for prop in process.properties}
 
 
-def _source_has_cpg(source: Any) -> bool:
-    current = source
-    visited: set[int] = set()
-    while current is not None and id(current) not in visited:
-        visited.add(id(current))
-        if _field(current, "kind") == "cpg" and _field(current, "source_text"):
-            return True
-        current = _field(current, "previous")
-    return False
-
-
 def _numeric_aliases(value: Any) -> list[str]:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return [str(value)]
@@ -400,15 +389,34 @@ def _check_template_parameters(process: Process) -> list[Finding]:
                     f"policy source on {parameter.name!r} requires a reserved parameter",
                 )
             )
-        if _field(source, "kind") == "reviewer" and not _source_has_cpg(
-            _field(source, "previous")
-        ):
-            findings.append(
-                _finding(
-                    "T2",
-                    f"reviewer default on {parameter.name!r} must retain its CPG citation",
+        if _field(source, "kind") == "reviewer":
+            previous = _field(source, "previous")
+            previous_is_valid = False
+            seen_sources: set[int] = set()
+            while previous is not None and id(previous) not in seen_sources:
+                seen_sources.add(id(previous))
+                previous_kind = _field(previous, "kind")
+                if previous_kind == "cpg":
+                    source_text = _field(previous, "source_text")
+                    previous_is_valid = (
+                        isinstance(source_text, str) and bool(source_text.strip())
+                    )
+                    break
+                if previous_kind == "authored":
+                    previous_is_valid = parameter.type == "string"
+                    break
+                if previous_kind != "reviewer":
+                    break
+                previous = _field(previous, "previous")
+            if not previous_is_valid:
+                findings.append(
+                    _finding(
+                        "T2",
+                        f"reviewer default on {parameter.name!r} must retain a CPG citation, "
+                        "or an authored source for a string parameter",
+                        element_id=parameter.name,
+                    )
                 )
-            )
         if parameter.default is not None and not _within_constraints(
             parameter, parameter.default
         ):
@@ -873,6 +881,8 @@ def validate_template_text(
 
     for parameter in process.acp.parameters:
         source = parameter.source
+        # Reviewer-edited defaults retain provenance but are not rechecked
+        # against the previous value's CPG text.
         if parameter.default is None or _field(source, "kind") != "cpg":
             continue
         source_text = _field(source, "source_text", "")

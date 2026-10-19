@@ -1,15 +1,34 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import type { ReviewAction, ReviewFeedbackItem, RunDetail } from '../api/types';
+import type {
+  AutomationAcknowledgement,
+  ParameterEdit,
+  ReviewAction,
+  ReviewFeedbackItem,
+  RunDetail,
+} from '../api/types';
+
+type ReviewExtras = {
+  parameterEdits?: ParameterEdit[];
+  acknowledgements?: AutomationAcknowledgement[];
+};
+
+function withReviewExtras(action: ReviewAction['action'], extras?: ReviewExtras): ReviewAction {
+  return {
+    action,
+    ...(extras?.parameterEdits?.length ? { parameterEdits: extras.parameterEdits } : {}),
+    ...(extras?.acknowledgements?.length ? { acknowledgements: extras.acknowledgements } : {}),
+  };
+}
 
 export function useReviewGate(run: RunDetail) {
   const queryClient = useQueryClient();
   const gate = run.awaitingReview;
 
   const approveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (extras?: ReviewExtras) => {
       if (!gate) throw new Error('No review gate active');
-      const action: ReviewAction = { action: 'approve' };
+      const action = withReviewExtras('approve', extras);
       return api.submitReview(run.id, gate, action);
     },
     onSuccess: () => {
@@ -18,12 +37,19 @@ export function useReviewGate(run: RunDetail) {
   });
 
   const requestChangesMutation = useMutation({
-    mutationFn: (params: { feedback: ReviewFeedbackItem[]; overallComment?: string }) => {
+    mutationFn: (params: {
+      feedback: ReviewFeedbackItem[];
+      overallComment?: string;
+      parameterEdits?: ParameterEdit[];
+      acknowledgements?: AutomationAcknowledgement[];
+    }) => {
       if (!gate) throw new Error('No review gate active');
       const action: ReviewAction = {
         action: 'request_changes',
         feedback: params.feedback,
         overallComment: params.overallComment,
+        parameterEdits: params.parameterEdits,
+        acknowledgements: params.acknowledgements,
       };
       return api.submitReview(run.id, gate, action);
     },

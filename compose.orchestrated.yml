@@ -1,0 +1,130 @@
+# Optional local SonataFlow dev-mode profile. Render workflow resources first:
+#   python3 scripts/render-workflows-for-compose.py
+# Then use this file with compose.yml and --profile orchestrated.
+services:
+  sonataflow-devmode:
+    image: docker.io/apache/incubator-kie-sonataflow-devmode:10.2.0
+    profiles: [orchestrated]
+    ports:
+      - "8097:8080"
+    volumes:
+      - ./working/orchestrated-workflows:/home/kogito/serverless-workflow-project/src/main/resources:ro
+
+  cpg-ingester-ingestion:
+    profiles: [orchestrated]
+    environment:
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  cpg-ingester-llm:
+    profiles: [orchestrated]
+    environment:
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  cpg-ingester-assembly:
+    profiles: [orchestrated]
+    environment:
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  cpg-ingester-delivery:
+    profiles: [orchestrated]
+    environment:
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  cpg-ingester-bff:
+    profiles: [orchestrated]
+    environment:
+      SONATAFLOW_URL: http://sonataflow-devmode:8080
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  cpg-ingester-ui:
+    profiles: [orchestrated]
+
+  acp-patient-data:
+    build:
+      context: .
+      dockerfile: acp-writer/deploy/pods/Containerfile.patient-data
+    profiles: [orchestrated]
+    environment:
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  acp-llm-reasoning:
+    build:
+      context: .
+      dockerfile: acp-writer/deploy/pods/Containerfile.llm-reasoning
+    profiles: [orchestrated]
+    environment:
+      DECISION_ENGINE_URL: http://acp-decision-engine:8080
+      LITELLM_URL: http://litellm:4000
+      LLM_MODEL: ${SLICE_LLM_MODEL:-default}
+      LITELLM_API_KEY: ${SLICE_LLM_API_KEY:?SLICE_LLM_API_KEY must be set}
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  acp-decision-engine:
+    build:
+      context: .
+      dockerfile: acp-writer/deploy/pods/Containerfile.decision-engine
+    profiles: [orchestrated]
+    environment:
+      KOGITO_URL: http://kogito:8081
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  acp-fhir-generation:
+    build:
+      context: .
+      dockerfile: acp-writer/deploy/pods/Containerfile.fhir-generation
+    profiles: [orchestrated]
+    environment:
+      LITELLM_URL: http://litellm:4000
+      LLM_MODEL: ${SLICE_LLM_MODEL:-default}
+      LITELLM_API_KEY: ${SLICE_LLM_API_KEY:?SLICE_LLM_API_KEY must be set}
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  acp-fhir-server:
+    build:
+      context: .
+      dockerfile: acp-writer/deploy/pods/Containerfile.fhir-server
+    profiles: [orchestrated]
+    environment:
+      FHIR_SERVER_URL: http://medplum-server:8103/fhir/R4
+      ARTIFACT_STORE_URL: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  acp-writer-bff:
+    build:
+      context: .
+      dockerfile: acp-writer/deploy/pods/Containerfile.bff
+    profiles: [orchestrated]
+    ports:
+      - "8094:8080"
+    environment:
+      SONATAFLOW_URL: http://sonataflow-devmode:8080
+      LLM_REASONING_URL: http://acp-llm-reasoning:8080
+      DECISION_ENGINE_URL: http://acp-decision-engine:8080
+      FHIR_SERVER_URL: http://acp-fhir-server:8080
+      MINIO_ENDPOINT: http://artifact-store:9000
+      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+
+  acp-writer-ui:
+    profiles: [orchestrated]
+    environment:
+      BFF_HOST: acp-writer-bff:8080

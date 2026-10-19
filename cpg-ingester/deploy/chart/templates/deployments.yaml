@@ -66,6 +66,10 @@ spec:
             - name: ACP_WRITER_BFF_URL
               value: {{ $pod.env.acpWriterBffUrl | quote }}
             {{- end }}
+            {{- if $pod.env.bpmnPreflightUrl }}
+            - name: BPMN_PREFLIGHT_URL
+              value: {{ $pod.env.bpmnPreflightUrl | quote }}
+            {{- end }}
             {{- if hasKey $pod.env "ingestionOcrEnabled" }}
             - name: INGESTION_OCR_ENABLED
               value: {{ $pod.env.ingestionOcrEnabled | quote }}

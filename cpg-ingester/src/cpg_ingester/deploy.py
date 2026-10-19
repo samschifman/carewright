@@ -110,7 +110,7 @@ def main(
         except requests.ConnectionError:
             click.echo(f"  FAILED: {dmn_path.name} — cannot connect to {acp_writer_url}", err=True)
 
-    failed = False
+    failures: list[tuple[str, str]] = []
     for template_path in template_files:
         try:
             result = deploy_template(
@@ -122,18 +122,25 @@ def main(
                 f"{summary.get('name') or summary.get('id') or template_path.stem}"
             )
         except requests.HTTPError as exc:
-            click.echo(f"  FAILED: {template_path.name} — {exc}", err=True)
             body = exc.response.text if exc.response is not None else ""
+            detail = body or str(exc)
+            click.echo(f"  FAILED: {template_path.name} — {exc}", err=True)
             if body:
                 click.echo(body, err=True)
-            failed = True
-        except requests.ConnectionError:
+            logger.error("Template registration rejected for %s: %s", template_path, detail)
+            failures.append((str(template_path), detail))
+        except requests.RequestException as exc:
+            detail = str(exc)
             click.echo(
-                f"  FAILED: {template_path.name} — cannot connect to {acp_writer_url}",
+                f"  FAILED: {template_path.name} — {exc}",
                 err=True,
             )
-            failed = True
-    if failed:
+            logger.error("Template registration failed for %s: %s", template_path, detail)
+            failures.append((str(template_path), detail))
+    if failures:
+        click.echo("Template registration failures:", err=True)
+        for template_path, detail in failures:
+            click.echo(f"  {template_path}: {detail}", err=True)
         raise click.exceptions.Exit(1)
 
 

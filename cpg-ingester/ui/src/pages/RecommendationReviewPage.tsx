@@ -1,5 +1,6 @@
 import {
   Alert,
+  Button,
   Card,
   CardBody,
   CardTitle,
@@ -19,6 +20,8 @@ import { FeedbackInput } from '../components/FeedbackInput';
 import { ReviewActionBar } from '../components/ReviewActionBar';
 import { useReviewGate } from '../hooks/useReviewGate';
 import { recommendationAlerts, type RecommendationAlert } from '../utils/escalations';
+import { BpmnViewer } from '@cpg-to-acp/ui-shared';
+import { automationsForRecommendation } from '../utils/automationLinks';
 
 const STRENGTH_COLORS: Record<string, 'green' | 'blue' | 'orange' | 'grey'> = {
   'strong-for': 'green',
@@ -29,6 +32,7 @@ const STRENGTH_COLORS: Record<string, 'green' | 'blue' | 'orange' | 'grey'> = {
 
 interface RecommendationReviewPageProps {
   run: RunDetail;
+  onOpenAutomations?: () => void;
 }
 
 function EscalationAlert({ alert }: { alert: RecommendationAlert }) {
@@ -49,7 +53,7 @@ function EscalationAlert({ alert }: { alert: RecommendationAlert }) {
   );
 }
 
-export function RecommendationReviewPage({ run }: RecommendationReviewPageProps) {
+export function RecommendationReviewPage({ run, onOpenAutomations }: RecommendationReviewPageProps) {
   const review = useReviewGate(run);
   const [expandedRecs, setExpandedRecs] = useState<Set<string>>(new Set());
   const [feedbackMap, setFeedbackMap] = useState<Map<string, { itemType: ReviewFeedbackItem['itemType']; comment: string }>>(new Map());
@@ -107,6 +111,7 @@ export function RecommendationReviewPage({ run }: RecommendationReviewPageProps)
               const strengthLabel = rec.certainty?.strength ?? '';
               const strengthColor = STRENGTH_COLORS[strengthLabel] ?? 'grey';
               const escalationAlert = recommendationAlertsById.get(rec.id);
+              const linkedAutomations = automationsForRecommendation(rec, run.automations ?? []);
 
               return (
                 <DataListItem key={rec.id} aria-labelledby={`rec-${rec.id}`}>
@@ -183,6 +188,27 @@ export function RecommendationReviewPage({ run }: RecommendationReviewPageProps)
                         </>
                       )}
                     </ExpandableSection>
+                    {linkedAutomations.length > 0 && (
+                      <ExpandableSection toggleText="Linked automations" isIndented>
+                        {linkedAutomations.map(automation => (
+                          <section key={automation.template_summary.id} style={{ marginTop: 8 }}>
+                            <Content component="h5">{automation.template_summary.name}</Content>
+                            <Content component="p">This automation is linked to this recommendation.</Content>
+                            {automation.bpmn_xml && (
+                              <BpmnViewer
+                                xml={automation.bpmn_xml}
+                                title={`${automation.template_summary.name} process diagram`}
+                              />
+                            )}
+                          </section>
+                        ))}
+                        {onOpenAutomations && (
+                          <Button variant="link" onClick={onOpenAutomations}>
+                            Review in Automations tab
+                          </Button>
+                        )}
+                      </ExpandableSection>
+                    )}
                     {review.isReviewActive && review.gate === 'pre-delivery' && (
                       <FeedbackInput
                         itemId={rec.id}
@@ -200,7 +226,7 @@ export function RecommendationReviewPage({ run }: RecommendationReviewPageProps)
 
       {review.isReviewActive && review.gate === 'pre-delivery' && (
         <ReviewActionBar
-          onApprove={() => review.approveMutation.mutate()}
+          onApprove={() => review.approveMutation.mutate({})}
           onRequestChanges={(feedback, comment) =>
             review.requestChangesMutation.mutate({ feedback, overallComment: comment })
           }

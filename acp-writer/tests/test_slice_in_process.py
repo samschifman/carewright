@@ -11,8 +11,12 @@ from urllib.parse import parse_qs, urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
+from lxml import etree
 import pytest
 
+from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.compiler import compile
+from cpg_contracts.automation.ir import ProcessIR, SourceRef, ir_version
 from acp_writer import api
 from acp_writer.nodes import fhir_server_writer
 from acp_writer.nodes.automation_synthesizer import synthesize_for_activity
@@ -73,6 +77,7 @@ class LiveArtifactStore:
     """Read-only artifact loader over the checked-in live replay fixture set."""
 
     def __init__(self):
+        self.template_overrides = {}
         self.templates = {
             f"live/templates/{path.name}": path
             for path in (LIVE / "templates").glob("*.template.json")
@@ -85,6 +90,8 @@ class LiveArtifactStore:
     def get(self, ref: str):
         if ref == "live/recommendations.json":
             return json.loads((LIVE / "recommendations.json").read_text())
+        if ref in self.template_overrides:
+            return deepcopy(self.template_overrides[ref])
         template_path = self.templates.get(ref)
         if template_path is not None:
             return json.loads(template_path.read_text())
@@ -118,7 +125,8 @@ class LiveComposerLLM:
 
 
 class LiveSynthesisLLM:
-    def __init__(self):
+    def __init__(self, *, remove_bindings: dict[str, str] | None = None):
+        remove_bindings = remove_bindings or {}
         self.responses = {}
         for request_path in sorted((LIVE / "responses/automation").glob("*/attempt-1.request.json")):
             request = json.loads(request_path.read_text())
@@ -131,7 +139,14 @@ class LiveSynthesisLLM:
                 activity.get("source_recommendation_id"),
             )
             response = json.loads((request_path.parent / "attempt-1.response.json").read_text())
-            self.responses[key] = json.loads(response["content"])
+            parsed_response = json.loads(response["content"])
+            parameter_name = remove_bindings.get(template["process"]["id"])
+            if parameter_name:
+                parsed_response["bindings"] = [
+                    binding for binding in parsed_response.get("bindings", [])
+                    if binding.get("name") != parameter_name
+                ]
+            self.responses[key] = parsed_response
         self.used = []
 
     def invoke(self, messages):
@@ -147,6 +162,80 @@ class LiveSynthesisLLM:
             raise AssertionError("no saved synthesis response matches this template and activity")
         self.used.append(key)
         return SimpleNamespace(content=json.dumps(self.responses[key]))
+
+
+def _saved_binding_value(template_id: str, parameter_name: str):
+    for request_path in sorted((LIVE / "responses/automation").glob("*/attempt-1.request.json")):
+        request = json.loads(request_path.read_text())
+        template = _json_prompt_section(
+            request["messages"][-1]["content"], "## Selected template (pinned)"
+        )
+        if template["process"]["id"] != template_id:
+            continue
+        response = json.loads(
+            (request_path.parent / "attempt-1.response.json").read_text()
+        )
+        payload = json.loads(response["content"])
+        binding = next(
+            (
+                item for item in payload.get("bindings", [])
+                if item.get("name") == parameter_name
+            ),
+            None,
+        )
+        if binding is not None:
+            return binding["value"]
+    raise AssertionError("saved replay has no matching parameter binding")
+
+
+def _review_edited_live_template(template_path: Path) -> tuple[dict, str, str]:
+    payload = json.loads(template_path.read_text())
+    ir = ProcessIR.model_validate(payload["ir"])
+    parameter = next(
+        item for item in ir.process.acp.parameters
+        if item.type == "boolean"
+        and item.required
+        and item.default is None
+        and item.source is not None
+        and item.source.kind == "cpg"
+    )
+    previous = parameter.source.model_copy(deep=True)
+    parameter.default = _saved_binding_value(
+        ir.process.id,
+        parameter.name,
+    )
+    parameter.source = SourceRef(
+        kind="reviewer",
+        reviewer="Offline reviewer",
+        note="Selected during pre-delivery review.",
+        previous=previous,
+    )
+    payload["ir"] = ir.model_dump(mode="json", exclude_none=True)
+    payload["summary"]["version"] = ir_version(ir)
+    payload["summary"]["parameters"] = [
+        item.model_dump(mode="json", exclude_none=True)
+        for item in ir.process.acp.parameters
+    ]
+    all_namespaces = {}
+    for dmn_path in (LIVE / "dmn").glob("*.dmn"):
+        root = etree.fromstring(dmn_path.read_bytes())
+        model_id = root.get("id")
+        namespace = root.get("namespace")
+        if model_id and namespace:
+            all_namespaces[model_id] = namespace
+    linked_model_ids = payload["summary"].get("linked_decision_model_ids", [])
+    namespaces = {
+        model_id: all_namespaces[model_id]
+        for model_id in linked_model_ids
+        if model_id in all_namespaces
+    }
+    payload["dmn_namespaces"] = namespaces
+    payload["bpmn_xml"] = compile(
+        ir,
+        catalog=load_catalog(),
+        dmn_namespaces=namespaces,
+    )
+    return payload, ir.process.id, parameter.name
 
 
 def test_automation_guard_persists_failure_artifact_before_raising(tmp_path):
@@ -437,6 +526,20 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
     dmn_refs = sorted(store.dmns)
     assert len(template_refs) == 2
     assert len(dmn_refs) == 6
+    reviewed_template_ref = next(
+        ref for ref, path in store.templates.items()
+        if any(
+            parameter.get("type") == "boolean"
+            and parameter.get("required")
+            and "default" not in parameter
+            and (parameter.get("source") or {}).get("kind") == "cpg"
+            for parameter in json.loads(path.read_text())["ir"]["process"]["acp"]["parameters"]
+        )
+    )
+    edited_template, reviewed_template_id, reviewed_parameter_name = (
+        _review_edited_live_template(store.templates[reviewed_template_ref])
+    )
+    store.template_overrides[reviewed_template_ref] = edited_template
     recommendation_bundle = store.get("live/recommendations.json")
     assert recommendation_bundle["recommendations"]
 
@@ -588,7 +691,9 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
         reviewer_llm = QueuedReviewerLLM()
         monkeypatch.setattr(brief_reviewer_node, "get_llm", lambda _state: reviewer_llm)
 
-        synthesis_llm = LiveSynthesisLLM()
+        synthesis_llm = LiveSynthesisLLM(
+            remove_bindings={reviewed_template_id: reviewed_parameter_name}
+        )
         monkeypatch.setattr(synthesizer_node, "get_llm", lambda _state: synthesis_llm)
         monkeypatch.setattr(synthesizer_node, "_review", lambda *_args, **_kwargs: (True, ""))
         monkeypatch.setattr(
@@ -630,15 +735,19 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
         assert guard_path.is_file()
         assert guard["ok"], guard.get("errors")
         assert guard["attached_count"] == 5
-        assert guard["valid_instances"] == 1
+        assert guard["valid_instances"] == 3
         assert all(item["status"] in {"valid", "incomplete"} for item in guard["attached"])
-        valid_automation = next(item for item in guard["attached"] if item["status"] == "valid")
-        assert valid_automation["template_refs"][0]["template_id"] == "treatment-linked-bmp-scheduling"
+        valid_automation = next(
+            item for item in guard["attached"]
+            if item["status"] == "valid"
+            and item["template_refs"][0]["template_id"] == reviewed_template_id
+        )
         valid_payload = next(
             automation
             for activity in result["planning_brief"]["activities"]
             for automation in activity.get("automations", [])
             if automation["validation"]["status"] == "valid"
+            and automation["template_refs"][0]["template_id"] == reviewed_template_id
         )
         assert valid_payload["validation"]["rungs_passed"] == [
             "L0", "L1", "L2", "L3", "L4", "L5a", "L6", "L7",
@@ -647,6 +756,10 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
             binding for binding in valid_payload["bindings"]
             if binding["name"] == "max_duration"
         )["source"] == "policy"
+        assert next(
+            binding for binding in valid_payload["bindings"]
+            if binding["name"] == reviewed_parameter_name
+        )["source"] == "reviewer"
 
         approved = fhir_writer_client.put(
             f"/api/v1/careplans/{CAREPLAN_ID}/status",
@@ -663,10 +776,10 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
             assert any(key.startswith("DocumentReference/") for key in fhir_resources)
         records = automation_client.get("/api/v1/automations", params={"careplan_id": CAREPLAN_ID})
         assert records.status_code == 200
-        assert len(records.json()) == 1
-        record = records.json()[0]
-        fetched = automation_client.get(
-            f"/api/v1/automations/{CAREPLAN_ID}/{record['automation_id']}",
-            params={"revision": record["revision"]},
-        )
-        assert fetched.status_code == 200
+        assert len(records.json()) == guard["valid_instances"]
+        for record in records.json():
+            fetched = automation_client.get(
+                f"/api/v1/automations/{CAREPLAN_ID}/{record['automation_id']}",
+                params={"revision": record["revision"]},
+            )
+            assert fetched.status_code == 200

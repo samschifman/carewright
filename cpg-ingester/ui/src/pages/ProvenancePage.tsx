@@ -220,7 +220,7 @@ export function ProvenancePage({ run }: ProvenancePageProps) {
 
       {review.isReviewActive && review.gate === 'pre-delivery' && (
         <ReviewActionBar
-          onApprove={() => review.approveMutation.mutate()}
+          onApprove={() => review.approveMutation.mutate({})}
           onRequestChanges={(feedback, comment) =>
             review.requestChangesMutation.mutate({ feedback, overallComment: comment })
           }

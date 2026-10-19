@@ -35,6 +35,12 @@ from cpg_ingester.nodes.bpmn_ir_creator import bpmn_ir_creator
 from cpg_ingester.nodes.bpmn_semantic_reviewer import bpmn_semantic_reviewer
 from cpg_ingester.nodes.bpmn_validator import bpmn_compile_and_validate
 from cpg_ingester.output import write_artifact
+from cpg_ingester.review_feedback import (
+    feedback_entries,
+    has_item_feedback,
+    item_feedback_ids,
+    render_reviewer_feedback,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -886,11 +892,14 @@ def _process_generation_gate(item: dict, manifest: list[dict]) -> tuple[str, str
 def _generate_bpmn_results(state: dict) -> list[dict]:
     """Run only the BPMN subgraph for a saved analysis/generation state."""
     manifest = state.get("item_manifest", []) or []
-    process_items = [item for item in manifest if item.get("type") == "process"]
+    process_items = state.get("process_items_override")
+    if process_items is None:
+        process_items = [item for item in manifest if item.get("type") == "process"]
     dmn_results = state.get("dmn_results", []) or []
     all_recs = state.get("recommendation_results", []) or []
     review_feedback = state.get("review_feedback", "") or ""
     review_comment = state.get("review_comment", "") or ""
+    review_iteration = state.get("review_iteration", 0)
     shared = {
         "abbreviations": state.get("abbreviations", {}),
         "litellm_url": state.get("litellm_url", ""),
@@ -917,6 +926,15 @@ def _generate_bpmn_results(state: dict) -> list[dict]:
         if bpmn_graph is None:
             bpmn_graph = _build_bpmn_subgraph().compile()
         logger.info("Generating BPMN template for: %s", item.get("name", "?"))
+        item_id = str(item.get("id") or item.get("template_id") or "")
+        human_feedback = render_reviewer_feedback(
+            review_feedback,
+            review_comment,
+            review_iteration,
+            item_types={"process"},
+            item_context={item_id: str(item.get("name") or item_id)},
+            item_id=item_id,
+        )
         try:
             result = bpmn_graph.invoke({
                 "item": item,
@@ -925,8 +943,8 @@ def _generate_bpmn_results(state: dict) -> list[dict]:
                 "figures": _process_figures(item, state),
                 "dmn_summaries": _linked_dmn_summaries(item, dmn_results),
                 "linked_recs": _linked_recommendations(item, manifest, all_recs),
-                "human_feedback": "\n".join(value for value in (
-                    state.get("human_feedback", ""), review_feedback, review_comment,
+                "human_feedback": "\n\n".join(value for value in (
+                    state.get("human_feedback", ""), human_feedback,
                 ) if value),
                 "cpg_metadata": state.get("cpg_metadata", {}),
                 **shared,
@@ -969,6 +987,39 @@ def generate_bpmn_only(state: dict) -> dict:
     """Re-drive process templates without rerunning decisions or recommendations."""
     return {"bpmn_results": _generate_bpmn_results(state)}
 
+
+def _item_identity(item: dict | None) -> str:
+    if not isinstance(item, dict):
+        return ""
+    return str(item.get("id") or item.get("model_id") or item.get("template_id") or "")
+
+
+def _result_identity(result: dict) -> str:
+    return _item_identity(result.get("item")) or str(result.get("id") or "")
+
+
+def _replace_scoped_results(
+    previous: list[dict], generated: list[dict], selected_ids: set[str],
+) -> list[dict]:
+    """Carry prior results outside the selected scope and replace selected ids."""
+    carried = [
+        result for result in previous
+        if _result_identity(result) not in selected_ids
+    ]
+    generated_ids = {_result_identity(result) for result in generated}
+    # A targeted old item is removed even when the new section produced no
+    # recommendation object; its section escalation is returned separately.
+    carried = [result for result in carried if _result_identity(result) not in generated_ids]
+    return [*carried, *generated]
+
+
+def _prior_escalated_ids(results: list[dict]) -> set[str]:
+    return {
+        _result_identity(result)
+        for result in results
+        if result.get("escalated") and _result_identity(result)
+    }
+
 def generate_all(state: dict) -> dict:
     """Run DMN, recommendation, and BPMN subgraphs for manifest items.
 
@@ -983,6 +1034,88 @@ def generate_all(state: dict) -> dict:
     section_map = state.get("section_map", [])
     review_feedback = state.get("review_feedback", "") or ""
     review_comment = state.get("review_comment", "") or ""
+    review_iteration = state.get("review_iteration", 0)
+    prior = state.get("prior_generate_result")
+    scoped = isinstance(prior, dict) and has_item_feedback(review_feedback)
+
+    decisions = [item for item in manifest if item.get("type") == "decision"]
+    recommendations = [item for item in manifest if item.get("type") == "recommendation"]
+    process_items = [item for item in manifest if item.get("type") == "process"]
+    previous_dmns = (prior or {}).get("dmn_results", []) or []
+    previous_recs = (prior or {}).get("recommendation_results", []) or []
+    previous_rec_escalations = (prior or {}).get("recommendation_escalations", []) or []
+    previous_bpmns = (prior or {}).get("bpmn_results", []) or []
+
+    if scoped:
+        decision_feedback_ids = item_feedback_ids(review_feedback, "decision")
+        rec_feedback_ids = item_feedback_ids(review_feedback, "recommendation")
+        process_feedback_ids = item_feedback_ids(review_feedback, "process")
+        decision_scope = decision_feedback_ids | _prior_escalated_ids(previous_dmns)
+        rec_scope = rec_feedback_ids | _prior_escalated_ids(previous_recs)
+        process_scope = process_feedback_ids | _prior_escalated_ids(previous_bpmns)
+        escalated_sections = {
+            str(result.get("section", result.get("id", "")))
+            for result in previous_rec_escalations
+            if result.get("escalated") or result.get("escalation_reason")
+        }
+        rec_scope.update(
+            str(item.get("id", "")) for item in recommendations
+            if str(item.get("section", "default")) in escalated_sections
+        )
+        normalized_decision_scope = {
+            value.strip().casefold() for value in decision_scope if value.strip()
+        }
+        selected_decisions = [
+            item for item in decisions
+            if {
+                str(item.get(key, "")).strip().casefold()
+                for key in ("id", "model_id", "name")
+                if item.get(key)
+            } & normalized_decision_scope
+        ]
+        selected_decision_names = {
+            str(item.get(key, "")).strip().casefold()
+            for item in selected_decisions
+            for key in ("id", "model_id", "name")
+            if item.get(key)
+        }
+        selected_recommendations = [
+            item for item in recommendations if str(item.get("id", "")) in rec_scope
+        ]
+        selected_processes = [
+            item for item in process_items
+            if str(item.get("id", "")) in process_scope
+            or bool(
+                {
+                    str(value).strip().casefold()
+                    for value in (item.get("linked_decisions", []) or [])
+                    if str(value).strip()
+                }
+                & selected_decision_names
+            )
+        ]
+        selected_dmn_ids = {
+            str(value) for item in selected_decisions
+            for value in (item.get("id"), item.get("model_id")) if value
+        }
+        selected_rec_ids = {str(item.get("id")) for item in selected_recommendations}
+        selected_process_ids = {str(item.get("id")) for item in selected_processes}
+        selected_rec_sections = {
+            str(item.get("section", "default")) for item in selected_recommendations
+        }
+    else:
+        selected_decisions = decisions
+        selected_recommendations = recommendations
+        selected_processes = process_items
+        selected_dmn_ids = {
+            str(value) for item in decisions
+            for value in (item.get("id"), item.get("model_id")) if value
+        }
+        selected_rec_ids = {str(item.get("id")) for item in recommendations}
+        selected_process_ids = {str(item.get("id")) for item in process_items}
+        selected_rec_sections = {
+            str(item.get("section", "default")) for item in recommendations
+        }
 
     shared = {
         "abbreviations": state.get("abbreviations", {}),
@@ -994,9 +1127,8 @@ def generate_all(state: dict) -> dict:
     dmn_graph = _build_dmn_subgraph().compile()
     rec_graph = _build_rec_subgraph().compile()
 
-    dmn_results = []
-    decisions = [i for i in manifest if i.get("type") == "decision"]
-    for item in decisions:
+    generated_dmns = []
+    for item in selected_decisions:
         logger.info("Generating DMN for: %s", item.get("name", "?"))
         source_text = _extract_section_text(markdown, section_map, item.get("section", ""))
         try:
@@ -1004,15 +1136,19 @@ def generate_all(state: dict) -> dict:
                 "item": item,
                 "source_pages": source_text,
                 "cpg_metadata": state.get("cpg_metadata", {}),
-                "review_feedback": review_feedback,
-                "review_comment": review_comment,
+                "human_feedback": render_reviewer_feedback(
+                    review_feedback, review_comment, review_iteration,
+                    item_types={"decision"},
+                    item_context={str(item.get("id") or ""): str(item.get("name") or "")},
+                    item_id=str(item.get("id") or ""),
+                ),
                 **shared,
             })
         except Exception as e:
             # A crash must not make the decision silently disappear from the
             # output and the counts — flag it for human review instead.
             logger.error("DMN generation failed for '%s': %s", item.get("name"), e)
-            dmn_results.append({
+            generated_dmns.append({
                 "dmn_xml": "",
                 "item": item,
                 "decision_model_summary": {},
@@ -1025,7 +1161,7 @@ def generate_all(state: dict) -> dict:
         if not result.get("dmn_xml"):
             # Same rule for a run that finished but produced no XML.
             logger.error("DMN generation produced no XML for '%s'", item.get("name"))
-            dmn_results.append({
+            generated_dmns.append({
                 "dmn_xml": "",
                 "item": item,
                 "decision_model_summary": result.get("decision_model_summary", {}),
@@ -1071,18 +1207,22 @@ def generate_all(state: dict) -> dict:
                 or result.get("semantic_discrepancies")
                 or []
             )
-        dmn_results.append(entry)
+        generated_dmns.append(entry)
 
-    all_recs = []
-    recommendation_escalations = []
+    dmn_results = (
+        _replace_scoped_results(previous_dmns, generated_dmns, selected_dmn_ids)
+        if scoped else generated_dmns
+    )
+
+    generated_recs = []
+    generated_rec_escalations = []
     seen_sections = set()
-    recommendations = [i for i in manifest if i.get("type") == "recommendation"]
-    for item in recommendations:
+    for item in selected_recommendations:
         section = item.get("section", "default")
         if section in seen_sections:
             continue
         seen_sections.add(section)
-        section_items = [i for i in recommendations if i.get("section") == section]
+        section_items = [i for i in selected_recommendations if i.get("section", "default") == section]
         logger.info("Extracting recommendations for section: %s (%d items)", section, len(section_items))
         source_text = _extract_section_text(markdown, section_map, section)
         try:
@@ -1090,8 +1230,15 @@ def generate_all(state: dict) -> dict:
                 "items": section_items,
                 "source_pages": source_text,
                 "grading_definitions": state.get("grading_definitions", ""),
-                "review_feedback": review_feedback,
-                "review_comment": review_comment,
+                "human_feedback": render_reviewer_feedback(
+                    review_feedback, review_comment, review_iteration,
+                    item_types={"recommendation"},
+                    item_context={
+                        str(value.get("id") or ""): str(value.get("name") or value.get("title") or "")
+                        for value in section_items
+                    },
+                    item_ids={str(value.get("id") or "") for value in section_items},
+                ),
                 **shared,
             })
             recs = result.get("recommendations", [])
@@ -1102,9 +1249,9 @@ def generate_all(state: dict) -> dict:
                             rec["escalated"] = True
                             rec["escalation_reason"] = result.get("escalation_reason", "")
                             rec["escalation_errors"] = result.get("escalation_errors", [])
-                all_recs.extend(recs)
+                generated_recs.extend(recs)
             elif result.get("escalated"):
-                recommendation_escalations.append({
+                generated_rec_escalations.append({
                     "type": "recommendation",
                     "id": section,
                     "name": f"Section: {section}",
@@ -1116,7 +1263,7 @@ def generate_all(state: dict) -> dict:
                 })
         except Exception as e:
             logger.error("Rec extraction failed for section '%s': %s", section, e)
-            recommendation_escalations.append({
+            generated_rec_escalations.append({
                 "type": "recommendation",
                 "id": section,
                 "name": f"Section: {section}",
@@ -1125,12 +1272,27 @@ def generate_all(state: dict) -> dict:
                 "escalation_errors": [str(e)],
             })
 
+    all_recs = (
+        _replace_scoped_results(previous_recs, generated_recs, selected_rec_ids)
+        if scoped else generated_recs
+    )
+    recommendation_escalations = (
+        [entry for entry in previous_rec_escalations
+         if str(entry.get("section", entry.get("id", ""))) not in selected_rec_sections]
+        + generated_rec_escalations
+        if scoped else generated_rec_escalations
+    )
     bpmn_state = {
         **state,
         "dmn_results": dmn_results,
         "recommendation_results": all_recs,
+        "process_items_override": selected_processes,
     }
-    bpmn_results = _generate_bpmn_results(bpmn_state)
+    generated_bpmns = _generate_bpmn_results(bpmn_state)
+    bpmn_results = (
+        _replace_scoped_results(previous_bpmns, generated_bpmns, selected_process_ids)
+        if scoped else generated_bpmns
+    )
 
     return {
         "dmn_results": dmn_results,

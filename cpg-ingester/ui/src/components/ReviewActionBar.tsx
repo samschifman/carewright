@@ -9,16 +9,27 @@ import {
   TextArea,
 } from '@patternfly/react-core';
 import { useState } from 'react';
-import type { ReviewFeedbackItem } from '../api/types';
+import type {
+  AutomationAcknowledgement,
+  ParameterEdit,
+  ReviewFeedbackItem,
+} from '../api/types';
 
 interface ReviewActionBarProps {
-  onApprove: () => void;
-  onRequestChanges: (feedback: ReviewFeedbackItem[], overallComment: string) => void;
+  onApprove: (extras?: { parameterEdits?: ParameterEdit[]; acknowledgements?: AutomationAcknowledgement[] }) => void;
+  onRequestChanges: (
+    feedback: ReviewFeedbackItem[],
+    overallComment: string,
+    extras?: { parameterEdits?: ParameterEdit[]; acknowledgements?: AutomationAcknowledgement[] },
+  ) => void;
   isApproving: boolean;
   isRequestingChanges: boolean;
   error?: Error | null;
   itemFeedback: Map<string, { itemType: ReviewFeedbackItem['itemType']; comment: string }>;
   reviewIteration: number;
+  parameterEdits?: ParameterEdit[];
+  acknowledgements?: AutomationAcknowledgement[];
+  hasInvalidParameters?: boolean;
 }
 
 export function ReviewActionBar({
@@ -29,12 +40,20 @@ export function ReviewActionBar({
   error,
   itemFeedback,
   reviewIteration,
+  parameterEdits = [],
+  acknowledgements = [],
+  hasInvalidParameters = false,
 }: ReviewActionBarProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [overallComment, setOverallComment] = useState('');
 
   const feedbackCount = Array.from(itemFeedback.values()).filter(f => f.comment.trim()).length;
   const isBusy = isApproving || isRequestingChanges;
+  const hasIncompleteAcknowledgement = acknowledgements.some(item => !item.note.trim());
+  const extras = {
+    ...(parameterEdits.length ? { parameterEdits } : {}),
+    ...(acknowledgements.length ? { acknowledgements } : {}),
+  };
 
   function handleSubmitChanges() {
     const feedback: ReviewFeedbackItem[] = [];
@@ -47,7 +66,7 @@ export function ReviewActionBar({
         });
       }
     });
-    onRequestChanges(feedback, overallComment);
+    onRequestChanges(feedback, overallComment, extras);
     setIsModalOpen(false);
     setOverallComment('');
   }
@@ -63,8 +82,8 @@ export function ReviewActionBar({
       <ActionGroup style={{ marginTop: 24 }}>
         <Button
           variant="primary"
-          onClick={onApprove}
-          isDisabled={isBusy}
+          onClick={() => onApprove(extras)}
+          isDisabled={isBusy || hasInvalidParameters || hasIncompleteAcknowledgement}
           isLoading={isApproving}
         >
           Approve &amp; Continue
@@ -72,7 +91,7 @@ export function ReviewActionBar({
         <Button
           variant="secondary"
           onClick={() => setIsModalOpen(true)}
-          isDisabled={isBusy}
+          isDisabled={isBusy || hasInvalidParameters}
           isLoading={isRequestingChanges}
         >
           Request Changes{feedbackCount > 0 ? ` (${feedbackCount})` : ''}
@@ -106,7 +125,7 @@ export function ReviewActionBar({
           <Button
             variant="primary"
             onClick={handleSubmitChanges}
-            isDisabled={feedbackCount === 0 && !overallComment.trim()}
+            isDisabled={feedbackCount === 0 && !overallComment.trim() && parameterEdits.length === 0}
           >
             Submit Feedback
           </Button>

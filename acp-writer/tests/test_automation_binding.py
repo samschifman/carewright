@@ -175,16 +175,20 @@ def test_cpg_enum_parameter_binds_from_unambiguous_dmn_output():
         template_id=template.process.id,
         version=version,
     )]
+    selected_template = SimpleNamespace(
+        ir=template,
+        summary=SimpleNamespace(linked_decision_model_ids=["decision-a"]),
+    )
     for element in instance.process.flowElements:
         element.acp.template_ref.version = version
 
     _, bindings, evidence, findings = bind_instance(
         instance,
-        [template],
+        [selected_template],
         activity={"id": "activity-1"},
         brief={"dmn_audit_trail": [{
             "id": "audit-treatment",
-            "model_id": "treatment-recommendation",
+            "model_id": "decision-a",
             "outputs": {
                 "Treatment Recommendation": (
                     "Start medication: selected treatment with follow-up details"
@@ -199,11 +203,52 @@ def test_cpg_enum_parameter_binds_from_unambiguous_dmn_output():
     assert treatment_binding.source == "plan-derived"
     assert evidence["ev-dmn-enum-treatment_action"].payload == {
         "audit_id": "audit-treatment",
-        "model_id": "treatment-recommendation",
+        "model_id": "decision-a",
         "output_name": "Treatment Recommendation",
         "output_value": "Start medication: selected treatment with follow-up details",
     }
     assert not [finding for finding in findings if finding.element_id == "treatment_action"]
+
+
+def test_enum_binding_ignores_outputs_from_unlinked_decisions():
+    template, instance = _template_and_instance()
+    parameter = Parameter(
+        name="review_choice",
+        type="string",
+        required=True,
+        source=SourceRef(kind="cpg", source_text="A plan-derived choice."),
+        constraints={"enum": ["Option one", "Option two"]},
+    )
+    template.process.acp.parameters.append(parameter)
+    instance.process.acp.parameters.append(parameter.model_copy(deep=True))
+    version = ir_version(template)
+    instance.process.acp.template_refs = [TemplateRef(
+        template_id=template.process.id,
+        version=version,
+    )]
+    for element in instance.process.flowElements:
+        element.acp.template_ref.version = version
+    selected_template = SimpleNamespace(
+        ir=template,
+        summary=SimpleNamespace(linked_decision_model_ids=["decision-a"]),
+    )
+
+    _, bindings, evidence, _ = bind_instance(
+        instance,
+        [selected_template],
+        activity={"id": "activity-1"},
+        brief={"dmn_audit_trail": [{
+            "id": "unlinked-audit",
+            "model_id": "decision-b",
+            "outputs": {
+                "Decision output": "Option one: details",
+            },
+        }]},
+        policy={"environment_default": "P90D"},
+    )
+
+    assert not any(binding.name == "review_choice" for binding in bindings)
+    assert "ev-dmn-enum-review_choice" not in evidence
 
 
 def test_policy_binds_required_operational_parameter_and_records_evidence():

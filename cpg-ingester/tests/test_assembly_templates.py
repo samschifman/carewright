@@ -3,10 +3,21 @@
 import json
 from pathlib import Path
 
+import pytest
 from cpg_contracts import DecisionModelSummary, DecisionVariable
+from cpg_contracts.automation.ir import ProcessIR, ir_version
+from fastapi.testclient import TestClient
 from cpg_ingester.nodes.assembly import assembly
+from cpg_ingester.services import assembly_svc
 
 GOLDEN_DIR = Path(__file__).parent.parent / "data" / "golden" / "automation"
+ASTRA_RUN_DIR = (
+    Path(__file__).resolve().parents[2]
+    / "working"
+    / "slice-run"
+    / "ingester"
+    / "20261014T161107Z-93281"
+)
 
 
 def _generated_template(item):
@@ -66,6 +77,168 @@ def test_resolves_recommendation_name_in_trigger_and_publishes_normalized_templa
     ]
     assert (tmp_path / "bpmn/home-bp-monitoring.template.json").exists()
     assert (tmp_path / "bpmn/home-bp-monitoring.bpmn").exists()
+
+
+def test_pre_delivery_parameter_edit_rebinds_recompiles_and_versions_template(tmp_path):
+    state = _state(tmp_path)
+    state["artifact_review"] = {
+        "action": "approve",
+        "parameterEdits": [{
+            "templateId": "home-bp-monitoring",
+            "parameter": "max_reminder_attempts",
+            "value": 3,
+            "note": "Reviewer selected the bounded value.",
+        }],
+    }
+    original_version = state["bpmn_results"][0]["template_summary"]["version"]
+
+    result = assembly(state)
+    template_result = result["bpmn_results"][0]
+    template = template_result["automation_template"]
+    edited = next(
+        parameter for parameter in template["ir"]["process"]["acp"]["parameters"]
+        if parameter["name"] == "max_reminder_attempts"
+    )
+
+    assert edited["default"] == 3
+    assert edited["source"]["kind"] == "reviewer"
+    assert edited["source"]["previous"]["kind"] == "cpg"
+    assert edited["source"]["note"] == "Reviewer selected the bounded value."
+    assert template["summary"]["version"] == ir_version(
+        ProcessIR.model_validate(template["ir"])
+    )
+    assert template["summary"]["version"] != original_version
+    assert "Reviewer selected the bounded value." in template["bpmn_xml"]
+    assert template["summary"]["validation"]["status"] == "valid"
+
+
+def test_l7_acknowledgement_makes_template_deliverable_but_mechanical_escalation_stays_blocked(tmp_path):
+    state = _state(tmp_path)
+    state["bpmn_results"][0].update({
+        "escalated": True,
+        "escalation_reason": "semantic-budget-exhausted",
+        "escalation_errors": ["Review was inconclusive."],
+    })
+    state["bpmn_results"][0]["template_summary"]["validation"].update({
+        "status": "escalated",
+        "errors": ["Review was inconclusive."],
+    })
+    state["artifact_review"] = {
+        "action": "approve",
+        "acknowledgements": [{
+            "templateId": "home-bp-monitoring",
+            "note": "The care team accepted the remaining review note.",
+        }],
+    }
+
+    result = assembly(state)
+    template_result = result["bpmn_results"][0]
+
+    assert template_result.get("escalated") is not True
+    assert template_result["automation_template"]["summary"]["validation"]["status"] == "escalated"
+    assert template_result["automation_template"]["summary"]["validation"]["acknowledgement"] == (
+        "The care team accepted the remaining review note."
+    )
+    assert (tmp_path / "bpmn/home-bp-monitoring.template.json").exists()
+
+    blocked = _state(tmp_path / "mechanical")
+    blocked["bpmn_results"][0].update({
+        "escalated": True,
+        "escalation_reason": "static-budget-exhausted",
+        "escalation_errors": ["Static validation failed."],
+    })
+    blocked["bpmn_results"][0]["template_summary"]["validation"].update({
+        "status": "escalated",
+        "errors": ["Static validation failed."],
+    })
+    blocked["artifact_review"] = state["artifact_review"]
+    blocked_result = assembly(blocked)["bpmn_results"][0]
+    assert blocked_result["escalated"] is True
+    assert "automation_template" not in blocked_result
+
+
+def test_assembly_service_applies_review_edits_from_request(monkeypatch, tmp_path):
+    template_result = _generated_template({
+        "id": "process-guid",
+        "template_id": "home-bp-monitoring",
+        "name": "Home blood pressure monitoring with outreach and escalation",
+        "section": "3.5 Home Blood Pressure Monitoring",
+        "linked_recommendations": ["Home blood pressure monitoring"],
+        "linked_decisions": [],
+    })
+    monkeypatch.setattr(assembly_svc, "_store", None)
+
+    with TestClient(assembly_svc.app) as client:
+        response = client.post("/api/v1/assemble", json={
+            "cpg_metadata": {"cpg_id": "SYN-HTN-2026-002"},
+            "item_manifest": [{
+                "id": "rec-home-bp", "type": "recommendation",
+                "name": "Home blood pressure monitoring",
+            }],
+            "recommendation_results": [{
+                "id": "rec-home-bp", "title": "Home blood pressure monitoring",
+                "source_cpg": "SYN-HTN-2026-002",
+            }],
+            "bpmn_results": [template_result],
+            "artifact_review": {
+                "action": "approve",
+                "parameterEdits": [{
+                    "templateId": "home-bp-monitoring",
+                    "parameter": "max_reminder_attempts",
+                    "value": 3,
+                    "note": "Reviewer selected the bounded value.",
+                }],
+            },
+        })
+
+    assert response.status_code == 200
+    edited = next(
+        parameter
+        for parameter in response.json()["bpmn_results"][0]["automation_template"]["ir"][
+            "process"]["acp"]["parameters"]
+        if parameter["name"] == "max_reminder_attempts"
+    )
+    assert edited["source"]["kind"] == "reviewer"
+
+
+def test_parameter_edit_runs_optional_engine_preflight(monkeypatch, tmp_path):
+    calls = []
+
+    class Response:
+        status_code = 200
+        ok = True
+
+        @staticmethod
+        def json():
+            return {"valid": True, "messages": []}
+
+    def post(url, **kwargs):
+        calls.append((url, kwargs))
+        return Response()
+
+    monkeypatch.setenv("BPMN_PREFLIGHT_URL", "http://engine.test/api/v1/automation/templates")
+    monkeypatch.setattr("cpg_ingester.nodes.assembly.requests.post", post)
+    state = _state(tmp_path)
+    state["artifact_review"] = {
+        "parameterEdits": [{
+            "templateId": "home-bp-monitoring",
+            "parameter": "max_reminder_attempts",
+            "value": 3,
+            "note": "Reviewer selected the bounded value.",
+        }],
+    }
+
+    result = assembly(state)
+
+    assert len(calls) == 1
+    assert "validate_only=true" in calls[0][0]
+    assert "source_cpg=SYN-HTN-2026-002" in calls[0][0]
+    assert next(
+        item for item in calls[0][1]["json"]["ir"]["process"]["acp"]["parameters"]
+        if item["name"] == "max_reminder_attempts"
+    )["default"] == 3
+    validation = result["bpmn_results"][0]["template_summary"]["validation"]
+    assert validation["kogito_checked"] is True
 
 
 def _state_with_saved_run_recommendation_names(tmp_path, linked_recommendations):
@@ -291,6 +464,93 @@ def test_business_rule_task_referencing_missing_dmn_escalates_as_undelivered(tmp
     assert "Monitoring Plan" in message
 
 
+def test_undelivered_decision_escalation_clears_when_decision_is_delivered(tmp_path):
+    state = _acei_assembly_state(
+        tmp_path,
+        dmn_results=[
+            {
+                "dmn_xml": "<definitions/>",
+                "decision_model_summary": {
+                    "id": "monitoring-plan", "name": "Monitoring Plan",
+                    "namespace": "https://example.org/monitoring-plan",
+                    "inputs": [
+                        {"name": "Treatment Action", "type": "string"},
+                        {"name": "Has Kidney Disease", "type": "boolean"},
+                    ],
+                    "outputs": [
+                        {"name": "Lab Order", "type": "string"},
+                        {"name": "Lab Timing Weeks", "type": "number"},
+                    ],
+                },
+            },
+            {
+                "dmn_xml": "<definitions/>",
+                "decision_model_summary": {
+                    "id": "treatment-recommendation", "name": "Treatment Recommendation",
+                    "namespace": "https://example.org/treatment-recommendation",
+                    "inputs": [
+                        {"name": "Systolic BP", "type": "number"},
+                        {"name": "Has Diabetes", "type": "boolean"},
+                        {"name": "Has Kidney Disease", "type": "boolean"},
+                    ],
+                    "outputs": [
+                        {"name": "Action", "type": "string"},
+                        {"name": "Medication", "type": "string"},
+                        {"name": "Dose", "type": "string"},
+                        {"name": "Follow Up Weeks", "type": "number"},
+                    ],
+                },
+            },
+        ],
+    )
+    state["item_manifest"].append({
+        "id": "decision-treatment", "type": "decision",
+        "model_id": "treatment-recommendation", "name": "Treatment Recommendation",
+    })
+    state["bpmn_results"][0].update({
+        "escalated": True,
+        "escalation_reason": "undelivered-decision-reference",
+        "escalation_errors": ["previous run did not deliver the linked decision"],
+    })
+
+    result = assembly(state)
+
+    template_result = result["bpmn_results"][0]
+    assert template_result.get("escalated") is not True, template_result.get("escalation_errors")
+    assert template_result["template_summary"]["validation"]["status"] == "valid"
+    assert template_result["automation_template"]["ir"]["process"]["id"] == "acei-lab-follow-up"
+
+
+def test_existing_linked_template_is_revalidated_after_decision_delivery(tmp_path):
+    result = assembly(_acei_assembly_state(
+        tmp_path,
+        dmn_results=[
+            {
+                "dmn_xml": "<definitions/>",
+                "decision_model_summary": {
+                    "id": "monitoring-plan", "name": "Monitoring Plan",
+                    "namespace": "https://example.org/monitoring-plan",
+                    "inputs": [], "outputs": [],
+                },
+            },
+            {
+                "dmn_xml": "<definitions/>",
+                "decision_model_summary": {
+                    "id": "treatment-recommendation", "name": "Treatment Recommendation",
+                    "namespace": "https://example.org/treatment-recommendation",
+                    "inputs": [], "outputs": [],
+                },
+            },
+        ],
+    ))
+
+    template_result = result["bpmn_results"][0]
+
+    assert template_result.get("escalated") is True
+    assert template_result["escalation_reason"] == "invalid-template"
+    assert any("Lab Order" in message for message in template_result["escalation_errors"])
+
+
 def test_escalated_linked_decision_without_business_rule_task_does_not_block_template(tmp_path):
     state = _state(tmp_path)
     state["item_manifest"].append({
@@ -320,3 +580,48 @@ def test_escalated_linked_decision_without_business_rule_task_does_not_block_tem
     assert template_result["automation_template"]["summary"][
         "linked_decision_model_ids"
     ] == ["weekly-home-bp-interpretation-and-notification"]
+
+
+def test_saved_astra_replay_escalates_enum_values_outside_linked_decision_outputs(tmp_path):
+    generation_path = ASTRA_RUN_DIR / "generation-result.json"
+    if not generation_path.exists():
+        pytest.skip("saved Astra replay artifacts are not present")
+
+    generation = json.loads(generation_path.read_text())
+    analysis = json.loads((ASTRA_RUN_DIR / "analysis-result.json").read_text())
+    manifest = json.loads((ASTRA_RUN_DIR / "manifest.json").read_text())
+    assembled = assembly({
+        **analysis,
+        **generation,
+        "item_manifest": manifest,
+        "output_dir": str(tmp_path),
+    })
+
+    source_template = next(
+        result for result in generation["bpmn_results"]
+        if any(
+            (parameter.get("constraints") or {}).get("enum")
+            for parameter in result.get("process_ir", {}).get("process", {})
+            .get("acp", {}).get("parameters", [])
+        )
+        and any(
+            element.get("type") == "businessRuleTask"
+            for element in result.get("process_ir", {}).get("process", {})
+            .get("flowElements", [])
+        )
+    )
+    template_id = source_template["template_summary"]["id"]
+    assembled_template = next(
+        result for result in assembled["bpmn_results"]
+        if result.get("template_summary", {}).get("id") == template_id
+    )
+
+    assert assembled_template["escalation_reason"] == "decision-output-mismatch"
+    enum_parameter = next(
+        parameter for parameter in source_template["process_ir"]["process"]
+        ["acp"]["parameters"]
+        if (parameter.get("constraints") or {}).get("enum")
+    )
+    message = " ".join(assembled_template["escalation_errors"])
+    assert enum_parameter["name"] in message
+    assert "enum values" in message and "output values" in message

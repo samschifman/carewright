@@ -1,5 +1,6 @@
 import {
   Alert,
+  Button,
   Card,
   CardBody,
   CardTitle,
@@ -15,12 +16,15 @@ import { DmnDecisionTable } from '../components/DmnDecisionTable';
 import { FeedbackInput } from '../components/FeedbackInput';
 import { ReviewActionBar } from '../components/ReviewActionBar';
 import { useReviewGate } from '../hooks/useReviewGate';
+import { BpmnViewer } from '@cpg-to-acp/ui-shared';
+import { automationsForDecision } from '../utils/automationLinks';
 
 interface DecisionReviewPageProps {
   run: RunDetail;
+  onOpenAutomations?: () => void;
 }
 
-export function DecisionReviewPage({ run }: DecisionReviewPageProps) {
+export function DecisionReviewPage({ run, onOpenAutomations }: DecisionReviewPageProps) {
   const review = useReviewGate(run);
   const [expandedXml, setExpandedXml] = useState<Set<string>>(new Set());
   const [feedbackMap, setFeedbackMap] = useState<Map<string, { itemType: ReviewFeedbackItem['itemType']; comment: string }>>(new Map());
@@ -53,6 +57,7 @@ export function DecisionReviewPage({ run }: DecisionReviewPageProps) {
         const key = decision.decision_model_summary?.id ?? `dmn-${i}`;
         const name = decision.decision_model_summary?.name ?? decision.item.name;
         const isXmlExpanded = expandedXml.has(key);
+        const linkedAutomations = automationsForDecision(decision, run.automations ?? []);
 
         return (
           <Card key={key} style={{ marginBottom: 16 }}>
@@ -122,6 +127,28 @@ export function DecisionReviewPage({ run }: DecisionReviewPageProps) {
                 </CodeBlock>
               </ExpandableSection>
 
+              {linkedAutomations.length > 0 && (
+                <ExpandableSection toggleText="Linked automations" isIndented>
+                  {linkedAutomations.map(automation => (
+                    <section key={automation.template_summary.id} style={{ marginTop: 8 }}>
+                      <Content component="h5">{automation.template_summary.name}</Content>
+                      <Content component="p">This automation is linked to this decision model.</Content>
+                      {automation.bpmn_xml && (
+                        <BpmnViewer
+                          xml={automation.bpmn_xml}
+                          title={`${automation.template_summary.name} process diagram`}
+                        />
+                      )}
+                    </section>
+                  ))}
+                  {onOpenAutomations && (
+                    <Button variant="link" onClick={onOpenAutomations}>
+                      Review in Automations tab
+                    </Button>
+                  )}
+                </ExpandableSection>
+              )}
+
               {review.isReviewActive && review.gate === 'pre-delivery' && (
                 <FeedbackInput
                   itemId={key}
@@ -136,7 +163,7 @@ export function DecisionReviewPage({ run }: DecisionReviewPageProps) {
 
       {review.isReviewActive && review.gate === 'pre-delivery' && (
         <ReviewActionBar
-          onApprove={() => review.approveMutation.mutate()}
+          onApprove={() => review.approveMutation.mutate({})}
           onRequestChanges={(feedback, comment) =>
             review.requestChangesMutation.mutate({ feedback, overallComment: comment })
           }

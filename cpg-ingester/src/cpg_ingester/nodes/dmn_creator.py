@@ -11,12 +11,14 @@ from cpg_ingester.output import write_artifact
 from cpg_ingester.prompts.dmn_creator import DMN_CREATOR_SYSTEM, DMN_CREATOR_USER
 from cpg_ingester.reference.dmn_error_patterns import format_error_pattern_hints
 from cpg_ingester.reference.dmn_examples import REFERENCE_EXAMPLES
+from cpg_ingester.review_feedback import render_reviewer_feedback
 
 logger = logging.getLogger(__name__)
 
 
 def _build_feedback(syntax_errors: list, semantic_discrepancies: list,
-                    previous_dmn_xml: str, engine_errors: list | None = None) -> str:
+                    previous_dmn_xml: str, engine_errors: list | None = None,
+                    human_feedback: str = "") -> str:
     """Assemble repair-mode feedback: previous attempt + all labeled errors.
 
     Both error kinds are rendered when both are present (no masking), and matched
@@ -24,13 +26,15 @@ def _build_feedback(syntax_errors: list, semantic_discrepancies: list,
     the raw message.
     """
     engine_errors = engine_errors or []
-    if not syntax_errors and not semantic_discrepancies and not engine_errors:
+    if not syntax_errors and not semantic_discrepancies and not engine_errors and not human_feedback:
         return ""
 
-    sections = [
-        "PREVIOUS ATTEMPT NEEDS CORRECTION — return a complete, corrected DMN "
-        "document (not a diff, not a fragment)."
-    ]
+    sections = [human_feedback] if human_feedback else []
+    if syntax_errors or semantic_discrepancies or engine_errors:
+        sections.append(
+            "PREVIOUS ATTEMPT NEEDS CORRECTION — return a complete, corrected DMN "
+            "document (not a diff, not a fragment)."
+        )
     if previous_dmn_xml:
         sections.append("## Previous attempt\n" + previous_dmn_xml)
     if syntax_errors:
@@ -163,15 +167,15 @@ def dmn_creator(state: dict) -> dict:
     inputs = item.get("inputs", [])
     outputs = item.get("outputs", [])
 
+    human_feedback = state.get("human_feedback", "") or render_reviewer_feedback(
+        state.get("review_feedback"),
+        state.get("review_comment", ""),
+        state.get("review_iteration", 0),
+    )
     feedback = _build_feedback(
-        syntax_errors, semantic_discrepancies, previous_dmn_xml, engine_errors)
-    review_feedback = state.get("review_feedback", "") or ""
-    review_comment = state.get("review_comment", "") or ""
-    if review_feedback or review_comment:
-        human_section = "## HUMAN REVIEW FEEDBACK\n" + "\n".join(
-            value for value in (review_feedback, review_comment) if value
-        )
-        feedback = "\n\n".join(value for value in (human_section, feedback) if value)
+        syntax_errors, semantic_discrepancies, previous_dmn_xml, engine_errors,
+        human_feedback=human_feedback,
+    )
 
     abbr_str = "\n".join(f"- {k}: {v}" for k, v in abbreviations.items()) if abbreviations else "(none)"
 

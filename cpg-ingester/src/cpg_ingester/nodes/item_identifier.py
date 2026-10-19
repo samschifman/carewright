@@ -94,9 +94,22 @@ def _assign_guids(manifest: list[dict]) -> list[dict]:
                 resolved.append(ref)
         item["cross_references"] = resolved
 
-        modifies_name = item.get("modifies")
-        if modifies_name and modifies_name in name_to_guid:
-            item["modifies"] = name_to_guid[modifies_name]
+        # The prompt asks for one name or null; models sometimes return a list.
+        modifies_value = item.get("modifies")
+        modifies_names = (
+            modifies_value if isinstance(modifies_value, list) else [modifies_value]
+        )
+        resolved_modifies = [
+            name_to_guid.get(name, name)
+            for name in modifies_names
+            if isinstance(name, str) and name.strip()
+        ]
+        if not resolved_modifies:
+            item["modifies"] = None
+        elif len(resolved_modifies) == 1:
+            item["modifies"] = resolved_modifies[0]
+        else:
+            item["modifies"] = resolved_modifies
 
     return manifest
 

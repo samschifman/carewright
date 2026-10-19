@@ -1,0 +1,192 @@
+name: Build and publish component images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ingester: ${{ steps.filter.outputs.ingester }}
+      writer: ${{ steps.filter.outputs.writer }}
+      mock_ehr: ${{ steps.filter.outputs.mock_ehr }}
+      tag: ${{ steps.tag.outputs.value }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - id: filter
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
+        with:
+          filters: |
+            ingester:
+              - 'cpg-ingester/**'
+              - 'shared/**'
+              - '.github/workflows/publish-images.yml'
+            writer:
+              - 'acp-writer/**'
+              - 'shared/**'
+              - '.github/workflows/publish-images.yml'
+            mock_ehr:
+              - 'mock-EHR/**'
+              - '.github/workflows/publish-images.yml'
+
+      - id: tag
+        run: echo "value=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+  build-ingester:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.ingester == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - image: cpg-ingester-ingestion
+            context: .
+            file: cpg-ingester/deploy/pods/Containerfile.ingestion
+          - image: cpg-ingester-llm
+            context: .
+            file: cpg-ingester/deploy/pods/Containerfile.llm-analysis
+          - image: cpg-ingester-assembly
+            context: .
+            file: cpg-ingester/deploy/pods/Containerfile.assembly
+          - image: cpg-ingester-delivery
+            context: .
+            file: cpg-ingester/deploy/pods/Containerfile.delivery
+          - image: cpg-ingester-bff
+            context: .
+            file: cpg-ingester/deploy/pods/Containerfile.bff
+          - image: cpg-ingester-ui
+            context: cpg-ingester/ui
+            file: cpg-ingester/ui/Containerfile
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Reclaim runner disk for Docling image
+        if: matrix.image == 'cpg-ingester-ingestion'
+        run: |
+          echo 'Disk space before cleanup:'
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          echo 'Disk space after cleanup:'
+          df -h /
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: quay.io
+          username: ${{ vars.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          tags: quay.io/carewright/${{ matrix.image }}:${{ needs.changes.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=min,scope=${{ matrix.image }}
+
+      - name: Report runner disk after Docling image build
+        if: always() && matrix.image == 'cpg-ingester-ingestion'
+        run: df -h /
+
+  build-writer:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.writer == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - image: acp-writer-patient-data
+            context: .
+            file: acp-writer/deploy/pods/Containerfile.patient-data
+          - image: acp-writer-llm
+            context: .
+            file: acp-writer/deploy/pods/Containerfile.llm-reasoning
+          - image: acp-writer-decision
+            context: .
+            file: acp-writer/deploy/pods/Containerfile.decision-engine
+          - image: acp-writer-fhir-gen
+            context: .
+            file: acp-writer/deploy/pods/Containerfile.fhir-generation
+          - image: acp-writer-fhir-srv
+            context: .
+            file: acp-writer/deploy/pods/Containerfile.fhir-server
+          - image: acp-writer-bff
+            context: .
+            file: acp-writer/deploy/pods/Containerfile.bff
+          - image: acp-writer-ui
+            context: .
+            file: acp-writer/ui/Containerfile
+          - image: acp-writer-mcp
+            context: .
+            file: acp-writer/deploy/pods/Containerfile.mcp
+          - image: decision-service
+            context: acp-writer/decision-service
+            file: acp-writer/decision-service/deploy/Containerfile
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: quay.io
+          username: ${{ vars.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          tags: quay.io/carewright/${{ matrix.image }}:${{ needs.changes.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=min,scope=${{ matrix.image }}
+
+  build-mock-ehr:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.mock_ehr == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: mock-ehr-app
+            context: mock-EHR/ui
+            file: mock-EHR/ui/Containerfile
+          - image: medplum-loader
+            context: mock-EHR
+            file: mock-EHR/deploy/Containerfile.loader
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: quay.io
+          username: ${{ vars.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          tags: quay.io/carewright/${{ matrix.image }}:${{ needs.changes.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=min,scope=${{ matrix.image }}

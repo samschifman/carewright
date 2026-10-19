@@ -1,6 +1,6 @@
 image:
   registry: quay.io
-  namespace: cpgtoacp
+  namespace: carewright
   name: litellm
   tag: latest
 

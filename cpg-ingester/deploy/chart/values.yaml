@@ -1,6 +1,6 @@
 image:
   registry: quay.io
-  namespace: cpgtoacp
+  namespace: carewright
 
 # When true, sandboxed pods render no Deployment (OpenShell sandboxes replace
 # them) and their Services select the openshell-router instead of pod labels.

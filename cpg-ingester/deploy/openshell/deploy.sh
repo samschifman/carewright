@@ -40,7 +40,7 @@ load_config "$CONFIG_PATH"
 preflight
 preflight_openshell
 
-IMAGE_REGISTRY="quay.io/cpgtoacp"
+IMAGE_REGISTRY="quay.io/carewright"
 
 RENDERED_POLICY_DIR="$REPO_ROOT/deploy/.rendered/cpg-ingester-policies"
 render_templates_dir "$SCRIPT_DIR/policies" "$RENDERED_POLICY_DIR"

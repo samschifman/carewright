@@ -47,7 +47,7 @@ load_config "$CONFIG_PATH"
 preflight
 preflight_openshell
 
-IMAGE_REGISTRY="quay.io/cpgtoacp"
+IMAGE_REGISTRY="quay.io/carewright"
 
 # Render policy templates with namespace and MLflow host
 RENDERED_POLICY_DIR="$REPO_ROOT/deploy/.rendered/acp-writer-policies"

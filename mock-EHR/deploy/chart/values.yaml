@@ -1,10 +1,10 @@
 image:
   registry: quay.io
-  namespace: cpgtoacp
+  namespace: carewright
 
 postgres:
   # Overridden by deploy scripts with the correct namespace
-  image: quay.io/cpgtoacp/postgres:16
+  image: quay.io/carewright/postgres:16
   replicas: 1
   resources:
     requests:
@@ -20,7 +20,7 @@ postgres:
     port: 5432
 
 redis:
-  image: quay.io/cpgtoacp/redis:7
+  image: quay.io/carewright/redis:7
   replicas: 1
   resources:
     requests:
@@ -33,7 +33,7 @@ redis:
     port: 6379
 
 medplumServer:
-  image: quay.io/cpgtoacp/medplum-server:5.1.27
+  image: quay.io/carewright/medplum-server:5.1.27
   replicas: 1
   port: 8103
   resources:
@@ -49,7 +49,7 @@ medplumServer:
     port: 8103
 
 medplumApp:
-  image: quay.io/cpgtoacp/medplum-app:5.1.27
+  image: quay.io/carewright/medplum-app:5.1.27
   replicas: 1
   port: 3000
   resources:

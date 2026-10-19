@@ -3,14 +3,14 @@
 #
 # This script creates the resources that are NOT managed by Helm:
 #   1. ImageStreams for tracking build output
-#   2. BuildConfigs for building images from Git (push to quay.io/cpgtoacp)
+#   2. BuildConfigs for building images from Git (push to quay.io/carewright)
 #
 # Run this ONCE before the first `helm install` of the mock-EHR chart.
 # After this, `deploy/install.sh` handles Helm deployments.
 #
 # Prerequisites:
 #   - Logged into OpenShift (`oc login`)
-#   - quay.io/cpgtoacp push secret exists in namespace (cpgtoacp-cpgtoacpbot-pull-secret)
+#   - quay.io/carewright push secret exists in namespace (carewright-quay-push-secret)
 #
 # Usage:
 #   bash mock-EHR/deploy/setup-openshift.sh [--namespace NAMESPACE] [--branch BRANCH] [--tag TAG]
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-sschifma-cpg-to-acp}"
-GIT_REPO="https://github.com/samschifman/cpg-to-acp.git"
+GIT_REPO="https://github.com/samschifman/carewright.git"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 IMAGE_TAG="${IMAGE_TAG:-phase4}"
 MEDPLUM_VERSION="5.1.27"
@@ -77,9 +77,9 @@ spec:
   output:
     to:
       kind: DockerImage
-      name: quay.io/cpgtoacp/$name:$IMAGE_TAG
+      name: quay.io/carewright/$name:$IMAGE_TAG
     pushSecret:
-      name: cpgtoacp-cpgtoacpbot-pull-secret
+      name: carewright-quay-push-secret
   resources:
     limits:
       cpu: "1"
@@ -127,7 +127,7 @@ log "     helm upgrade --install cpg-mock-ehr ./mock-EHR/deploy/chart --namespac
 log ""
 log "  2. After Medplum server is healthy, run the data loader manually:"
 log "     oc run medplum-loader-init \\"
-log "       --image=quay.io/cpgtoacp/medplum-loader:$IMAGE_TAG \\"
+log "       --image=quay.io/carewright/medplum-loader:$IMAGE_TAG \\"
 log "       --restart=Never \\"
 log "       --env='MEDPLUM_BASE_URL=http://cpg-mock-ehr-medplum-server:8103' \\"
 log "       --env='DATA_DIR=/data' \\"

@@ -83,9 +83,9 @@ ${context_yaml}
   output:
     to:
       kind: DockerImage
-      name: quay.io/cpgtoacp/$name:$IMAGE_TAG
+      name: quay.io/carewright/$name:$IMAGE_TAG
     pushSecret:
-      name: cpgtoacp-cpgtoacpbot-pull-secret
+      name: carewright-quay-push-secret
   resources:
     limits:
       cpu: "$cpu_limit"

@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: ui
-          image: quay.io/cpgtoacp/acp-writer-ui:latest
+          image: quay.io/carewright/acp-writer-ui:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

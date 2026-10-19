@@ -55,7 +55,7 @@ Producers must not assume a specific consumer runtime. Consumers are pluggable b
 - A root-level `deploy/` directory holds only shared infrastructure (MinIO, openshell-router, MCP gateway CRs) and thin orchestrators (`deploy-all.sh`, `teardown-all.sh`, `verify-all.sh`). It must not contain component-specific knowledge.
 - **Secrets:** managed via `deploy/setup/setup-secrets.sh` → K8s Secrets → `secretKeyRef` (Helm pods) / `read_secret` + `--env` (OpenShell sandboxes). Never commit secrets. See [`deploy/README.md` § Secrets](deploy/README.md#secrets) for the full inventory and rotation procedure.
 - **OpenShell provisioning:** `deploy/setup/setup-openshell.sh` provisions the OpenShell gateway + SonataFlow platform per-namespace. Creates cluster-scoped RBAC that must be cleaned up via `teardown-all.sh --full-wipe` when abandoning a namespace.
-- **Container registry:** All images (project-built and vendor mirrors) are hosted on `quay.io/cpgtoacp`. BuildConfigs push via a `cpgtoacp-cpgtoacpbot-pull-secret` push secret. No images are pulled from the OpenShift internal registry or Docker Hub at deploy time.
+- **Container registry:** All images (project-built and vendor mirrors) are hosted on `quay.io/carewright`. BuildConfigs push via a `carewright-quay-push-secret` push secret. GitHub Actions uses a Carewright Quay robot credential to publish changed component images. No images are pulled from the OpenShift internal registry or Docker Hub at deploy time.
 - **Images:** SHA-tagged (`git rev-parse --short HEAD`), `imagePullPolicy: Always`. Never use `--skip-build` without an explicit `--tag` matching built images.
 - **Local dev** uses `compose.yml` (unchanged by the cluster framework).
 

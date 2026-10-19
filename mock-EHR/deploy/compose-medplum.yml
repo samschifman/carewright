@@ -8,7 +8,7 @@
 
 services:
   medplum-postgres:
-    image: quay.io/cpgtoacp/postgres:16
+    image: quay.io/carewright/postgres:16
     restart: unless-stopped
     ports:
       - "5432:5432"
@@ -34,7 +34,7 @@ services:
       retries: 5
 
   medplum-redis:
-    image: quay.io/cpgtoacp/redis:7
+    image: quay.io/carewright/redis:7
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -46,7 +46,7 @@ services:
       retries: 5
 
   medplum-server:
-    image: quay.io/cpgtoacp/medplum-server:5.1.27
+    image: quay.io/carewright/medplum-server:5.1.27
     restart: unless-stopped
     ports:
       - "8103:8103"

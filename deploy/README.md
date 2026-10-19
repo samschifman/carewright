@@ -12,7 +12,7 @@ Before deploying, ensure:
 | `helm` CLI installed | `helm version` |
 | `envsubst` available | `which envsubst` (part of `gettext`) |
 | `python3` available | `python3 --version` |
-| `quay.io/cpgtoacp` push secret in namespace | `oc get secret cpgtoacp-cpgtoacpbot-pull-secret` |
+| `quay.io/carewright` push secret in namespace | `oc get secret carewright-quay-push-secret` |
 | `openshell` CLI installed | `openshell --version` |
 | MaaS gateway available | `oc get svc maas-default-gateway-openshift-default -n openshift-ingress` |
 
@@ -141,7 +141,7 @@ oc new-project <namespace>
 
 # 3. Install the Quay robot push secret (one-time per namespace)
 # See "Container Registry" below for how to obtain the secret from Quay.
-oc apply -f /secure/path/cpgtoacp-cpgtoacpbot-pull-secret.yaml -n <namespace>
+oc apply -f /secure/path/carewright-quay-push-secret.yaml -n <namespace>
 
 # 4. Provision OpenShell + SonataFlow (one-time per namespace, requires cluster-admin)
 ./deploy/setup/setup-openshell.sh --config deploy/config/cluster.env
@@ -258,32 +258,32 @@ acp-writer/deploy/deploy.sh --skip-build --tag <old-sha>
 
 ## Container Registry
 
-All container images are hosted on **quay.io/cpgtoacp**. This includes both project-built images (acp-writer, cpg-ingester, mock-EHR) and mirrored vendor images (postgres, redis, medplum, node, nginx). Using a single external registry makes images portable across clusters and available for local development without cluster access.
+All container images are hosted on **quay.io/carewright**. This includes both project-built images (acp-writer, cpg-ingester, mock-EHR) and mirrored vendor images (postgres, redis, medplum, node, nginx). Using a single external registry makes images portable across clusters and available for local development without cluster access.
 
 ### Install the Quay robot push secret
 
-OpenShift BuildConfigs need credentials to push project-built images to `quay.io/cpgtoacp`. The application secret setup script does **not** create this registry credential; install it separately in every deployment namespace and again after a `--full-wipe`.
+OpenShift BuildConfigs need credentials to push project-built images to `quay.io/carewright`. The application secret setup script does **not** create this registry credential; install it separately in every deployment namespace and again after a `--full-wipe`.
 
-1. Ask a `cpgtoacp` Quay organization administrator for access to the `cpgtoacp+cpgtoacpbot` robot account. The robot must have write access to the project-built image repositories.
-2. In the Quay UI, open the `cpgtoacp` organization, select **Robot Accounts**, open `cpgtoacpbot`, and download its **Kubernetes Secret**. If you cannot access the organization, ask an administrator to securely provide the downloaded manifest.
-3. Confirm that the downloaded manifest has `metadata.name: cpgtoacp-cpgtoacpbot-pull-secret`. BuildConfigs reference that exact name.
+1. Ask a `carewright` Quay organization administrator for a robot account with write access to the project-built image repositories.
+2. In the Quay UI, open the `carewright` organization, select **Robot Accounts**, and download the robot account's **Kubernetes Secret**. If you cannot access the organization, ask an administrator to securely provide the downloaded manifest.
+3. Set the downloaded manifest's `metadata.name` to `carewright-quay-push-secret`. BuildConfigs reference that exact name.
 4. Apply the manifest to the target namespace:
 
    ```bash
    oc apply \
-     -f /secure/path/cpgtoacp-cpgtoacpbot-pull-secret.yaml \
+     -f /secure/path/carewright-quay-push-secret.yaml \
      -n <namespace>
    ```
 
 5. Verify the secret type and the presence of its Docker configuration without printing the credential:
 
    ```bash
-   oc get secret cpgtoacp-cpgtoacpbot-pull-secret \
+   oc get secret carewright-quay-push-secret \
      -n <namespace> \
      -o jsonpath='{.type}{"\n"}'
    # Expected: kubernetes.io/dockerconfigjson
 
-   oc get secret cpgtoacp-cpgtoacpbot-pull-secret \
+   oc get secret carewright-quay-push-secret \
      -n <namespace> \
      -o jsonpath='{.data.\.dockerconfigjson}' \
      | grep -q . && echo "Quay credentials are present"
@@ -291,9 +291,15 @@ OpenShift BuildConfigs need credentials to push project-built images to `quay.io
 
 The downloaded YAML contains a registry credential. Store and transfer it securely, never commit it, and delete the local copy when it is no longer needed.
 
-- **BuildConfigs** push to `quay.io/cpgtoacp` via `DockerImage` output (not ImageStreamTags). They require a push secret named `cpgtoacp-cpgtoacpbot-pull-secret` in the namespace.
-- **Helm chart values** default to `quay.io/cpgtoacp` — deploy scripts no longer override `image.namespace` with the OpenShift namespace.
-- **compose.yml** and **Containerfile base images** also pull from `quay.io/cpgtoacp`.
+- **BuildConfigs** push to `quay.io/carewright` via `DockerImage` output (not ImageStreamTags). They require a push secret named `carewright-quay-push-secret` in the namespace.
+- **Helm chart values** default to `quay.io/carewright` — deploy scripts no longer override `image.namespace` with the OpenShift namespace.
+- **compose.yml** and **Containerfile base images** also pull from `quay.io/carewright`.
+
+### GitHub Actions image publishing
+
+The [image publishing workflow](../.github/workflows/publish-images.yml) builds changed components on pushes to `main` and publishes them to `quay.io/carewright` with the short commit SHA as the tag. A manual run builds all images. Configure the repository Actions variable `QUAY_USERNAME` with the Carewright robot username and the repository Actions secret `QUAY_TOKEN` with its token. The robot needs write access to every repository named in the workflow. No registry credentials belong in the workflow file.
+
+The workflow publishes six CPG Ingester images, nine ACP Writer images, and two mock EHR images. Changes under `shared/` rebuild both application components. OpenShift BuildConfigs remain available for cluster builds; they use the separate `carewright-quay-push-secret` Kubernetes Secret. For a full stack deployment at a new SHA, run the workflow manually to publish every component image at that tag. The optional `mock-ehr-mcp` and LiteLLM images are external to this workflow and must be mirrored or built in `quay.io/carewright` before those components are enabled.
 
 ## Image Tagging
 
@@ -349,7 +355,7 @@ acp-writer/deploy/
 │   ├── deploy.sh         # OpenShell sandbox management
 │   ├── policies/         # Security policies
 │   └── router-fragment.conf.tmpl  # nginx routing fragment
-├── setup-images.sh       # BuildConfigs (push to quay.io/cpgtoacp)
+├── setup-images.sh       # BuildConfigs (push to quay.io/carewright)
 ├── deploy.sh             # Full component deploy
 ├── verify.sh             # Post-deploy verification
 └── teardown.sh           # Component teardown
@@ -441,7 +447,7 @@ The deploy scripts apply these automatically (`cpgingester-props.yaml` and `acpw
 - The MaaS ExternalName service (`maas-model-*-backend:443`) does not work from pods (TLS/SNI failure). All traffic uses the MaaS gateway URL.
 - `etcd` encryption at rest is not verified for this cluster. K8s Secrets may be stored in plaintext.
 - **Delivery/notification not wired:** cpg-ingester publishes artifacts to MinIO but does not notify acp-writer. Use `deploy/load-published-artifacts.sh` as a stopgap.
-- **quay.io push secret required:** BuildConfigs push to `quay.io/cpgtoacp` and require a `cpgtoacp-cpgtoacpbot-pull-secret` in the namespace. This must be created before running `setup-images.sh`.
+- **quay.io push secret required:** BuildConfigs push to `quay.io/carewright` and require a `carewright-quay-push-secret` in the namespace. This must be created before running `setup-images.sh`.
 
 ## Test Coverage
 

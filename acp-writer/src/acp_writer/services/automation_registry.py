@@ -114,11 +114,23 @@ class AutomationRegistry:
             raise RegistryError(422, "static-validation-incomplete", {"missing_rungs": missing})
         if ir_version(template.ir) != template.summary.version:
             raise RegistryError(422, "ir-version-mismatch", "summary version does not match IR hash")
-        if template.summary.validation.status != "valid" or "L5b" not in template.summary.validation.rungs_passed:
+        validation = template.summary.validation
+        reviewer_passed = validation.status == "valid" and "L5b" in validation.rungs_passed
+        # Design §5: a template escalated only on the reviewer rung may be
+        # delivered when the informaticist acknowledges it at pre-delivery. The
+        # mechanical rungs were re-run above, so only the reviewer's verdict is
+        # being overridden, and the note travels with the record.
+        reviewer_acknowledged = (
+            validation.status == "escalated"
+            and bool((validation.acknowledgement or "").strip())
+            and "L5a" in validation.rungs_passed
+        )
+        if not (reviewer_passed or reviewer_acknowledged):
             raise RegistryError(
                 422,
                 "text-validation-missing",
-                "template must carry a successful L5b source-grounding result",
+                "template must carry a successful L5b source-grounding result "
+                "or a pre-delivery acknowledgement of its reviewer escalation",
             )
 
         engine_result = bpmn_validator(template.bpmn_xml)

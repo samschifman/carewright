@@ -147,6 +147,8 @@ services:
     profiles: [orchestrated]
     environment:
       BFF_HOST: acp-writer-bff:8080
+    volumes:
+      - ./acp-writer/ui/public/smart-config.json:/opt/app-root/src/smart-config.json:ro
 
 volumes:
   orchestrated-artifact-store-data:

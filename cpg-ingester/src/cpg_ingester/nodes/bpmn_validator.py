@@ -52,13 +52,20 @@ def bpmn_compile_and_validate(state: dict) -> dict:
         findings = [finding.__dict__.copy() for finding in ladder.findings]
         deferred = list(ladder.deferred)
         rungs_passed = list(ladder.rungs_passed)
-        if ladder.ok:
+        # The compiler ran at L1; keep its output whenever L1 passed, even if a
+        # later rung failed, so the review UI can show the diagram the
+        # informaticist is being asked to judge. Delivery still requires ladder.ok.
+        if "L1" in rungs_passed:
             namespaces = {
                 model_id: summary.namespace
                 for model_id, summary in dmn_summaries.items()
                 if summary.namespace
             }
-            bpmn_xml = compile(process_ir, catalog=catalog, dmn_namespaces=namespaces)
+            try:
+                bpmn_xml = compile(process_ir, catalog=catalog, dmn_namespaces=namespaces)
+            except (TypeError, ValueError, KeyError) as exc:
+                logger.warning("BPMN compile for review display failed: %s", exc)
+                bpmn_xml = ""
         normalized_ir = process_ir.model_dump(mode="json", exclude_none=True)
     except (ValidationError, TypeError, ValueError, KeyError) as exc:
         logger.warning("ProcessIR validation failed: %s", exc)

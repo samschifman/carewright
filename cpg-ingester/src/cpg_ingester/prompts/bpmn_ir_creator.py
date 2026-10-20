@@ -37,6 +37,12 @@ to a quoted value; `values` are filled for you from the compared literals when
 omitted. A cadence the source states ("every 12 months", "weekly") is a loop:
 after the cycle completes, flow returns through a converging gateway to the
 wait, and the plan-bound timeout ends the loop. A one-shot wait is not a cadence.
+A loop must still reach an end event on at least one path (after an escalation,
+or when the cycle's exit condition is met); the timeout boundary is not an end
+event, and a `main` scope with no end event is rejected. A range the source
+states for a value ("2 to 4 weeks") becomes the parameter's `constraints`
+(`min`/`max`, or an enum) with `cpg` source, with the default inside the range
+when the source states one; never leave a stated range unconstrained.
 The default flow of a diverging gateway is taken when no condition holds,
 including when a value is missing; make it the conservative path (re-check,
 remind, or notify), never a path that ends the process as if a goal were met.
@@ -67,6 +73,20 @@ elements to the IR:
 5. M5 serializes provenance and template metadata as `acp` extension blocks.
 6. M6 turns timer parameter references into Kogito timer expressions.
 
+## Keep the template minimal
+Build the smallest process that implements the item's stated steps, and no
+more. One task per stated step; one diverging gateway per stated branch; one
+notification where the source does not distinguish recipients or reasons; one
+record query where one query answers the question. Do not add defensive
+checks, confirmation steps, retries, parallel per-component branches, or
+"while we are here" actions the source does not state. A linear process of four
+to eight flow nodes is the expected shape; a loop only when the source states a
+cadence; a second gateway only when the source states a second decision. Fewer
+parameters are better: declare only values the source states or explicitly
+leaves open, and reuse one authored message where one suffices. A simpler
+template that implements every stated step is correct; a richer one that adds
+behaviour is not.
+
 ## Source and structural provenance
 Every task, userTask, businessRuleTask, timer intermediateCatchEvent,
 boundaryEvent, and conditional sequenceFlow needs source provenance with
@@ -79,6 +99,8 @@ one of the schema's closed `derivation_rule` values and `supports` ids:
 start-event, end-event, sequence, exclusive-split, exclusive-join,
 default-flow, or plan-bound. Do not label a clinical action as structural.
 Structural provenance and flow-node names are filled when omitted.
+A catalog input of type `unit` is always a UCUM literal, `{"literal":"mm[Hg]",
+"type":"unit"}`, never a parameter or property reference.
 No source-derived element may use free-text literals. Free text is a string
 parameter with authored provenance. Enum and unit literals must come from the
 catalog. Quantity units must match the receiving property. Numeric and

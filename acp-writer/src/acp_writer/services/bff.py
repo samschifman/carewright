@@ -616,7 +616,52 @@ async def get_careplan(careplan_id: str):
         return JSONResponse(status_code=502, content={"message": "Failed to reach FHIR server"})
     if not raw:
         return JSONResponse(status_code=404, content={"message": f"Care plan {careplan_id} not found"})
-    return _to_careplan_detail(raw)
+    detail = _to_careplan_detail(raw)
+    await _merge_brief_automations(detail, careplan_id)
+    return detail
+
+
+async def _merge_brief_automations(detail: dict, careplan_id: str) -> None:
+    """Add the planning brief's automations to a persisted care plan view.
+
+    The FHIR bundle carries only enabled, valid automations (the
+    activity-automation extension). Incomplete, escalated and disabled ones
+    live in the run's planning brief, which is what the review gate shows;
+    the persisted view should show the same set with the same statuses.
+    """
+    if not _sonataflow or not _phi_store:
+        return
+    try:
+        instances = await _sonataflow.list_instances()
+    except Exception as exc:
+        logger.warning("Could not list runs to enrich care plan %s: %s", careplan_id, exc)
+        return
+    for inst in instances:
+        summary = map_to_run_summary(inst)
+        if summary.get("careplanId") != careplan_id:
+            continue
+        try:
+            full = await _sonataflow.get_instance(inst["id"])
+        except Exception as exc:
+            logger.warning("Could not load run %s for care plan %s: %s", inst.get("id"), careplan_id, exc)
+            return
+        run_detail = enrich_run_detail(map_to_run_detail(full), _phi_store, _artifacts_store)
+        if not detail.get("runId"):
+            detail["runId"] = summary.get("runId") or run_detail.get("runId")
+        brief_activities = (run_detail.get("carePlan") or {}).get("activities") or []
+        by_id = {a.get("id"): a for a in brief_activities if a.get("id")}
+        for activity in (detail.get("view") or {}).get("activities") or []:
+            source = by_id.get(activity.get("id"))
+            if not source or not source.get("automations"):
+                continue
+            merged = list(activity.get("automations") or [])
+            seen = {a.get("id") for a in merged}
+            for automation in source["automations"]:
+                if automation.get("id") not in seen:
+                    merged.append(automation)
+                    seen.add(automation.get("id"))
+            activity["automations"] = merged
+        return
 
 
 # ---------------------------------------------------------------------------

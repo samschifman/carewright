@@ -24,3 +24,4 @@ working/
 **/.DS_Store
 dev_docs/
 docs/
+acp-writer/ui/public/smart-config.json

@@ -9,6 +9,7 @@ import mlflow
 from pydantic import ValidationError
 
 from cpg_contracts import content_to_text, get_llm
+from cpg_contracts.automation.catalog import load_catalog
 from cpg_ingester.nodes.structure_analyzer import _parse_llm_json
 from cpg_ingester.output import write_artifact
 from cpg_ingester.llm_responses import persist_llm_response
@@ -256,6 +257,34 @@ def _normalize_template_ir(raw_ir: dict, state: dict) -> dict:
             add_structural_provenance(element, "default-flow", [source_id, target_id])
         elif element.get("conditionExpression") is None:
             add_structural_provenance(element, "sequence", [source_id, target_id])
+
+    # A catalog input of type `unit` is a terminology literal, never a
+    # parameter: when the creator bound it to a string parameter whose default
+    # is the UCUM code, use that code as the literal (the parameter stays).
+    try:
+        unit_inputs = {
+            capability.id: {value.name for value in capability.inputs if value.type == "unit"}
+            for capability in load_catalog().capabilities
+        }
+    except Exception:  # catalog unavailable: leave the IR untouched
+        unit_inputs = {}
+    parameters_by_name = {
+        q.get("name"): q
+        for q in (process.get("acp") or {}).get("parameters") or []
+        if isinstance(q, dict)
+    }
+    for element in elements:
+        if not isinstance(element, dict) or element.get("type") != "task":
+            continue
+        names = unit_inputs.get(element.get("taskName"), set())
+        inputs = element.get("inputs") or {}
+        for input_name in names:
+            ref = inputs.get(input_name)
+            if isinstance(ref, dict) and isinstance(ref.get("param"), str):
+                parameter = parameters_by_name.get(ref["param"])
+                default = parameter.get("default") if isinstance(parameter, dict) else None
+                if parameter and parameter.get("type") == "string" and isinstance(default, str) and default.strip():
+                    inputs[input_name] = {"literal": default.strip(), "type": "unit"}
 
     # A string property compared against quoted values is categorical. Declare
     # its value set from those literals when the creator omitted `values`, so

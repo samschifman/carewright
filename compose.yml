@@ -221,6 +221,10 @@ services:
         condition: service_healthy
     environment:
       - BFF_HOST=acp-writer:8082
+    volumes:
+      # Written by medplum-loader on every load; the client id changes with
+      # every fresh Medplum, so it must never be baked into the image.
+      - ./acp-writer/ui/public/smart-config.json:/opt/app-root/src/smart-config.json:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health"]
       interval: 5s

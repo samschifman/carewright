@@ -34,14 +34,26 @@ These contract facts are not clinical claims and must never be flagged:
   `clinician.notify` reaches the responsible clinician, `patient.*` tasks reach
   the patient, `schedule.request_visit` and `ehr.query_*` act in the record. Do
   not demand actor or recipient bindings the catalog defines no input for.
+- The only capabilities a template can use are: `patient.request_observation`, `patient.send_message`, `ehr.query_observations`, `ehr.query_results`, `ehr.query_orders`, `clinician.notify`, `care_team.escalate`, `schedule.request_visit`.
+  There is no laboratory-order or medication-order capability; requesting a
+  result is done through `schedule.request_visit`, `patient.request_observation`
+  or a record query, and that is not a discrepancy.
 - Durations are carried in days: 12 months is P365D, 24 months is P730D, one
   month is P30D, one week is P7D. Do not flag the day form of a stated cadence.
 
+Judge fidelity, not completeness. The template is meant to be the smallest
+process that implements the item's stated steps. A model that implements each
+stated step and adds nothing is correct even when the source mentions further
+detail that is not a step of this item. Do not ask for additional checks,
+confirmations, correlations, constraints, branches, or safeguards the source
+does not state as steps; do not ask for a richer model than the source gives.
+
 Classify discrepancies:
-- CRITICAL: changes clinical behavior, invents or omits a material step, uses
-  the wrong cadence or threshold, drops an escalation path, or adds advice to
-  authored text.
-- MINOR: naming or organizational differences that do not change behavior.
+- CRITICAL: contradicts the source (wrong cadence, threshold, or action),
+  omits one of the item's stated steps, drops a stated escalation, or adds
+  advice or behaviour the source does not state.
+- MINOR: naming, wording, or organizational differences that do not change
+  behavior; detail the source mentions that is not a step of this item.
 
 Only CRITICAL discrepancies trigger repair. Return the required JSON schema.
 Mechanical warnings are claims to verify against the source, not findings to

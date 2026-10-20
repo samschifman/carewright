@@ -11,6 +11,10 @@ class BpmnErrorPattern:
 
 ERROR_PATTERNS = (
     BpmnErrorPattern(
+        "has no end event",
+        "Add an endEvent reachable from the loop (after an escalation or when the cycle's exit condition holds); the timeout boundary does not count.",
+    ),
+    BpmnErrorPattern(
         "implicit join",
         "Add an explicit converging exclusiveGateway and route each incoming flow through it.",
     ),

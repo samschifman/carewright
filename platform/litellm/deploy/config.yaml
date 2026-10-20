@@ -7,6 +7,10 @@ model_list:
     litellm_params:
       model: openai/gpt-6-luna
       api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-6-astra
+    litellm_params:
+      model: openai/gpt-6-astra
+      api_key: os.environ/OPENAI_API_KEY
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

@@ -1,0 +1,306 @@
+{
+  "ir_version": "1.0",
+  "process": {
+    "id": "follow-up-visit",
+    "name": "Follow-up visit scheduling and confirmation",
+    "description": "For medication patients, request a follow-up visit within the treatment decision interval, check for the visit order immediately, and notify the care team if no order is found.",
+    "isExecutable": true,
+    "kind": "template",
+    "properties": [
+      {
+        "name": "visit_request_id",
+        "type": "string"
+      },
+      {
+        "name": "visit_found",
+        "type": "boolean"
+      }
+    ],
+    "flowElements": [
+      {
+        "type": "startEvent",
+        "id": "start",
+        "name": "Follow-up process begins",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "start-event",
+            "supports": [
+              "request_visit"
+            ]
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "request_visit",
+        "name": "Request the planned follow-up visit",
+        "taskName": "schedule.request_visit",
+        "inputs": {
+          "reason": {
+            "param": "visit_reason"
+          },
+          "within": {
+            "param": "follow_up_interval"
+          }
+        },
+        "outputs": {
+          "request_id": "visit_request_id"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."
+          }
+        }
+      },
+      {
+        "type": "task",
+        "id": "query_visit_order",
+        "name": "Check for a follow-up visit order",
+        "taskName": "ehr.query_orders",
+        "inputs": {
+          "code": {
+            "concept": "follow-up visit"
+          },
+          "window": {
+            "param": "follow_up_interval"
+          }
+        },
+        "outputs": {
+          "found": "visit_found"
+        },
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."
+          }
+        }
+      },
+      {
+        "type": "exclusiveGateway",
+        "id": "gw_visit_found",
+        "name": "Follow-up visit found?",
+        "gatewayDirection": "Diverging",
+        "default": "f_visit_missing",
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "exclusive-split",
+            "supports": [
+              "f_visit_found",
+              "f_visit_missing"
+            ]
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_visit_found",
+        "sourceRef": "gw_visit_found",
+        "targetRef": "end_complete",
+        "name": "visit found",
+        "conditionExpression": "defined(visit_found) and visit_found == true",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_visit_missing",
+        "sourceRef": "gw_visit_found",
+        "targetRef": "notify_clinician",
+        "name": "visit missing"
+      },
+      {
+        "type": "task",
+        "id": "notify_clinician",
+        "name": "Notify clinician about missing visit",
+        "taskName": "clinician.notify",
+        "inputs": {
+          "urgency": {
+            "literal": "routine",
+            "type": "enum"
+          },
+          "reason": {
+            "param": "notify_reason"
+          }
+        },
+        "outputs": {},
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_complete",
+        "name": "Follow-up visit found",
+        "acp": {
+          "outcome": "complete",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "query_visit_order"
+            ]
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_notified",
+        "name": "Care team notified",
+        "acp": {
+          "outcome": "notified",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "notify_clinician"
+            ]
+          }
+        }
+      },
+      {
+        "type": "endEvent",
+        "id": "end_timeout",
+        "name": "Follow-up window elapsed",
+        "acp": {
+          "outcome": "timed_out",
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "end-event",
+            "supports": [
+              "period_elapsed"
+            ]
+          }
+        }
+      },
+      {
+        "type": "boundaryEvent",
+        "id": "period_elapsed",
+        "name": "Maximum duration elapsed",
+        "attachedToRef": "main",
+        "cancelActivity": true,
+        "timerEventDefinition": {
+          "timeDuration": {
+            "param": "max_duration"
+          }
+        },
+        "acp": {
+          "provenance": {
+            "kind": "structural",
+            "derivation_rule": "plan-bound",
+            "supports": [
+              "request_visit",
+              "query_visit_order",
+              "gw_visit_found",
+              "notify_clinician"
+            ]
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_start",
+        "sourceRef": "start",
+        "targetRef": "request_visit"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_request_query",
+        "sourceRef": "request_visit",
+        "targetRef": "query_visit_order",
+        "acp": {
+          "provenance": {
+            "kind": "source",
+            "source_text": "For patients starting or changing medication, the seven-day home average should be reviewed two to four weeks after the change, in addition to the laboratory follow-up in Table 2."
+          }
+        }
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_query_gateway",
+        "sourceRef": "query_visit_order",
+        "targetRef": "gw_visit_found"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_notify_end",
+        "sourceRef": "notify_clinician",
+        "targetRef": "end_notified"
+      },
+      {
+        "type": "sequenceFlow",
+        "id": "f_timeout",
+        "sourceRef": "period_elapsed",
+        "targetRef": "end_timeout"
+      }
+    ],
+    "acp": {
+      "triggers": [
+        {
+          "kind": "dmn-output",
+          "model_id": "treatment-recommendation",
+          "output_name": "Follow Up Weeks",
+          "output_value": 2
+        },
+        {
+          "kind": "dmn-output",
+          "model_id": "treatment-recommendation",
+          "output_name": "Follow Up Weeks",
+          "output_value": 4
+        }
+      ],
+      "parameters": [
+        {
+          "name": "follow_up_interval",
+          "type": "duration",
+          "required": true,
+          "description": "Interval derived from the Treatment Recommendation output Follow Up Weeks."
+        },
+        {
+          "name": "visit_reason",
+          "type": "string",
+          "default": "Arrange the planned hypertension follow-up visit.",
+          "required": true,
+          "description": "Reason supplied with the visit request.",
+          "source": {
+            "kind": "authored"
+          }
+        },
+        {
+          "name": "notify_reason",
+          "type": "string",
+          "default": "No follow-up visit was found in the EHR during the expected interval.",
+          "required": true,
+          "description": "Reason shown to the responsible clinician.",
+          "source": {
+            "kind": "authored"
+          }
+        },
+        {
+          "name": "max_duration",
+          "type": "duration",
+          "required": true,
+          "description": "Maximum time allowed for this automation.",
+          "reserved": true
+        }
+      ],
+      "invariants": [
+        "max_duration >= follow_up_interval"
+      ],
+      "produces": [],
+      "provenance": {
+        "source_cpg": "SYN-HTN-2026-002",
+        "section": "3.2 Treatment Decision; Table 1 Follow-up (weeks)"
+      }
+    }
+  }
+}

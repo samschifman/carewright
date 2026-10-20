@@ -227,6 +227,29 @@ def _duration_alias_groups(value: Any) -> list[list[str]]:
 
     day_seconds = 24 * 60 * 60
     week_seconds = 7 * day_seconds
+    # Guidelines state yearly and monthly cadences in words; the IR carries days
+    # (the engine rejects month and year designators). Accept the words.
+    year_seconds = 365 * day_seconds
+    month_seconds = 30 * day_seconds
+    if seconds % year_seconds == 0:
+        count = seconds // year_seconds
+        noun = "year" if count == 1 else "years"
+        aliases.append([str(count), noun])
+        aliases.append([str(count * 12), "months"])
+        if count in _SIMPLE_NUMBER_WORDS:
+            aliases.append([_SIMPLE_NUMBER_WORDS[count], noun])
+        if count == 1:
+            aliases.extend([["annually"], ["annual"], ["yearly"], ["every", "year"], ["a", "year"], ["every", "12", "months"]])
+        if count == 2:
+            aliases.extend([["every", "other", "year"], ["biennial"], ["biennially"], ["every", "two", "years"]])
+    if seconds % month_seconds == 0 and seconds % year_seconds != 0:
+        count = seconds // month_seconds
+        noun = "month" if count == 1 else "months"
+        aliases.append([str(count), noun])
+        if count in _SIMPLE_NUMBER_WORDS:
+            aliases.append([_SIMPLE_NUMBER_WORDS[count], noun])
+        if count == 1:
+            aliases.extend([["monthly"], ["every", "month"], ["a", "month"], ["each", "month"]])
     if seconds % week_seconds == 0:
         count = seconds // week_seconds
         noun = "week" if count == 1 else "weeks"

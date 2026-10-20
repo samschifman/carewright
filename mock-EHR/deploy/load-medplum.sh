@@ -77,13 +77,13 @@ if [ -n "$MEDPLUM_SUPERADMIN_PASSWORD" ]; then
   log "Changing seeded super admin password ..."
   sa_login=$(curl -sf -X POST "$MEDPLUM_BASE_URL/auth/login" \
     -H "Content-Type: application/json" \
-    -d '{"email":"admin@example.com","password":"medplum_admin","codeChallengeMethod":"plain","codeChallenge":"sa"}' 2>/dev/null)
-  sa_code=$(echo "$sa_login" | python3 -c "import sys,json; print(json.load(sys.stdin).get('code',''))" 2>/dev/null)
+      -d '{"email":"admin@example.com","password":"medplum_admin","codeChallengeMethod":"plain","codeChallenge":"sa"}' 2>/dev/null) || sa_login=""
+  sa_code=$(echo "$sa_login" | python3 -c "import sys,json; print(json.load(sys.stdin).get('code',''))" 2>/dev/null) || sa_code=""
   if [ -n "$sa_code" ]; then
     sa_token=$(curl -sf -X POST "$MEDPLUM_BASE_URL/oauth2/token" \
       -H "Content-Type: application/x-www-form-urlencoded" \
       -d "grant_type=authorization_code&code=$sa_code&code_verifier=sa" \
-      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null)
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null) || sa_token=""
     if [ -n "$sa_token" ]; then
       curl -sf -X POST "$MEDPLUM_BASE_URL/auth/changepassword" \
         -H "Content-Type: application/json" \

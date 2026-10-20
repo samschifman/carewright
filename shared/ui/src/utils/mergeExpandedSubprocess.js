@@ -3,7 +3,13 @@ import * as BpmnModdleModule from "bpmn-moddle";
 const SHAPE = "bpmndi:BPMNShape";
 const EDGE = "bpmndi:BPMNEdge";
 const PADDING = 80;
-const BpmnModdle = BpmnModdleModule.BpmnModdle;
+// bpmn-moddle 9 exposes only a default export; 10 adds the named `BpmnModdle`.
+// The lockfile and a hoisted install can disagree, so accept either shape.
+const BpmnModdle =
+  BpmnModdleModule.BpmnModdle ?? BpmnModdleModule.default ?? BpmnModdleModule;
+if (typeof BpmnModdle !== "function") {
+  throw new Error("bpmn-moddle did not export a constructor");
+}
 
 function elementId(reference) {
   return typeof reference === "string" ? reference : reference?.id;

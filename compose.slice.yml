@@ -7,7 +7,8 @@ services:
     image: docker.io/chrislusf/seaweedfs:4.22
     command:
       ["server", "-dir=/data", "-filer", "-s3", "-s3.port=9000",
-       "-s3.config=/etc/seaweedfs/s3.json"]
+       "-s3.config=/etc/seaweedfs/s3.json",
+       "-master.volumeSizeLimitMB=512", "-volume.max=0"]
     ports:
       - "9000:9000"
       - "9333:9333"

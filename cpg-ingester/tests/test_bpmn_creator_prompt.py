@@ -23,7 +23,7 @@ def test_prompt_includes_catalog_and_forbids_xml_and_coordinates():
     assert "Use `userTask` only for clinician" in flat_prompt
     assert "care team's automation expressed with catalog capabilities" in flat_prompt
     assert "Never use a `property` reference for a timer" in flat_prompt
-    assert "express one week as `P7D`, never `P1W`" in flat_prompt
+    assert "express one week as `P7D`, one month as `P30D`, 12 months as `P365D`" in flat_prompt
     assert "one exact, contiguous quote" in flat_prompt
     assert "An `acp.triggers` entry of kind `dmn-output`" in flat_prompt
 

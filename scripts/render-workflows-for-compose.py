@@ -16,10 +16,14 @@ WORKFLOWS = {
     "cpg-ingester": REPO_ROOT / "cpg-ingester/deploy/orchestrator/cpg-ingester-workflow.yaml",
     "acp-writer": REPO_ROOT / "acp-writer/deploy/orchestrator/acp-writer-workflow.yaml",
 }
+WORKFLOW_PROPERTIES = (
+    REPO_ROOT / "cpg-ingester/deploy/orchestrator/cpgingester-props.yaml",
+    REPO_ROOT / "acp-writer/deploy/orchestrator/acpwriter-props.yaml",
+)
 HOST_REWRITES = {
     "cpg-ingester-llm-analysis": "cpg-ingester-llm",
-    "cpgingester": "cpg-ingester-bff",
-    "acpwriter": "acp-writer-bff",
+    "cpgingester": "sonataflow-devmode",
+    "acpwriter": "sonataflow-devmode",
     "acp-bff": "acp-writer-bff",
 }
 URL_PATTERN = re.compile(r"(?P<scheme>https?://)(?P<host>[A-Za-z0-9_.-]+)(?::(?P<port>[0-9]+))?")
@@ -71,6 +75,28 @@ def render_workflows(output_dir: Path, repo_root: Path = REPO_ROOT) -> list[Path
             yaml.safe_dump(workflow, sort_keys=False, allow_unicode=True), encoding="utf-8"
         )
         rendered.append(target)
+    properties: dict[str, str] = {}
+    for source in WORKFLOW_PROPERTIES:
+        source = repo_root / source.relative_to(REPO_ROOT)
+        resource = yaml.safe_load(source.read_text(encoding="utf-8"))
+        content = (resource.get("data") or {}).get("application.properties")
+        if not isinstance(content, str):
+            raise ValueError(f"{source} has no application.properties content")
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            key, separator, value = stripped.partition("=")
+            if not separator:
+                raise ValueError(f"Invalid application property in {source}: {stripped}")
+            prior = properties.setdefault(key.strip(), value.strip())
+            if prior != value.strip():
+                raise ValueError(f"Conflicting application property {key!r} in {source}")
+    properties_path = output_dir / "application.properties"
+    properties_path.write_text(
+        "\n".join(f"{key}={value}" for key, value in properties.items()) + "\n",
+        encoding="utf-8",
+    )
     return rendered
 
 

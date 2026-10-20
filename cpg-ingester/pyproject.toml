@@ -51,7 +51,7 @@ test = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-cpg_ingester = ["resources/schemas/*.xsd"]
+cpg_ingester = ["resources/schemas/*.xsd", "resources/automation/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

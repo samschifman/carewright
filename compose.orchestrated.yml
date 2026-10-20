@@ -10,41 +10,58 @@ services:
     volumes:
       - ./working/orchestrated-workflows:/home/kogito/serverless-workflow-project/src/main/resources:ro
 
+  artifact-store:
+    image: docker.io/chrislusf/seaweedfs:4.22
+    profiles: [orchestrated]
+    command:
+      ["server", "-dir=/data", "-filer", "-s3", "-s3.port=9000",
+       "-s3.config=/etc/seaweedfs/s3.json",
+       "-master.volumeSizeLimitMB=512", "-volume.max=0"]
+    ports:
+      - "9000:9000"
+      - "9333:9333"
+    volumes:
+      - orchestrated-artifact-store-data:/data
+      - ./working/orchestrated/s3-config.json:/etc/seaweedfs/s3.json:ro
+
   cpg-ingester-ingestion:
     profiles: [orchestrated]
     environment:
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   cpg-ingester-llm:
     profiles: [orchestrated]
     environment:
+      LLM_MODEL: ${LLM_MODEL:-default}
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   cpg-ingester-assembly:
     profiles: [orchestrated]
     environment:
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   cpg-ingester-delivery:
     profiles: [orchestrated]
     environment:
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   cpg-ingester-bff:
     profiles: [orchestrated]
     environment:
       SONATAFLOW_URL: http://sonataflow-devmode:8080
+      MINIO_ENDPOINT: http://artifact-store:9000
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   cpg-ingester-ui:
     profiles: [orchestrated]
@@ -56,8 +73,8 @@ services:
     profiles: [orchestrated]
     environment:
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   acp-llm-reasoning:
     build:
@@ -67,11 +84,11 @@ services:
     environment:
       DECISION_ENGINE_URL: http://acp-decision-engine:8080
       LITELLM_URL: http://litellm:4000
-      LLM_MODEL: ${SLICE_LLM_MODEL:-default}
-      LITELLM_API_KEY: ${SLICE_LLM_API_KEY:?SLICE_LLM_API_KEY must be set}
+      LLM_MODEL: ${LLM_MODEL:-default}
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   acp-decision-engine:
     build:
@@ -81,8 +98,8 @@ services:
     environment:
       KOGITO_URL: http://kogito:8081
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   acp-fhir-generation:
     build:
@@ -91,11 +108,11 @@ services:
     profiles: [orchestrated]
     environment:
       LITELLM_URL: http://litellm:4000
-      LLM_MODEL: ${SLICE_LLM_MODEL:-default}
-      LITELLM_API_KEY: ${SLICE_LLM_API_KEY:?SLICE_LLM_API_KEY must be set}
+      LLM_MODEL: ${LLM_MODEL:-default}
+      LITELLM_API_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   acp-fhir-server:
     build:
@@ -105,8 +122,8 @@ services:
     environment:
       FHIR_SERVER_URL: http://medplum-server:8103/fhir/R4
       ARTIFACT_STORE_URL: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   acp-writer-bff:
     build:
@@ -121,10 +138,13 @@ services:
       DECISION_ENGINE_URL: http://acp-decision-engine:8080
       FHIR_SERVER_URL: http://acp-fhir-server:8080
       MINIO_ENDPOINT: http://artifact-store:9000
-      ARTIFACT_STORE_ACCESS_KEY: ${SLICE_S3_ACCESS_KEY:-slice-access}
-      ARTIFACT_STORE_SECRET_KEY: ${SLICE_S3_SECRET_KEY:-slice-secret}
+      ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
+      ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   acp-writer-ui:
     profiles: [orchestrated]
     environment:
       BFF_HOST: acp-writer-bff:8080
+
+volumes:
+  orchestrated-artifact-store-data:

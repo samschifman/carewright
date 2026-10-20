@@ -27,6 +27,15 @@ These contract facts are not clinical claims and must never be flagged:
   `exclusive-split`, `exclusive-join`, `default-flow`) are not clinical claims.
 - A required parameter with no default represents a value the source leaves
   unstated; the clinician binds it. Flag an invented default, not a missing one.
+- A template is patient-agnostic. Which patients it applies to, and when it
+  starts, are decided when a care plan attaches it. Do not demand eligibility
+  preconditions, patient triggers, or recurrence beyond what the source states.
+- Catalog tasks act on the care team's behalf and have fixed recipients:
+  `clinician.notify` reaches the responsible clinician, `patient.*` tasks reach
+  the patient, `schedule.request_visit` and `ehr.query_*` act in the record. Do
+  not demand actor or recipient bindings the catalog defines no input for.
+- Durations are carried in days: 12 months is P365D, 24 months is P730D, one
+  month is P30D, one week is P7D. Do not flag the day form of a stated cadence.
 
 Classify discrepancies:
 - CRITICAL: changes clinical behavior, invents or omits a material step, uses

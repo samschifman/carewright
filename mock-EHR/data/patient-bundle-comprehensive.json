@@ -10,134 +10,393 @@
           {
             "system": "http://careview.example/fhir/ids",
             "type": {
-              "coding": [{"system": "http://terminology.hl7.org/CodeSystem/v2-0203", "code": "MR", "display": "Medical Record Number"}]
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "MR",
+                  "display": "Medical Record Number"
+                }
+              ]
             },
             "value": "P003"
           }
         ],
-        "name": [{"use": "official", "family": "Thompson", "given": ["Robert"]}],
+        "name": [
+          {
+            "use": "official",
+            "family": "Thompson",
+            "given": [
+              "Robert"
+            ]
+          }
+        ],
         "telecom": [
-          {"system": "phone", "value": "555-456-7890", "use": "home"},
-          {"system": "email", "value": "r.thompson@example.com", "use": "home"}
+          {
+            "system": "phone",
+            "value": "555-456-7890",
+            "use": "home"
+          },
+          {
+            "system": "email",
+            "value": "r.thompson@example.com",
+            "use": "home"
+          }
         ],
         "gender": "male",
         "birthDate": "1958-11-30",
-        "address": [{"line": ["321 Elm Drive"], "city": "Springfield", "state": "IL", "postalCode": "62703", "country": "US"}],
-        "maritalStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus", "code": "M", "display": "Married"}], "text": "Married"}
+        "address": [
+          {
+            "line": [
+              "321 Elm Drive"
+            ],
+            "city": "Springfield",
+            "state": "IL",
+            "postalCode": "62703",
+            "country": "US"
+          }
+        ],
+        "maritalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+              "code": "M",
+              "display": "Married"
+            }
+          ],
+          "text": "Married"
+        }
       },
-      "request": {"method": "POST", "url": "Patient"}
+      "request": {
+        "method": "POST",
+        "url": "Patient"
+      }
     },
     {
       "fullUrl": "urn:uuid:b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
       "resource": {
         "resourceType": "Encounter",
         "status": "finished",
-        "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode", "code": "AMB", "display": "ambulatory"},
-        "type": [{"coding": [{"system": "http://snomed.info/sct", "code": "185349003", "display": "Office visit"}], "text": "Office visit"}],
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "period": {"start": "2026-06-10T10:00:00Z", "end": "2026-06-10T10:45:00Z"}
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "AMB",
+          "display": "ambulatory"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "185349003",
+                "display": "Office visit"
+              }
+            ],
+            "text": "Office visit"
+          }
+        ],
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "period": {
+          "start": "2026-06-10T10:00:00Z",
+          "end": "2026-06-10T10:45:00Z"
+        }
       },
-      "request": {"method": "POST", "url": "Encounter"}
+      "request": {
+        "method": "POST",
+        "url": "Encounter"
+      }
     },
     {
       "fullUrl": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
       "resource": {
         "resourceType": "Encounter",
         "status": "finished",
-        "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode", "code": "AMB", "display": "ambulatory"},
-        "type": [{"coding": [{"system": "http://snomed.info/sct", "code": "185349003", "display": "Office visit"}], "text": "Follow-up visit"}],
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "period": {"start": "2026-07-15T09:00:00Z", "end": "2026-07-15T09:30:00Z"}
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "AMB",
+          "display": "ambulatory"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "185349003",
+                "display": "Office visit"
+              }
+            ],
+            "text": "Follow-up visit"
+          }
+        ],
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "period": {
+          "start": "2026-07-15T09:00:00Z",
+          "end": "2026-07-15T09:30:00Z"
+        }
       },
-      "request": {"method": "POST", "url": "Encounter"}
+      "request": {
+        "method": "POST",
+        "url": "Encounter"
+      }
     },
     {
       "fullUrl": "urn:uuid:d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80",
       "resource": {
         "resourceType": "Condition",
-        "clinicalStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active"}]},
-        "verificationStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-ver-status", "code": "confirmed"}]},
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed"
+            }
+          ]
+        },
         "code": {
           "coding": [
-            {"system": "http://snomed.info/sct", "code": "59621000", "display": "Essential hypertension"},
-            {"system": "http://hl7.org/fhir/sid/icd-10-cm", "code": "I10", "display": "Essential (primary) hypertension"}
+            {
+              "system": "http://snomed.info/sct",
+              "code": "59621000",
+              "display": "Essential hypertension"
+            },
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10-cm",
+              "code": "I10",
+              "display": "Essential (primary) hypertension"
+            }
           ],
           "text": "Essential hypertension"
         },
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "encounter": {"reference": "urn:uuid:b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"},
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "encounter": {
+          "reference": "urn:uuid:b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"
+        },
         "onsetDateTime": "2020-03-15",
         "recordedDate": "2020-03-15"
       },
-      "request": {"method": "POST", "url": "Condition"}
+      "request": {
+        "method": "POST",
+        "url": "Condition"
+      }
     },
     {
       "fullUrl": "urn:uuid:e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8091",
       "resource": {
         "resourceType": "Condition",
-        "clinicalStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active"}]},
-        "verificationStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-ver-status", "code": "confirmed"}]},
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed"
+            }
+          ]
+        },
         "code": {
           "coding": [
-            {"system": "http://snomed.info/sct", "code": "44054006", "display": "Type 2 diabetes mellitus"},
-            {"system": "http://hl7.org/fhir/sid/icd-10-cm", "code": "E11", "display": "Type 2 diabetes mellitus"}
+            {
+              "system": "http://snomed.info/sct",
+              "code": "44054006",
+              "display": "Type 2 diabetes mellitus"
+            },
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10-cm",
+              "code": "E11",
+              "display": "Type 2 diabetes mellitus"
+            }
           ],
           "text": "Type 2 diabetes mellitus"
         },
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "onsetDateTime": "2018-09-01",
         "recordedDate": "2018-09-01"
       },
-      "request": {"method": "POST", "url": "Condition"}
+      "request": {
+        "method": "POST",
+        "url": "Condition"
+      }
     },
     {
       "fullUrl": "urn:uuid:f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f809102",
       "resource": {
         "resourceType": "Condition",
-        "clinicalStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active"}]},
-        "verificationStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-ver-status", "code": "confirmed"}]},
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed"
+            }
+          ]
+        },
         "code": {
           "coding": [
-            {"system": "http://snomed.info/sct", "code": "431855005", "display": "Chronic kidney disease stage 3"},
-            {"system": "http://hl7.org/fhir/sid/icd-10-cm", "code": "N18.3", "display": "Chronic kidney disease, stage 3"}
+            {
+              "system": "http://snomed.info/sct",
+              "code": "431855005",
+              "display": "Chronic kidney disease stage 3"
+            },
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10-cm",
+              "code": "N18.3",
+              "display": "Chronic kidney disease, stage 3"
+            }
           ],
           "text": "Chronic kidney disease stage 3"
         },
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "onsetDateTime": "2023-05-20",
         "recordedDate": "2023-05-20"
       },
-      "request": {"method": "POST", "url": "Condition"}
+      "request": {
+        "method": "POST",
+        "url": "Condition"
+      }
     },
     {
       "fullUrl": "urn:uuid:a7b8c9d0-e1f2-4a3b-4c5d-6e7f80910213",
       "resource": {
         "resourceType": "AllergyIntolerance",
-        "clinicalStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical", "code": "active"}]},
-        "verificationStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification", "code": "confirmed"}]},
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+              "code": "confirmed"
+            }
+          ]
+        },
         "type": "allergy",
         "criticality": "high",
-        "code": {"coding": [{"system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "7980", "display": "Penicillin V"}], "text": "Penicillin"},
-        "patient": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "code": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "7980",
+              "display": "Penicillin V"
+            }
+          ],
+          "text": "Penicillin"
+        },
+        "patient": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "recordedDate": "2015-04-10",
-        "reaction": [{"manifestation": [{"coding": [{"system": "http://snomed.info/sct", "code": "39579001", "display": "Anaphylaxis"}]}], "severity": "severe"}]
+        "reaction": [
+          {
+            "manifestation": [
+              {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "39579001",
+                    "display": "Anaphylaxis"
+                  }
+                ]
+              }
+            ],
+            "severity": "severe"
+          }
+        ]
       },
-      "request": {"method": "POST", "url": "AllergyIntolerance"}
+      "request": {
+        "method": "POST",
+        "url": "AllergyIntolerance"
+      }
     },
     {
       "fullUrl": "urn:uuid:b8c9d0e1-f2a3-4b4c-5d6e-7f8091021324",
       "resource": {
         "resourceType": "AllergyIntolerance",
-        "clinicalStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical", "code": "active"}]},
-        "verificationStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification", "code": "confirmed"}]},
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+              "code": "confirmed"
+            }
+          ]
+        },
         "type": "intolerance",
         "criticality": "low",
-        "code": {"coding": [{"system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "2670", "display": "Codeine"}], "text": "Codeine"},
-        "patient": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "code": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "2670",
+              "display": "Codeine"
+            }
+          ],
+          "text": "Codeine"
+        },
+        "patient": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "recordedDate": "2019-08-22",
-        "reaction": [{"manifestation": [{"coding": [{"system": "http://snomed.info/sct", "code": "422587007", "display": "Nausea"}]}], "severity": "mild"}]
+        "reaction": [
+          {
+            "manifestation": [
+              {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "422587007",
+                    "display": "Nausea"
+                  }
+                ]
+              }
+            ],
+            "severity": "mild"
+          }
+        ]
       },
-      "request": {"method": "POST", "url": "AllergyIntolerance"}
+      "request": {
+        "method": "POST",
+        "url": "AllergyIntolerance"
+      }
     },
     {
       "fullUrl": "urn:uuid:c9d0e1f2-a3b4-4c5d-6e7f-809102132435",
@@ -145,14 +404,55 @@
         "resourceType": "MedicationRequest",
         "status": "active",
         "intent": "order",
-        "medicationCodeableConcept": {"coding": [{"system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "860975", "display": "Metformin hydrochloride 500 MG Oral Tablet"}], "text": "Metformin 500mg"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "encounter": {"reference": "urn:uuid:b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"},
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "860975",
+              "display": "Metformin hydrochloride 500 MG Oral Tablet"
+            }
+          ],
+          "text": "Metformin 500mg"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "encounter": {
+          "reference": "urn:uuid:b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"
+        },
         "authoredOn": "2018-10-01",
-        "reasonReference": [{"reference": "urn:uuid:e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8091"}],
-        "dosageInstruction": [{"text": "500mg twice daily", "timing": {"repeat": {"frequency": 2, "period": 1, "periodUnit": "d"}}, "doseAndRate": [{"doseQuantity": {"value": 500, "unit": "mg", "system": "http://unitsofmeasure.org", "code": "mg"}}]}]
+        "reasonReference": [
+          {
+            "reference": "urn:uuid:e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8091"
+          }
+        ],
+        "dosageInstruction": [
+          {
+            "text": "500mg twice daily",
+            "timing": {
+              "repeat": {
+                "frequency": 2,
+                "period": 1,
+                "periodUnit": "d"
+              }
+            },
+            "doseAndRate": [
+              {
+                "doseQuantity": {
+                  "value": 500,
+                  "unit": "mg",
+                  "system": "http://unitsofmeasure.org",
+                  "code": "mg"
+                }
+              }
+            ]
+          }
+        ]
       },
-      "request": {"method": "POST", "url": "MedicationRequest"}
+      "request": {
+        "method": "POST",
+        "url": "MedicationRequest"
+      }
     },
     {
       "fullUrl": "urn:uuid:d0e1f2a3-b4c5-4d6e-7f80-910213243546",
@@ -160,13 +460,52 @@
         "resourceType": "MedicationRequest",
         "status": "active",
         "intent": "order",
-        "medicationCodeableConcept": {"coding": [{"system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "314076", "display": "Lisinopril 10 MG Oral Tablet"}], "text": "Lisinopril 10mg"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet"
+            }
+          ],
+          "text": "Lisinopril 10mg"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "authoredOn": "2020-04-01",
-        "reasonReference": [{"reference": "urn:uuid:d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80"}],
-        "dosageInstruction": [{"text": "10mg once daily", "timing": {"repeat": {"frequency": 1, "period": 1, "periodUnit": "d"}}, "doseAndRate": [{"doseQuantity": {"value": 10, "unit": "mg", "system": "http://unitsofmeasure.org", "code": "mg"}}]}]
+        "reasonReference": [
+          {
+            "reference": "urn:uuid:d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80"
+          }
+        ],
+        "dosageInstruction": [
+          {
+            "text": "10mg once daily",
+            "timing": {
+              "repeat": {
+                "frequency": 1,
+                "period": 1,
+                "periodUnit": "d"
+              }
+            },
+            "doseAndRate": [
+              {
+                "doseQuantity": {
+                  "value": 10,
+                  "unit": "mg",
+                  "system": "http://unitsofmeasure.org",
+                  "code": "mg"
+                }
+              }
+            ]
+          }
+        ]
       },
-      "request": {"method": "POST", "url": "MedicationRequest"}
+      "request": {
+        "method": "POST",
+        "url": "MedicationRequest"
+      }
     },
     {
       "fullUrl": "urn:uuid:e1f2a3b4-c5d6-4e7f-8091-021324354657",
@@ -174,195 +513,632 @@
         "resourceType": "MedicationRequest",
         "status": "active",
         "intent": "order",
-        "medicationCodeableConcept": {"coding": [{"system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "197361", "display": "Amlodipine 5 MG Oral Tablet"}], "text": "Amlodipine 5mg"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "197361",
+              "display": "Amlodipine 5 MG Oral Tablet"
+            }
+          ],
+          "text": "Amlodipine 5mg"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "authoredOn": "2024-01-15",
-        "reasonReference": [{"reference": "urn:uuid:d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80"}],
-        "dosageInstruction": [{"text": "5mg once daily", "timing": {"repeat": {"frequency": 1, "period": 1, "periodUnit": "d"}}, "doseAndRate": [{"doseQuantity": {"value": 5, "unit": "mg", "system": "http://unitsofmeasure.org", "code": "mg"}}]}]
+        "reasonReference": [
+          {
+            "reference": "urn:uuid:d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80"
+          }
+        ],
+        "dosageInstruction": [
+          {
+            "text": "5mg once daily",
+            "timing": {
+              "repeat": {
+                "frequency": 1,
+                "period": 1,
+                "periodUnit": "d"
+              }
+            },
+            "doseAndRate": [
+              {
+                "doseQuantity": {
+                  "value": 5,
+                  "unit": "mg",
+                  "system": "http://unitsofmeasure.org",
+                  "code": "mg"
+                }
+              }
+            ]
+          }
+        ]
       },
-      "request": {"method": "POST", "url": "MedicationRequest"}
+      "request": {
+        "method": "POST",
+        "url": "MedicationRequest"
+      }
     },
     {
       "fullUrl": "urn:uuid:f2a3b4c5-d6e7-4f80-9102-132435465768",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs", "display": "Vital Signs"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "85354-9", "display": "Blood pressure panel"}], "text": "Blood Pressure"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "encounter": {"reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "85354-9",
+              "display": "Blood pressure panel"
+            }
+          ],
+          "text": "Blood Pressure"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "encounter": {
+          "reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"
+        },
         "effectiveDateTime": "2026-07-15T09:10:00Z",
         "issued": "2026-07-15T09:10:00Z",
         "component": [
-          {"code": {"coding": [{"system": "http://loinc.org", "code": "8480-6", "display": "Systolic BP"}]}, "valueQuantity": {"value": 152, "unit": "mmHg", "system": "http://unitsofmeasure.org", "code": "mm[Hg]"}},
-          {"code": {"coding": [{"system": "http://loinc.org", "code": "8462-4", "display": "Diastolic BP"}]}, "valueQuantity": {"value": 96, "unit": "mmHg", "system": "http://unitsofmeasure.org", "code": "mm[Hg]"}}
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8480-6",
+                  "display": "Systolic BP"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "value": 152,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8462-4",
+                  "display": "Diastolic BP"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "value": 96,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
+          }
         ]
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:01a2b3c4-d5e6-4f78-9012-abcdef012345",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs", "display": "Vital Signs"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4", "display": "Heart rate"}], "text": "Heart Rate"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "encounter": {"reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ],
+          "text": "Heart Rate"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "encounter": {
+          "reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"
+        },
         "effectiveDateTime": "2026-07-15T09:10:00Z",
         "issued": "2026-07-15T09:10:00Z",
-        "valueQuantity": {"value": 78, "unit": "/min", "system": "http://unitsofmeasure.org", "code": "/min"}
+        "valueQuantity": {
+          "value": 78,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        }
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:02b3c4d5-e6f7-4089-0123-bcdef0123456",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs", "display": "Vital Signs"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "8310-5", "display": "Body temperature"}], "text": "Body Temperature"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "encounter": {"reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8310-5",
+              "display": "Body temperature"
+            }
+          ],
+          "text": "Body Temperature"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "encounter": {
+          "reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"
+        },
         "effectiveDateTime": "2026-07-15T09:10:00Z",
         "issued": "2026-07-15T09:10:00Z",
-        "valueQuantity": {"value": 98.6, "unit": "°F", "system": "http://unitsofmeasure.org", "code": "[degF]"}
+        "valueQuantity": {
+          "value": 98.6,
+          "unit": "\u00b0F",
+          "system": "http://unitsofmeasure.org",
+          "code": "[degF]"
+        }
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:03c4d5e6-f708-4190-2345-cdef01234567",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs", "display": "Vital Signs"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "9279-1", "display": "Respiratory rate"}], "text": "Respiratory Rate"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "encounter": {"reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9279-1",
+              "display": "Respiratory rate"
+            }
+          ],
+          "text": "Respiratory Rate"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "encounter": {
+          "reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"
+        },
         "effectiveDateTime": "2026-07-15T09:10:00Z",
         "issued": "2026-07-15T09:10:00Z",
-        "valueQuantity": {"value": 18, "unit": "/min", "system": "http://unitsofmeasure.org", "code": "/min"}
+        "valueQuantity": {
+          "value": 18,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        }
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:04d5e6f7-0819-4201-3456-def012345678",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs", "display": "Vital Signs"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "2708-6", "display": "Oxygen saturation in Arterial blood"}], "text": "Oxygen Saturation"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "encounter": {"reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "2708-6",
+              "display": "Oxygen saturation in Arterial blood"
+            }
+          ],
+          "text": "Oxygen Saturation"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "encounter": {
+          "reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"
+        },
         "effectiveDateTime": "2026-07-15T09:10:00Z",
         "issued": "2026-07-15T09:10:00Z",
-        "valueQuantity": {"value": 97, "unit": "%", "system": "http://unitsofmeasure.org", "code": "%"}
+        "valueQuantity": {
+          "value": 97,
+          "unit": "%",
+          "system": "http://unitsofmeasure.org",
+          "code": "%"
+        }
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:05e6f708-1920-4312-4567-ef0123456789",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs", "display": "Vital Signs"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "29463-7", "display": "Body weight"}], "text": "Weight"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "encounter": {"reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "29463-7",
+              "display": "Body weight"
+            }
+          ],
+          "text": "Weight"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "encounter": {
+          "reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"
+        },
         "effectiveDateTime": "2026-07-15T09:08:00Z",
         "issued": "2026-07-15T09:08:00Z",
-        "valueQuantity": {"value": 210, "unit": "lbs", "system": "http://unitsofmeasure.org", "code": "[lb_av]"}
+        "valueQuantity": {
+          "value": 210,
+          "unit": "lbs",
+          "system": "http://unitsofmeasure.org",
+          "code": "[lb_av]"
+        }
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:06f70819-2031-4423-5678-f01234567890",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs", "display": "Vital Signs"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "8302-2", "display": "Body height"}], "text": "Height"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "encounter": {"reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8302-2",
+              "display": "Body height"
+            }
+          ],
+          "text": "Height"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "encounter": {
+          "reference": "urn:uuid:c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"
+        },
         "effectiveDateTime": "2026-07-15T09:08:00Z",
         "issued": "2026-07-15T09:08:00Z",
-        "valueQuantity": {"value": 70, "unit": "in", "system": "http://unitsofmeasure.org", "code": "[in_i]"}
+        "valueQuantity": {
+          "value": 70,
+          "unit": "in",
+          "system": "http://unitsofmeasure.org",
+          "code": "[in_i]"
+        }
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:a3b4c5d6-e7f8-4091-0213-243546576879",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory", "display": "Laboratory"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "4548-4", "display": "Hemoglobin A1c/Hemoglobin.total in Blood"}], "text": "HbA1c"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "4548-4",
+              "display": "Hemoglobin A1c/Hemoglobin.total in Blood"
+            }
+          ],
+          "text": "HbA1c"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "effectiveDateTime": "2026-07-10",
         "issued": "2026-07-10T14:00:00Z",
-        "valueQuantity": {"value": 7.8, "unit": "%", "system": "http://unitsofmeasure.org", "code": "%"}
+        "valueQuantity": {
+          "value": 7.8,
+          "unit": "%",
+          "system": "http://unitsofmeasure.org",
+          "code": "%"
+        }
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:b4c5d6e7-f809-4102-1324-354657687980",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory", "display": "Laboratory"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "2160-0", "display": "Creatinine [Mass/volume] in Serum or Plasma"}], "text": "Creatinine"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "2160-0",
+              "display": "Creatinine [Mass/volume] in Serum or Plasma"
+            }
+          ],
+          "text": "Creatinine"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "effectiveDateTime": "2026-07-10",
         "issued": "2026-07-10T14:00:00Z",
-        "valueQuantity": {"value": 1.8, "unit": "mg/dL", "system": "http://unitsofmeasure.org", "code": "mg/dL"},
-        "referenceRange": [{"low": {"value": 0.7, "unit": "mg/dL"}, "high": {"value": 1.3, "unit": "mg/dL"}}]
+        "valueQuantity": {
+          "value": 1.8,
+          "unit": "mg/dL",
+          "system": "http://unitsofmeasure.org",
+          "code": "mg/dL"
+        },
+        "referenceRange": [
+          {
+            "low": {
+              "value": 0.7,
+              "unit": "mg/dL"
+            },
+            "high": {
+              "value": 1.3,
+              "unit": "mg/dL"
+            }
+          }
+        ]
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:c5d6e7f8-0910-4213-2435-465768798091",
       "resource": {
         "resourceType": "Observation",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory", "display": "Laboratory"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "33914-3", "display": "Glomerular filtration rate/1.73 sq M.predicted"}], "text": "eGFR"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "33914-3",
+              "display": "Glomerular filtration rate/1.73 sq M.predicted"
+            }
+          ],
+          "text": "eGFR"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "effectiveDateTime": "2026-07-10",
         "issued": "2026-07-10T14:00:00Z",
-        "valueQuantity": {"value": 42, "unit": "mL/min/1.73m2", "system": "http://unitsofmeasure.org", "code": "mL/min/{1.73_m2}"}
+        "valueQuantity": {
+          "value": 42,
+          "unit": "mL/min/1.73m2",
+          "system": "http://unitsofmeasure.org",
+          "code": "mL/min/{1.73_m2}"
+        }
       },
-      "request": {"method": "POST", "url": "Observation"}
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     },
     {
       "fullUrl": "urn:uuid:d6e7f809-1021-4324-3546-576879809102",
       "resource": {
         "resourceType": "DiagnosticReport",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/v2-0074", "code": "LAB", "display": "Laboratory"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "51990-0", "display": "Basic metabolic panel"}], "text": "Basic Metabolic Panel"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v2-0074",
+                "code": "LAB",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "51990-0",
+              "display": "Basic metabolic panel"
+            }
+          ],
+          "text": "Basic Metabolic Panel"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "effectiveDateTime": "2026-07-10",
         "issued": "2026-07-10T15:00:00Z",
         "result": [
-          {"reference": "urn:uuid:b4c5d6e7-f809-4102-1324-354657687980"},
-          {"reference": "urn:uuid:c5d6e7f8-0910-4213-2435-465768798091"}
+          {
+            "reference": "urn:uuid:b4c5d6e7-f809-4102-1324-354657687980"
+          },
+          {
+            "reference": "urn:uuid:c5d6e7f8-0910-4213-2435-465768798091"
+          }
         ]
       },
-      "request": {"method": "POST", "url": "DiagnosticReport"}
+      "request": {
+        "method": "POST",
+        "url": "DiagnosticReport"
+      }
     },
     {
       "fullUrl": "urn:uuid:e7f80910-2132-4435-4657-687980910213",
       "resource": {
         "resourceType": "DiagnosticReport",
         "status": "final",
-        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/v2-0074", "code": "LAB", "display": "Laboratory"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": "4548-4", "display": "Hemoglobin A1c"}], "text": "HbA1c"},
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v2-0074",
+                "code": "LAB",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "4548-4",
+              "display": "Hemoglobin A1c"
+            }
+          ],
+          "text": "HbA1c"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
         "effectiveDateTime": "2026-07-10",
         "issued": "2026-07-10T14:30:00Z",
-        "result": [{"reference": "urn:uuid:a3b4c5d6-e7f8-4091-0213-243546576879"}]
+        "result": [
+          {
+            "reference": "urn:uuid:a3b4c5d6-e7f8-4091-0213-243546576879"
+          }
+        ]
       },
-      "request": {"method": "POST", "url": "DiagnosticReport"}
+      "request": {
+        "method": "POST",
+        "url": "DiagnosticReport"
+      }
     },
     {
       "fullUrl": "urn:uuid:f8091021-3243-4546-5768-798091021324",
@@ -370,16 +1146,135 @@
         "resourceType": "CarePlan",
         "status": "active",
         "intent": "plan",
-        "category": [{"coding": [{"system": "http://snomed.info/sct", "code": "734163000", "display": "Care plan"}], "text": "Hypertension management"}],
-        "subject": {"reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"},
-        "period": {"start": "2024-02-01"},
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "734163000",
+                "display": "Care plan"
+              }
+            ],
+            "text": "Hypertension management"
+          }
+        ],
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "period": {
+          "start": "2024-02-01"
+        },
         "activity": [
-          {"detail": {"status": "in-progress", "description": "Monitor blood pressure weekly"}},
-          {"detail": {"status": "in-progress", "description": "Take Lisinopril 10mg daily"}},
-          {"detail": {"status": "in-progress", "description": "Take Amlodipine 5mg daily"}}
+          {
+            "detail": {
+              "status": "in-progress",
+              "description": "Monitor blood pressure weekly"
+            }
+          },
+          {
+            "detail": {
+              "status": "in-progress",
+              "description": "Take Lisinopril 10mg daily"
+            }
+          },
+          {
+            "detail": {
+              "status": "in-progress",
+              "description": "Take Amlodipine 5mg daily"
+            }
+          }
         ]
       },
-      "request": {"method": "POST", "url": "CarePlan"}
+      "request": {
+        "method": "POST",
+        "url": "CarePlan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d7e8f9a0-1b2c-4d3e-8f4a-5b6c7d8e9f01",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9318-7",
+              "display": "Albumin/Creatinine [Mass Ratio] in Urine"
+            }
+          ],
+          "text": "UACR"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "effectiveDateTime": "2026-07-10",
+        "issued": "2026-07-10T14:00:00Z",
+        "valueQuantity": {
+          "value": 250,
+          "unit": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "code": "mg/g"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e8f9a0b1-2c3d-4e4f-9a5b-6c7d8e9f0a12",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "2823-3",
+              "display": "Potassium [Moles/volume] in Serum or Plasma"
+            }
+          ],
+          "text": "Potassium"
+        },
+        "subject": {
+          "reference": "urn:uuid:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        },
+        "effectiveDateTime": "2026-07-10",
+        "issued": "2026-07-10T14:00:00Z",
+        "valueQuantity": {
+          "value": 4.4,
+          "unit": "mmol/L",
+          "system": "http://unitsofmeasure.org",
+          "code": "mmol/L"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
     }
   ]
 }

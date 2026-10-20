@@ -1,7 +1,7 @@
 """Prompt builders for generating BPMN process IR from a CPG process."""
 
 import json
-from pathlib import Path
+from importlib.resources import files
 
 from cpg_contracts.automation.catalog import Catalog, load_catalog
 from cpg_contracts.automation.ir import ProcessIR
@@ -39,7 +39,9 @@ or care-team review.
 Timer ValueRefs must be either `{"param":"parameter_name"}` or a duration
 literal such as `{"literal":"P7D","type":"duration"}`. Never use a
 `property` reference for a timer. Duration literals use ISO-8601 day/hour form;
-week form is rejected, so express one week as `P7D`, never `P1W`.
+week, month and year forms are rejected, so express one week as `P7D`, one
+month as `P30D`, 12 months as `P365D`, and 24 months as `P730D`. A cadence the
+source states in words ("annually", "every 12 months") grounds its day form.
 
 The deterministic compiler expands these macros; do not add their generated
 elements to the IR:
@@ -143,12 +145,10 @@ def build_bpmn_ir_creator_system(catalog: Catalog | None = None) -> str:
     """Render the schema, capability catalog, and canonical worked example."""
     active_catalog = catalog or load_catalog()
     schema = ProcessIR.model_json_schema()
-    example_path = (
-        Path(__file__).resolve().parents[3]
-        / "data"
-        / "golden"
-        / "automation"
-        / "follow-up-visit.ir.json"
+    # Package data, not a repository path: the pod images install the package
+    # without the repository's data/ directory.
+    example_path = files("cpg_ingester").joinpath(
+        "resources/automation/worked-example.ir.json"
     )
     example = json.loads(example_path.read_text(encoding="utf-8"))
     return (

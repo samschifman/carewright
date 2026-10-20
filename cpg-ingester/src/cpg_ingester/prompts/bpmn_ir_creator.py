@@ -30,6 +30,18 @@ add one unconditional flow from the gateway to the original target. Never send
 two flows directly to an end event, task, or gateway. When a parameter represents
 a categorical DMN output, set `constraints.enum` to the complete finite set of
 that output's values so its trigger conditions are enum-typed.
+A string property that receives a categorical decision output (a
+businessRuleTask output or a task output that holds a category) declares
+`values`, the finite set of strings it can hold, so conditions can compare it
+to a quoted value; `values` are filled for you from the compared literals when
+omitted. A cadence the source states ("every 12 months", "weekly") is a loop:
+after the cycle completes, flow returns through a converging gateway to the
+wait, and the plan-bound timeout ends the loop. A one-shot wait is not a cadence.
+The default flow of a diverging gateway is taken when no condition holds,
+including when a value is missing; make it the conservative path (re-check,
+remind, or notify), never a path that ends the process as if a goal were met.
+Authored text states a reason or a fact for its recipient; it never instructs a
+clinician what to do and never adds advice the source does not state.
 
 A template is the care team's automation expressed with catalog capabilities,
 such as patient outreach, EHR queries, notifications, and visit requests. The

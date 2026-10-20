@@ -107,6 +107,7 @@ export interface AutomationResult {
     type?: string;
     name: string;
     section?: string;
+    template_id?: string;
     linked_recommendations?: string[];
     linked_decisions?: string[];
   };

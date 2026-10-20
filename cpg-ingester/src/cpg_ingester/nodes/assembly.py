@@ -433,7 +433,12 @@ def _resolve_template_links(
                 "name": summary.get("name", ""),
                 "model_id": summary["id"],
             })
-            if not result.get("escalated") and result.get("dmn_xml"):
+            # Delivery publishes every decision model that has XML, escalated
+            # or not (escalations travel alongside in escalated-items.json), and
+            # acp-writer registers what is published. A template reference is
+            # therefore "delivered" on the same condition; anything stricter
+            # here escalates templates for decisions the consumer actually has.
+            if result.get("dmn_xml"):
                 delivered_dmn_ids.add(summary["id"])
     for item in manifest:
         if item.get("type") == "decision" and item.get("model_id"):

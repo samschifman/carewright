@@ -142,11 +142,18 @@ def validate_review_payload(run_detail: dict, gate: str, review: dict) -> str | 
     if (edits or acknowledgements) and gate != "pre-delivery":
         return "Parameter edits and acknowledgements are only accepted at pre-delivery review."
     automations = run_detail.get("automations") or []
-    by_template_id = {
-        str((automation.get("template_summary") or {}).get("id")): automation
-        for automation in automations
-        if isinstance(automation, dict) and (automation.get("template_summary") or {}).get("id")
-    }
+    # Key automations by the summary id and by the manifest item's template id:
+    # an escalated template may carry no summary, but its item always has one.
+    by_template_id: dict[str, dict] = {}
+    for automation in automations:
+        if not isinstance(automation, dict):
+            continue
+        for key in (
+            (automation.get("template_summary") or {}).get("id"),
+            (automation.get("item") or {}).get("template_id"),
+        ):
+            if key:
+                by_template_id.setdefault(str(key), automation)
 
     for edit in edits:
         if not isinstance(edit, dict):

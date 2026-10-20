@@ -44,6 +44,7 @@ For all patients, including those with type 2 diabetes, the systolic goal is bel
 
 - A blood pressure is **above goal** when the systolic value is at or above the systolic goal OR the diastolic value is at or above the diastolic goal.
 - The rows for patients aged 60 and over state the less stringent goal; lowering further toward 130 mmHg systolic has added benefit.
+- This guideline's population is adults aged 30 years and over (section 1.2); the diastolic goal applies to every patient in that population. Patients under 30 are outside its scope and the table does not apply to them.
 
 ### 3.2 Drug Therapy (source recommendations 23, 25, 26)
 
@@ -60,11 +61,13 @@ A thiazide-type diuretic, a calcium channel blocker, or either an ACE inhibitor 
 
 ### 3.3 Home Blood Pressure Self-Monitoring (source recommendations 2, 5)
 
-Patients treated for hypertension should be offered home blood pressure self-monitoring with co-interventions (Weak for). Each measurement session consists of three readings separated by at least 30 seconds after five minutes of rest; the session value is the average of the three readings. Patients transmit their readings to the care team weekly. The care team reviews the weekly average and notifies the responsible clinician when the weekly average is above goal as defined in Table 1. If a week passes without readings, a reminder is sent to the patient; after three reminder attempts on different days without readings, the care team contacts the patient directly.
+Patients treated for hypertension should be offered home blood pressure self-monitoring with co-interventions (Weak for). Measurement technique for the patient: each session consists of three readings separated by at least 30 seconds after five minutes of rest, and the session value is the average of the three readings; this technique is patient education and is not a care-team process step.
+
+Care-team process: the patient transmits readings to the care team weekly. Each week the care team queries the transmitted readings, reviews the weekly average, and notifies the responsible clinician when the weekly average is above goal as defined in Table 1. If a week passes without any readings, a reminder is sent to the patient; after three reminder attempts on different days without readings, the care team contacts the patient directly. The cycle repeats weekly while the plan is active.
 
 ### 3.4 Follow-up After a Therapy Change (algorithm boxes 20–23)
 
-After drug therapy is started or changed, the patient is followed up regularly, monthly, until blood pressure is at goal, with tailored medication titration at each follow-up. The care team schedules the follow-up visit four weeks after the change and confirms that home readings are available for that visit.
+After drug therapy is started or changed, the patient is followed up regularly, monthly, until blood pressure is at goal, with tailored medication titration at each follow-up. Care-team process: the care team requests the follow-up visit for four weeks after the change; one week before the visit it queries the record for home readings from the preceding week and, if none are found, sends the patient a reminder. At the visit the clinician re-evaluates Table 1 and Table 2. If blood pressure is not at goal, or the goal cannot be determined, the care team requests the next monthly visit; only a confirmed at-goal result ends the follow-up cycle.
 
 **Key principles:**
 

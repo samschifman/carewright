@@ -639,7 +639,7 @@ def _parse_properties(
             if child.tag == _DROOLS + "metaData"
         ]
         by_name = {item.get("name"): item.text or "" for item in metadata}
-        if len(by_name) != len(metadata) or set(by_name) - {"acp.type", "acp.unit"}:
+        if len(by_name) != len(metadata) or set(by_name) - {"acp.type", "acp.unit", "acp.values"}:
             raise ParseError(f"invalid property metadata for {name!r}")
         value_type = by_name.get("acp.type")
         if not value_type or element.get("itemSubjectRef") not in item_definitions:
@@ -658,8 +658,14 @@ def _parse_properties(
             if value_type != "string" or unit is not None:
                 raise ParseError("generated outcome property must have type string")
             continue
+        values = None
+        if "acp.values" in by_name:
+            try:
+                values = json.loads(by_name["acp.values"])
+            except ValueError as exc:
+                raise ParseError(f"property {name!r} has invalid acp.values metadata") from exc
         try:
-            result.append(Property(name=name, type=value_type, unit=unit))
+            result.append(Property(name=name, type=value_type, unit=unit, values=values))
         except ValidationError as exc:
             raise ParseError(f"invalid process property {name!r}: {exc}") from exc
     missing_parameters = sorted(set(parameters) - seen)

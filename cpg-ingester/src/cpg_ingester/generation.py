@@ -516,6 +516,25 @@ def _automatability_rationale(item: dict) -> str:
 
 def _bpmn_accept(state: BPMNPipelineState) -> dict:
     """Build the public template summary after static and semantic acceptance."""
+    summary = _build_template_summary(state, status="valid")
+    write_artifact(
+        state.get("output_dir", "output"),
+        f"bpmn/{summary.id}.template-summary.json",
+        summary.model_dump(mode="json", exclude_none=True),
+    )
+    return {
+        "template_summary": summary.model_dump(mode="json", exclude_none=True),
+        "escalated": False,
+    }
+
+
+def _build_template_summary(state: BPMNPipelineState, *, status: str) -> AutomationTemplateSummary:
+    """Build the full template summary from pipeline state.
+
+    Used on acceptance and on escalation alike: an escalated template still
+    needs a complete summary, because the review gate keys acknowledgements
+    by template id and assembly builds the AutomationTemplate from it.
+    """
     ir = ProcessIR.model_validate(state["process_ir"])
     process = ir.process
     item = state.get("item", {})
@@ -571,7 +590,7 @@ def _bpmn_accept(state: BPMNPipelineState) -> dict:
             rationale=_automatability_rationale(item),
         ),
         validation=ValidationRecord(
-            status="valid",
+            status=status,
             rungs_passed=state.get("static_rungs_passed", []),
             deferred_invariants=state.get("deferred_invariants", []),
             kogito_checked=False,
@@ -579,15 +598,7 @@ def _bpmn_accept(state: BPMNPipelineState) -> dict:
         ),
         artifact_id=item.get("id") or process.id,
     )
-    write_artifact(
-        state.get("output_dir", "output"),
-        f"bpmn/{process.id}.template-summary.json",
-        summary.model_dump(mode="json", exclude_none=True),
-    )
-    return {
-        "template_summary": summary.model_dump(mode="json", exclude_none=True),
-        "escalated": False,
-    }
+    return summary
 
 
 def _bpmn_escalate(state: BPMNPipelineState) -> dict:
@@ -616,11 +627,36 @@ def _bpmn_escalate(state: BPMNPipelineState) -> dict:
         "BPMN template escalated for %s (%s)",
         state.get("item", {}).get("name", "unknown"), reason,
     )
+    # An escalated template still needs its identity: the review UI keys
+    # acknowledgements and parameter edits by template id, and assembly
+    # matches them the same way. The summary is only built on acceptance,
+    # so fill the identity from the manifest item when it is missing.
+    item = state.get("item", {}) or {}
+    summary = dict(state.get("template_summary", {}) or {})
+    if not summary.get("source_cpg") and isinstance(state.get("process_ir"), dict):
+        try:
+            summary = _build_template_summary(state, status="escalated").model_dump(
+                mode="json", exclude_none=True
+            )
+        except Exception as exc:  # the IR itself may be the reason for escalation
+            logger.info("Escalated template keeps a minimal summary: %s", exc)
+    if not summary.get("id") and item.get("template_id"):
+        summary["id"] = item["template_id"]
+    if not summary.get("name") and item.get("name"):
+        summary["name"] = item["name"]
+    validation = dict(summary.get("validation") or {})
+    validation.setdefault("status", "escalated")
+    validation["errors"] = list(errors)
+    validation["warnings"] = list(validation.get("warnings", [])) + [
+        w for w in warnings if w not in validation.get("warnings", [])
+    ]
+    summary["validation"] = validation
     return {
         "escalated": True,
         "escalation_reason": reason,
         "escalation_errors": list(errors),
         "escalation_warnings": warnings,
+        "template_summary": summary,
     }
 
 

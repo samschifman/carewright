@@ -590,6 +590,7 @@ def _properties(ir: ProcessIR) -> list[XProperty]:
                 type=prop.type,
                 structure_ref=STRUCTURE_REF[prop.type],
                 unit=prop.unit,
+                values=tuple(prop.values) if prop.values else None,
             )
         )
     properties.append(

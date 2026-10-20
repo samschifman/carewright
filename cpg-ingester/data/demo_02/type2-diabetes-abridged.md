@@ -68,7 +68,7 @@ Every 12 months the care team queries the record for a lower-extremity risk asse
 
 ### 3.5 Glycemic Follow-up Process
 
-When the HbA1c is above range under Table 1, the care team requests a follow-up visit, which may be delivered through telehealth (source recommendation 3, Weak for), at an interval after the therapy change that the clinician sets, and queries the record for a repeat HbA1c result within that same interval. If no repeat result is found when the interval ends, the care team notifies the responsible clinician with routine urgency. No decision table applies to this process beyond Table 1.
+This process applies when Table 1 yields "Above range" and therapy has been intensified; the clinician starts it at the therapy change, so the process start is the therapy change. The care team requests a follow-up visit, which may be delivered through telehealth (source recommendation 3, Weak for), at an interval from the process start that the clinician sets, and queries the record for a repeat HbA1c result within that same interval. If no repeat result is found when the interval ends, the care team notifies the responsible clinician with routine urgency. No decision table applies to this process beyond Table 1, and no other prerequisite is required.
 
 **Key principles:**
 

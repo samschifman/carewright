@@ -95,7 +95,7 @@ export function RunDetailPage() {
   const showRecommendations = showDecisions;
   const showAssembly = isAtLeast(run.status, 'assembling');
   const showProvenance = isAtLeast(run.status, 'awaiting_artifact_review');
-  const showAutomations = !!run.automations?.length;
+  const showAutomations = showDecisions && !!run.automations?.length;
 
   return (
     <>
@@ -184,6 +184,12 @@ export function RunDetailPage() {
             </Tab>
           )}
 
+          {showAutomations && (
+            <Tab eventKey={6} title={<TabTitleText>Automations</TabTitleText>}>
+              <AutomationReviewPage run={run} />
+            </Tab>
+          )}
+
           {showAssembly && (
             <Tab eventKey={4} title={<TabTitleText>Assembly</TabTitleText>}>
               <AssemblyReportPage run={run} />
@@ -193,12 +199,6 @@ export function RunDetailPage() {
           {showProvenance && (
             <Tab eventKey={5} title={<TabTitleText>Provenance</TabTitleText>}>
               <ProvenancePage run={run} />
-            </Tab>
-          )}
-
-          {showAutomations && (
-            <Tab eventKey={6} title={<TabTitleText>Automations</TabTitleText>}>
-              <AutomationReviewPage run={run} />
             </Tab>
           )}
         </Tabs>

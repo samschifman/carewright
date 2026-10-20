@@ -83,7 +83,10 @@ class TypeInfo:
 def expression_environment(process: Any) -> dict[str, TypeInfo]:
     """Build the shared acp-expr types for process properties and parameters."""
     environment = {
-        prop.name: TypeInfo(type=prop.type, unit=prop.unit)
+        prop.name: TypeInfo(
+            type="enum" if (prop.type == "string" and getattr(prop, "values", None)) else prop.type,
+            unit=prop.unit,
+        )
         for prop in process.properties
     }
     for parameter in process.acp.parameters:

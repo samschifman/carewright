@@ -123,11 +123,19 @@ class Property(StrictModel):
     name: str
     type: Literal["duration", "integer", "decimal", "boolean", "string", "quantity", "code"]
     unit: str | None = None
+    # Finite value set of a categorical string property (typically a decision
+    # output); conditions may then compare it to quoted values (enum typing).
+    values: list[str] | None = None
 
     @model_validator(mode="after")
     def validate_quantity_unit(self) -> Property:
         if self.type == "quantity" and self.unit is None:
             raise ValueError(f"quantity property {self.name!r} requires unit")
+        if self.values is not None:
+            if self.type != "string":
+                raise ValueError(f"property {self.name!r}: values are only valid on string properties")
+            if not self.values or len(set(self.values)) != len(self.values):
+                raise ValueError(f"property {self.name!r}: values must be a non-empty list of distinct strings")
         return self
 
 

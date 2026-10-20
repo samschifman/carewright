@@ -58,6 +58,8 @@ services:
     profiles: [orchestrated]
     environment:
       SONATAFLOW_URL: http://sonataflow-devmode:8080
+      # The workflow notifies acp-writer only when this is set (CheckNotify).
+      ACP_WRITER_BFF_URL: http://acp-writer-bff:8080
       MINIO_ENDPOINT: http://artifact-store:9000
       ARTIFACT_STORE_URL: http://artifact-store:9000
       ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}

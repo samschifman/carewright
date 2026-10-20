@@ -432,7 +432,11 @@ def _acei_assembly_state(tmp_path, *, dmn_results, manifest_decision=True):
     }
 
 
-def test_business_rule_task_referencing_escalated_dmn_escalates_as_undelivered(tmp_path):
+def test_business_rule_task_referencing_escalated_dmn_with_xml_is_not_undelivered(tmp_path):
+    # Delivery publishes every decision model that has XML, escalated or not,
+    # and acp-writer registers what is published. Assembly must use the same
+    # notion of "delivered", so an escalated-but-published decision does not
+    # escalate the templates that reference it.
     result = assembly(_acei_assembly_state(
         tmp_path,
         dmn_results=[{
@@ -446,11 +450,7 @@ def test_business_rule_task_referencing_escalated_dmn_escalates_as_undelivered(t
     ))
 
     template_result = result["bpmn_results"][0]
-    assert template_result["escalated"] is True
-    assert template_result["escalation_reason"] == "undelivered-decision-reference"
-    message = template_result["escalation_errors"][0]
-    assert "run_monitoring_plan" in message
-    assert "Monitoring Plan" in message
+    assert template_result.get("escalation_reason") != "undelivered-decision-reference"
 
 
 def test_business_rule_task_referencing_missing_dmn_escalates_as_undelivered(tmp_path):

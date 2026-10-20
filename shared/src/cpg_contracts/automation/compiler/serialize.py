@@ -267,6 +267,13 @@ def serialize(process: XProcess) -> str:
                 {"name": "acp.unit"},
             )
             unit_metadata.text = prop.unit
+        if prop.values:
+            values_metadata = etree.SubElement(
+                property_extensions,
+                _drools("metaData"),
+                {"name": "acp.values"},
+            )
+            values_metadata.text = json.dumps(list(prop.values), ensure_ascii=False)
 
     type_environment = expression_environment(process.ir.process)
     for node in process.nodes:

@@ -257,6 +257,35 @@ def _normalize_template_ir(raw_ir: dict, state: dict) -> dict:
         elif element.get("conditionExpression") is None:
             add_structural_provenance(element, "sequence", [source_id, target_id])
 
+    # A string property compared against quoted values is categorical. Declare
+    # its value set from those literals when the creator omitted `values`, so
+    # the comparison is enum-typed (the default flow covers any other value).
+    # Deterministic, so it is ours to fill, never the model's to get wrong.
+    compared: dict[str, list[str]] = {}
+    literal_re = re.compile(r"\b([a-z][a-z0-9_]*)\s*(?:==|!=)\s*\"([^\"]*)\"")
+    reversed_re = re.compile(r"\"([^\"]*)\"\s*(?:==|!=)\s*\b([a-z][a-z0-9_]*)\b")
+    for element in elements:
+        if not isinstance(element, dict):
+            continue
+        expression = element.get("conditionExpression")
+        if not isinstance(expression, str):
+            continue
+        pairs = literal_re.findall(expression) + [
+            (name, value) for value, name in reversed_re.findall(expression)
+        ]
+        for name, value in pairs:
+            bucket = compared.setdefault(name, [])
+            if value not in bucket:
+                bucket.append(value)
+    for prop in process.get("properties") or []:
+        if (
+            isinstance(prop, dict)
+            and prop.get("type") == "string"
+            and not prop.get("values")
+            and prop.get("name") in compared
+        ):
+            prop["values"] = list(compared[prop["name"]])
+
     return raw_ir
 
 

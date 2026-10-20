@@ -86,7 +86,9 @@ function AutomationCard({
   const statusColor = status === 'valid' ? 'green' : status === 'incomplete' ? 'orange' : 'red';
   const warnings = summary.validation?.warnings ?? [];
   const deferred = summary.validation?.deferred_invariants ?? [];
-  const templateId = summary.id;
+  // Escalated templates may arrive without a summary; the manifest item's
+  // template id is the same identifier assembly matches on.
+  const templateId = summary.id ?? automation.item.template_id ?? '';
   const parameters = automationParameters(automation);
   const feedbackId = automation.item.id ?? templateId;
   const l7Escalated = isL7Escalation(automation);
@@ -276,7 +278,9 @@ export function AutomationReviewPage({ run }: AutomationReviewPageProps) {
           canFeedback={canFeedback}
           parameterEdits={parameterEdits}
           onParameterEdit={handleParameterEdit}
-          acknowledgement={acknowledgements.find(item => item.templateId === automation.template_summary.id)}
+          acknowledgement={acknowledgements.find(item => (
+            item.templateId === (automation.template_summary.id ?? automation.item.template_id)
+          ))}
           onAcknowledgementChange={handleAcknowledgementChange}
         />
       ))}

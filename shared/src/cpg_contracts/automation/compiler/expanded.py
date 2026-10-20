@@ -32,6 +32,7 @@ class XProperty:
     type: str
     structure_ref: str
     unit: str | None = None
+    values: tuple[str, ...] | None = None
 
 
 @dataclass(slots=True)

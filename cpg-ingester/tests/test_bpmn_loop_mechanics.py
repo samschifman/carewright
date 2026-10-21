@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.automation.ir import ProcessIR
 from cpg_contracts.automation.validators.ladder import run_static_ladder
@@ -13,6 +15,7 @@ from cpg_ingester.generation import (
     _build_bpmn_subgraph,
     _bpmn_escalate,
     _bpmn_source_sections,
+    _route_after_bpmn_creator,
     _route_after_bpmn_engine,
     _route_after_bpmn_validation,
     bpmn_engine_preflight,
@@ -237,6 +240,84 @@ def test_normalizer_leaves_populated_structural_data_unchanged(tmp_path):
     twice = _normalize_template_ir(deepcopy(once), _state(tmp_path))
 
     assert twice == once
+
+
+def test_normalizer_uses_trusted_manifest_identity_and_source_cpg(tmp_path):
+    raw_ir = _ir()
+    raw_ir["process"]["id"] = "model-selected-id"
+    raw_provenance = deepcopy(raw_ir["process"]["acp"]["provenance"])
+    raw_provenance["source_cpg"] = "model-selected-cpg"
+    raw_ir["process"]["acp"]["provenance"] = raw_provenance
+
+    normalized = _normalize_template_ir(raw_ir, _state(tmp_path))
+    provenance = normalized["process"]["acp"]["provenance"]
+
+    assert normalized["process"]["id"] == "home-bp-monitoring"
+    assert provenance["source_cpg"] == "SYN-HTN-2026-002"
+    assert {
+        key: value for key, value in provenance.items() if key != "source_cpg"
+    } == {
+        key: value for key, value in raw_provenance.items() if key != "source_cpg"
+    }
+    assert "source_text" not in provenance
+
+
+def test_normalizer_derives_template_id_from_manifest_name(tmp_path):
+    raw_ir = _ir()
+    state = _state(tmp_path)
+    state["item"].pop("template_id")
+
+    normalized = _normalize_template_ir(raw_ir, state)
+
+    assert normalized["process"]["id"] == "home-blood-pressure-monitoring"
+
+
+def test_normalizer_drops_model_id_when_manifest_has_no_identity(tmp_path):
+    raw_ir = _ir()
+    raw_ir["process"]["id"] = "model-selected-id"
+    state = _state(tmp_path)
+    state["item"].pop("template_id")
+    state["item"].pop("name")
+
+    normalized = _normalize_template_ir(raw_ir, state)
+
+    assert "id" not in normalized["process"]
+
+
+@pytest.mark.parametrize(
+    ("missing_field", "finding_code"),
+    [
+        ("template_identity", "missing-template-id"),
+        ("source_cpg", "missing-source-cpg"),
+    ],
+)
+def test_missing_trusted_identity_metadata_escalates_before_writing(
+    tmp_path, monkeypatch, missing_field, finding_code,
+):
+    state = _state(tmp_path)
+    if missing_field == "template_identity":
+        state["item"].pop("template_id")
+        state["item"].pop("name")
+    else:
+        state["cpg_metadata"]["cpg_id"] = " "
+    llm = ScriptedLLM([])
+    monkeypatch.setattr(
+        "cpg_ingester.nodes.bpmn_ir_creator.get_llm", lambda _state: llm
+    )
+
+    result = _build_bpmn_subgraph().compile().invoke(state)
+
+    assert result["escalated"] is True
+    assert result["force_escalate"] is True
+    assert result["escalation_reason"] == finding_code
+    assert [finding["code"] for finding in result["static_findings"]] == [finding_code]
+    assert not llm.calls
+    assert not list(tmp_path.rglob("*"))
+
+
+def test_creator_escalation_routes_around_ir_validation():
+    assert _route_after_bpmn_creator({"force_escalate": True}) == "bpmn_escalate"
+    assert _route_after_bpmn_creator({"force_escalate": False}) == "bpmn_validator"
 
 
 def test_normalizer_does_not_invent_source_provenance(tmp_path):

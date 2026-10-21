@@ -13,6 +13,7 @@ import re
 from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -26,6 +27,8 @@ from cpg_contracts.recommendations import SourceLocation
 
 
 IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_STORAGE_ID_PATTERN = r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+_STORAGE_ID_RE = re.compile(_STORAGE_ID_PATTERN)
 JAVA_RESERVED = frozenset(
     """
     abstract assert boolean break byte case catch char class const continue
@@ -51,6 +54,24 @@ RESERVED_ELEMENT_IDS = frozenset(
 )
 RESERVED_ELEMENT_SUBSTRINGS = ("_counter", "_reset", "_outcome", "_route")
 RESERVED_PARAMETERS = ("max_duration",)
+
+
+def _validate_storage_id(value: str) -> str:
+    if not _STORAGE_ID_RE.fullmatch(value):
+        raise ValueError("storage ID has an invalid format")
+    if ".." in value:
+        raise ValueError("storage IDs must not contain '..'")
+    return value
+
+
+StorageId: TypeAlias = Annotated[
+    str,
+    Field(
+        pattern=_STORAGE_ID_PATTERN,
+        json_schema_extra={"not": {"pattern": r"\.\."}},
+    ),
+    AfterValidator(_validate_storage_id),
+]
 
 
 class StrictModel(BaseModel):
@@ -230,7 +251,7 @@ Provenance: TypeAlias = Annotated[
 
 
 class TemplateRef(StrictModel):
-    template_id: str
+    template_id: StorageId
     version: str
     source_cpg: str | None = None
     element_id: str | None = None
@@ -375,14 +396,14 @@ class UnifyRecord(StrictModel):
 
 class PruneRecord(StrictModel):
     id: str
-    template_id: str
+    template_id: StorageId
     element_ids: list[str]
     reason: Literal["inapplicable-dmn-output", "inapplicable-category", "clinician-directed"]
     evidence_id: str
 
 
 class ConsolidatedBoundary(StrictModel):
-    template_id: str
+    template_id: StorageId
     element_id: str
 
 
@@ -406,7 +427,7 @@ class AcpProcess(StrictModel):
 
 
 class Process(StrictModel):
-    id: str
+    id: StorageId
     name: str
     description: str = ""
     isExecutable: Literal[True] = True

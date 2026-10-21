@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from cpg_contracts.automation.ir import Parameter, ProcessIR, Trigger, ir_version
+from cpg_contracts.automation.ir import Parameter, ProcessIR, StorageId, Trigger, ir_version
 from cpg_contracts.decisions import DecisionModelSummary
 from cpg_contracts.recommendations import SourceLocation
 
@@ -49,7 +49,7 @@ class ValidationRecord(ContractModel):
 class AutomationTemplateSummary(ContractModel):
     """Searchable metadata for one immutable automation template version."""
 
-    id: str = Field(min_length=1)
+    id: StorageId
     version: str = Field(pattern=r"^[0-9a-f]{12}$")
     name: str = Field(min_length=1)
     description: str = ""

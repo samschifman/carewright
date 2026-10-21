@@ -16,7 +16,7 @@ from langgraph.graph import END, START, StateGraph
 from lxml import etree
 from cpg_contracts import DecisionCategory, DecisionModelSummary, DecisionVariable, SourceLocation, decision_model_id
 from cpg_contracts.automation.catalog import load_catalog
-from cpg_contracts.automation.ir import ProcessIR, Task, ir_version
+from cpg_contracts.automation.ir import ProcessIR, Task, automation_template_id, ir_version
 from cpg_contracts.automation.templates import (
     Automatability,
     AutomationTemplate,
@@ -457,6 +457,12 @@ def _route_after_dmn_engine(state: DMNPipelineState) -> str:
 
 # --- BPMN subgraph routing ---
 
+def _route_after_bpmn_creator(state: BPMNPipelineState) -> str:
+    if state.get("force_escalate"):
+        return "bpmn_escalate"
+    return "bpmn_validator"
+
+
 def _route_after_bpmn_validation(state: BPMNPipelineState) -> str:
     errors = [
         finding for finding in state.get("static_findings", [])
@@ -640,8 +646,17 @@ def _bpmn_escalate(state: BPMNPipelineState) -> dict:
             )
         except Exception as exc:  # the IR itself may be the reason for escalation
             logger.info("Escalated template keeps a minimal summary: %s", exc)
-    if not summary.get("id") and item.get("template_id"):
-        summary["id"] = item["template_id"]
+    if not summary.get("id"):
+        template_id = item.get("template_id")
+        if not isinstance(template_id, str) or not template_id.strip():
+            name = item.get("name")
+            template_id = (
+                automation_template_id(name)
+                if isinstance(name, str) and name.strip()
+                else None
+            )
+        if template_id:
+            summary["id"] = template_id
     if not summary.get("name") and item.get("name"):
         summary["name"] = item["name"]
     validation = dict(summary.get("validation") or {})
@@ -767,7 +782,10 @@ def _build_bpmn_subgraph() -> StateGraph:
     graph.add_node("bpmn_escalate", _bpmn_escalate)
 
     graph.add_edge(START, "bpmn_ir_creator")
-    graph.add_edge("bpmn_ir_creator", "bpmn_validator")
+    graph.add_conditional_edges("bpmn_ir_creator", _route_after_bpmn_creator, {
+        "bpmn_validator": "bpmn_validator",
+        "bpmn_escalate": "bpmn_escalate",
+    })
     graph.add_conditional_edges("bpmn_validator", _route_after_bpmn_validation, {
         "bpmn_semantic_reviewer": "bpmn_semantic_reviewer",
         "bpmn_ir_creator": "bpmn_ir_creator",

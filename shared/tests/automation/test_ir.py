@@ -13,11 +13,14 @@ from pydantic import ValidationError
 from cpg_contracts.automation.ir import (
     AcpElement,
     BoundaryEvent,
+    ConsolidatedBoundary,
     Justification,
+    PruneRecord,
     ProcessIR,
     SourceRef,
     Task,
     TimerEventDefinition,
+    TemplateRef,
     automation_template_id,
     canonical_json,
     ir_version,
@@ -103,6 +106,71 @@ def test_canonical_json_and_hash_ignore_flow_element_order() -> None:
 def test_template_id_uses_the_decision_model_slug_rule() -> None:
     assert automation_template_id("Home BP Monitoring") == "home-bp-monitoring"
     assert automation_template_id("!!!") == "unknown"
+
+
+@pytest.mark.parametrize(
+    "process_id",
+    ["", "unsafe/path", "unsafe:id", "unsafe%id", "unsafe\nid", "unsafe..id", "x" * 129],
+)
+def test_process_id_must_be_storage_safe(process_id: str) -> None:
+    invalid(lambda data: data["process"].update(id=process_id))
+
+
+@pytest.mark.parametrize(
+    "template_id",
+    ["", "unsafe/path", "unsafe:id", "unsafe%id", "unsafe\nid", "unsafe..id", "x" * 129],
+)
+def test_template_reference_id_must_be_storage_safe(template_id: str) -> None:
+    with pytest.raises(ValidationError):
+        TemplateRef(template_id=template_id, version="a" * 12)
+
+
+@pytest.mark.parametrize(
+    ("model", "data"),
+    [
+        (PruneRecord, {
+            "id": "prune-1",
+            "template_id": "unsafe/path",
+            "element_ids": ["task-1"],
+            "reason": "clinician-directed",
+            "evidence_id": "evidence-1",
+        }),
+        (ConsolidatedBoundary, {
+            "template_id": "unsafe..id",
+            "element_id": "boundary-1",
+        }),
+    ],
+)
+def test_template_ids_in_process_references_must_be_storage_safe(model, data) -> None:
+    with pytest.raises(ValidationError):
+        model.model_validate(data)
+
+
+@pytest.mark.parametrize("process_id", ["home-bp-monitoring", "_home_bp_monitoring", "a" * 128])
+def test_process_id_accepts_safe_slugs_and_maximum_length(process_id: str) -> None:
+    data = fixture_data()
+    data["process"]["id"] = process_id
+
+    assert ProcessIR.model_validate(data).process.id == process_id
+
+
+def test_process_ir_schema_exports_storage_id_constraints() -> None:
+    schema = ProcessIR.model_json_schema()
+    storage_ids = [
+        schema["$defs"][model]["properties"][field]
+        for model, field in (
+            ("Process", "id"),
+            ("TemplateRef", "template_id"),
+            ("PruneRecord", "template_id"),
+            ("ConsolidatedBoundary", "template_id"),
+        )
+    ]
+
+    assert all(
+        value["pattern"] == r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+        and value["not"]["pattern"] == r"\.\."
+        for value in storage_ids
+    )
 
 
 @pytest.mark.parametrize(

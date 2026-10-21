@@ -145,6 +145,15 @@ def test_activity_automation_id_must_be_a_uuid() -> None:
         ActivityAutomation.model_validate(data)
 
 
+@pytest.mark.parametrize("template_id", ["unsafe/path", "unsafe:id", "unsafe%id", "unsafe..id"])
+def test_activity_automation_rejects_unsafe_template_reference_ids(template_id: str) -> None:
+    data = activity_automation().model_dump(mode="python")
+    data["template_refs"][0]["template_id"] = template_id
+
+    with pytest.raises(ValidationError):
+        ActivityAutomation.model_validate(data)
+
+
 def test_publication_payload_accepts_fhir_task_and_document_reference() -> None:
     activity = activity_automation()
     item = PublishedAutomation(

@@ -285,6 +285,10 @@
           "type": "string"
         },
         "template_id": {
+          "not": {
+            "pattern": "\\.\\."
+          },
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$",
           "title": "Template Id",
           "type": "string"
         }
@@ -682,6 +686,10 @@
           "type": "array"
         },
         "id": {
+          "not": {
+            "pattern": "\\.\\."
+          },
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$",
           "title": "Id",
           "type": "string"
         },
@@ -888,6 +896,10 @@
           "type": "string"
         },
         "template_id": {
+          "not": {
+            "pattern": "\\.\\."
+          },
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$",
           "title": "Template Id",
           "type": "string"
         }
@@ -1309,6 +1321,10 @@
           "title": "Source Cpg"
         },
         "template_id": {
+          "not": {
+            "pattern": "\\.\\."
+          },
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$",
           "title": "Template Id",
           "type": "string"
         },

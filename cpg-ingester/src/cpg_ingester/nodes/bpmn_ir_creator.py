@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from cpg_contracts import content_to_text, get_llm
 from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.ir import automation_template_id
 from cpg_ingester.nodes.structure_analyzer import _parse_llm_json
 from cpg_ingester.output import write_artifact
 from cpg_ingester.llm_responses import persist_llm_response
@@ -22,22 +23,74 @@ from cpg_ingester.reference.bpmn_error_patterns import format_bpmn_error_pattern
 logger = logging.getLogger(__name__)
 
 
+def _manifest_template_id(item: dict) -> str | None:
+    template_id = item.get("template_id")
+    if isinstance(template_id, str) and template_id.strip():
+        return template_id
+    name = item.get("name")
+    if isinstance(name, str) and name.strip():
+        return automation_template_id(name)
+    return None
+
+
+def _source_cpg_id(state: dict) -> str | None:
+    metadata = state.get("cpg_metadata")
+    source_cpg = metadata.get("cpg_id") if isinstance(metadata, dict) else None
+    if isinstance(source_cpg, str) and source_cpg.strip():
+        return source_cpg
+    return None
+
+
+def _identity_escalation(code: str, message: str) -> dict:
+    return {
+        "process_ir": {},
+        "join_normalizer_fired": False,
+        "static_findings": [{
+            "rung": "identity",
+            "severity": "ERROR",
+            "code": code,
+            "message": message,
+            "element_id": None,
+        }],
+        "deferred_invariants": [],
+        "static_rungs_passed": [],
+        "semantic_discrepancies": [],
+        "engine_errors": [],
+        "engine_validation_warnings": [],
+        "force_escalate": True,
+        "escalation_reason": code,
+    }
+
+
 def _normalize_template_ir(raw_ir: dict, state: dict) -> dict:
     """Apply system-owned template fields and deterministic graph repairs."""
     process = raw_ir.get("process")
     if not isinstance(process, dict):
         return raw_ir
 
-    item = state.get("item", {})
-    if item.get("template_id"):
-        process["id"] = item["template_id"]
-    if item.get("name"):
-        process["name"] = item["name"]
+    item = state.get("item") if isinstance(state.get("item"), dict) else {}
+    template_id = _manifest_template_id(item)
+    if template_id:
+        process["id"] = template_id
+    else:
+        process.pop("id", None)
+    name = item.get("name")
+    if isinstance(name, str) and name.strip():
+        process["name"] = name
     process["kind"] = "template"
 
     acp = process.get("acp")
     if not isinstance(acp, dict):
         return raw_ir
+    source_cpg = _source_cpg_id(state)
+    provenance = acp.get("provenance")
+    if source_cpg:
+        if not isinstance(provenance, dict):
+            provenance = {}
+        provenance["source_cpg"] = source_cpg
+        acp["provenance"] = provenance
+    elif isinstance(provenance, dict):
+        provenance.pop("source_cpg", None)
     parameters = acp.setdefault("parameters", [])
     if not isinstance(parameters, list):
         return raw_ir
@@ -372,9 +425,19 @@ def _safe_name(value: str) -> str:
 @mlflow.trace(name="bpmn_ir_creator")
 def bpmn_ir_creator(state: dict) -> dict:
     """Generate ProcessIR JSON and prepare it for deterministic validation."""
-    item = state.get("item", {})
+    item = state.get("item") if isinstance(state.get("item"), dict) else {}
     name = item.get("name", "unknown process")
     output_dir = state.get("output_dir", "output")
+    if _manifest_template_id(item) is None:
+        return _identity_escalation(
+            "missing-template-id",
+            "The process manifest has neither a template_id nor a nonempty name.",
+        )
+    if _source_cpg_id(state) is None:
+        return _identity_escalation(
+            "missing-source-cpg",
+            "The generation state has no nonempty cpg_metadata.cpg_id.",
+        )
     repair_feedback = _repair_feedback(state)
     human_feedback = state.get("human_feedback", "") or ""
     dmn_summaries = state.get("dmn_summaries", {}) or {}

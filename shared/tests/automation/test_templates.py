@@ -93,6 +93,25 @@ def test_template_summary_requires_a_recommendation_link() -> None:
         AutomationTemplateSummary.model_validate(data)
 
 
+@pytest.mark.parametrize(
+    "template_id",
+    ["", "unsafe/path", "unsafe:id", "unsafe%id", "unsafe\nid", "unsafe..id", "x" * 129],
+)
+def test_template_summary_id_must_be_storage_safe(template_id: str) -> None:
+    data = template_summary(fixture_ir()).model_dump(mode="python")
+    data["id"] = template_id
+
+    with pytest.raises(ValidationError):
+        AutomationTemplateSummary.model_validate(data)
+
+
+def test_template_summary_accepts_underscore_leading_id() -> None:
+    data = template_summary(fixture_ir()).model_dump(mode="python")
+    data["id"] = "_home_bp_monitoring"
+
+    assert AutomationTemplateSummary.model_validate(data).id == "_home_bp_monitoring"
+
+
 def test_validation_record_accepts_all_supported_statuses() -> None:
     for status in ("valid", "incomplete", "escalated"):
         record = ValidationRecord(status=status)

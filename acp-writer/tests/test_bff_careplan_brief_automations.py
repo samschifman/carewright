@@ -23,6 +23,9 @@ BRIEF = {
             "id": ACTIVITY_ID,
             "type": "monitoring",
             "description": "Every 12 months, query the record for a screening result.",
+            "source_cpg": "DEMO",
+            "source_recommendation_id": "rec-1",
+            "clinical_rationale": "The guideline requires annual screening.",
             "automations": [
                 {
                     "id": "auto-1",
@@ -114,6 +117,10 @@ def test_persisted_careplan_carries_brief_automations(client):
     assert automations[0]["validation"]["status"] == "incomplete"
     assert automations[0]["enabled"] is False
     assert automations[0]["templateRefs"][0]["templateId"] == "annual-screening"
+    # Provenance comes across from the brief as well; the card shows it.
+    assert activity["sourceCpg"] == "DEMO"
+    assert activity["sourceRecommendationId"] == "rec-1"
+    assert activity["clinicalRationale"] == "The guideline requires annual screening."
 
 
 def test_persisted_careplan_without_a_run_is_unchanged(client, monkeypatch):

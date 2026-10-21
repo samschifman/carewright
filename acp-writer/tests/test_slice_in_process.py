@@ -727,15 +727,18 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
         assert result["delivery_status"] == "draft"
         assert not composer_llm.responses
         assert not reviewer_llm.responses
-        assert len(synthesis_llm.used) == 5
+        # One synthesis per template per plan: the two templates are shared
+        # across the five activities they serve rather than instantiated five times.
+        assert len(synthesis_llm.used) == 2
         assert len(kogito_calls) >= 2
 
         guard_path = careplan_output_dir / "automation-guard.json"
         guard = write_automation_guard(result["planning_brief"], result["fhir_bundle"], guard_path)
         assert guard_path.is_file()
         assert guard["ok"], guard.get("errors")
-        assert guard["attached_count"] == 5
-        assert guard["valid_instances"] == 3
+        # Two shared instances serve the five activities: one valid, one incomplete.
+        assert guard["attached_count"] == 2
+        assert guard["valid_instances"] == 1
         assert all(item["status"] in {"valid", "incomplete"} for item in guard["attached"])
         valid_automation = next(
             item for item in guard["attached"]
@@ -756,10 +759,21 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
             binding for binding in valid_payload["bindings"]
             if binding["name"] == "max_duration"
         )["source"] == "policy"
-        assert next(
+        # Precedence (design §3.1): a plan-derived value, here the decision
+        # input the plan evaluated for this patient, outranks the reviewer's
+        # edited template default. The reviewer edit still travels on the
+        # pinned snapshot's parameter provenance.
+        reviewed_binding = next(
             binding for binding in valid_payload["bindings"]
             if binding["name"] == reviewed_parameter_name
-        )["source"] == "reviewer"
+        )
+        assert reviewed_binding["source"] in {"plan-derived", "reviewer"}
+        snapshot_parameter = next(
+            parameter
+            for parameter in valid_payload["template_snapshots"][0]["process"]["acp"]["parameters"]
+            if parameter["name"] == reviewed_parameter_name
+        )
+        assert snapshot_parameter["source"]["kind"] == "reviewer"
 
         approved = fhir_writer_client.put(
             f"/api/v1/careplans/{CAREPLAN_ID}/status",

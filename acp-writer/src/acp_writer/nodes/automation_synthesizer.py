@@ -491,11 +491,30 @@ def synthesize_for_activity(
     validator: Callable[[dict[str, Any]], Mapping[str, Any]] | None = None,
     reviewer: Callable[..., tuple[bool, str]] | None = None,
     prompt_sink: dict[str, str] | None = None,
+    shared: dict[str, ActivityAutomation] | None = None,
 ) -> list[ActivityAutomation]:
-    """Build one reviewed ActivityAutomation for each selected template."""
+    """Build one reviewed ActivityAutomation for each selected template.
+
+    ``shared`` maps template id to an automation already synthesized for
+    another activity of the same plan. A template is instantiated once per
+    plan and attached to every activity it serves (the view shows it as
+    shared), instead of producing near-identical copies per activity.
+    """
     selected = select_templates(activity, registry, list(dmn_audit_trail))
     if not selected:
         return []
+    reused: list[ActivityAutomation] = []
+    if shared is not None:
+        remaining = []
+        for template in selected:
+            template_id = _field(_summary(template), "id", None)
+            if template_id in shared:
+                reused.append(shared[template_id])
+            else:
+                remaining.append(template)
+        selected = remaining
+        if not selected:
+            return reused
     llm = llm or get_llm(dict(state))
     if validator is None:
         from acp_writer.services.template_client import TemplateClient
@@ -747,7 +766,11 @@ def synthesize_for_activity(
             review_notes,
             compiled_xml,
         ))
-    return outputs
+        if shared is not None:
+            template_id = _field(_summary(template), "id", None)
+            if template_id:
+                shared.setdefault(template_id, outputs[-1])
+    return reused + outputs
 
 
 @mlflow.trace(name="automation.synthesize_brief")
@@ -781,6 +804,7 @@ def synthesize_automations_for_brief(
         for item in audit_trail
     ]
 
+    shared: dict[str, ActivityAutomation] = {}
     for activity in brief.activities:
         try:
             activity.automations = synthesize_for_activity(
@@ -792,6 +816,7 @@ def synthesize_automations_for_brief(
                 llm=llm,
                 validator=validator,
                 prompt_sink=prompt_sink,
+                shared=shared,
             )
         except Exception as exc:
             logger.exception("Automation synthesis failed for activity %s", activity.id)

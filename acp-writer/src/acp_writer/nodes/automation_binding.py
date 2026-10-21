@@ -12,7 +12,9 @@ import mlflow
 from cpg_contracts.automation.compiler.kogito_profile import normalize_duration
 from cpg_contracts.automation.instances import Evidence, ParameterBinding
 from cpg_contracts.automation.ir import (
+    BusinessRuleTask,
     ConceptRef,
+    ParamRef,
     Parameter,
     Process,
     ProcessIR,
@@ -302,6 +304,42 @@ def bind_instance(
             },
         )
 
+    # A rule task maps decision inputs to template parameters by name. The
+    # plan already evaluated those decisions with this patient's values, so
+    # every mapped input the audit trail records is a plan-derived binding.
+    # The mapping is the template's own, so no name heuristics are involved.
+    parameter_types = {q.name: q for q in process.acp.parameters}
+    audit_inputs: dict[str, dict[str, Any]] = {}
+    for audit in dmn_audit_trail:
+        model_id = _field(audit, "model_id")
+        inputs = _field(audit, "inputs", {}) or {}
+        if isinstance(model_id, str) and isinstance(inputs, Mapping):
+            audit_inputs.setdefault(model_id, dict(inputs))
+    for element in process.flowElements:
+        if not isinstance(element, BusinessRuleTask):
+            continue
+        inputs = audit_inputs.get(element.dmnModel)
+        if not inputs:
+            continue
+        for input_name, ref in element.inputs.items():
+            if not isinstance(ref, ParamRef) or ref.param in bindings or input_name not in inputs:
+                continue
+            parameter = parameter_types.get(ref.param)
+            value = inputs[input_name]
+            if parameter is None or not _value_fits_parameter(parameter, value):
+                continue
+            bindings[ref.param] = ParameterBinding(
+                name=ref.param,
+                value=value,
+                source="plan-derived",
+                unit=parameter.unit,
+                note=f"Decision input {element.dmnModel}.{input_name} evaluated for this plan.",
+            )
+            evidence[f"ev-dmn-input-{ref.param}"] = Evidence(
+                kind="dmn-input",
+                payload={"model_id": element.dmnModel, "input_name": input_name, "value": value},
+            )
+
     for binding in _prior_clinician_bindings(activity, brief):
         if binding.name in {parameter.name for parameter in process.acp.parameters}:
             bindings[binding.name] = binding
@@ -477,3 +515,18 @@ def bind_instance(
 
 
 __all__ = ["bind_instance", "known_phi_values"]
+
+def _value_fits_parameter(parameter: Parameter, value: Any) -> bool:
+    """Accept an evaluated decision input only when it has the parameter's type."""
+    enum = parameter.constraints.enum if parameter.constraints is not None else None
+    if enum:
+        return isinstance(value, str) and value in enum
+    if parameter.type == "boolean":
+        return isinstance(value, bool)
+    if parameter.type == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if parameter.type in {"decimal", "quantity"}:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if parameter.type == "string":
+        return isinstance(value, str)
+    return False

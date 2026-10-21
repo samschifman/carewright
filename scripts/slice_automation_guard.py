@@ -40,6 +40,11 @@ def evaluate_automation_guard(brief: Mapping[str, Any], bundle: Mapping[str, Any
         for activity, automation in attached
         if (automation.get("validation") or {}).get("status") == "valid"
     ]
+    # One instance may serve several activities (shared automation); count
+    # instances by id, which is also how the FHIR Task and the automation
+    # service record them.
+    distinct_valid = {automation.get("id") for _, automation in valid}
+    distinct_attached = {automation.get("id") for _, automation in attached}
     if valid:
         careplan = next(
             (
@@ -61,7 +66,7 @@ def evaluate_automation_guard(brief: Mapping[str, Any], bundle: Mapping[str, Any
                         child.get("url"): child.get("valueReference", {}).get("reference")
                         for child in extension.get("extension", []) or []
                     })
-        if len(links) < len(valid):
+        if len(links) < len(distinct_valid):
             errors.append(
                 "Generated CarePlan is missing an activity automation extension for a valid instance"
             )
@@ -92,8 +97,8 @@ def evaluate_automation_guard(brief: Mapping[str, Any], bundle: Mapping[str, Any
             }
             for activity, automation in attached
         ],
-        "valid_instances": len(valid),
-        "attached_count": len(attached),
+        "valid_instances": len(distinct_valid),
+        "attached_count": len(distinct_attached),
     }
     if errors:
         result["message"] = errors[0]

@@ -650,9 +650,20 @@ async def _merge_brief_automations(detail: dict, careplan_id: str) -> None:
             detail["runId"] = summary.get("runId") or run_detail.get("runId")
         brief_activities = (run_detail.get("carePlan") or {}).get("activities") or []
         by_id = {a.get("id"): a for a in brief_activities if a.get("id")}
+        # Provenance the FHIR bundle does not carry per activity but the brief
+        # does: source guideline, source recommendation, rationale, dosing.
+        provenance_keys = (
+            "sourceCpg", "sourceRecommendationId", "clinicalRationale",
+            "specialty", "dose", "route", "frequency", "medication",
+        )
         for activity in (detail.get("view") or {}).get("activities") or []:
             source = by_id.get(activity.get("id"))
-            if not source or not source.get("automations"):
+            if not source:
+                continue
+            for key in provenance_keys:
+                if source.get(key) and not activity.get(key):
+                    activity[key] = source[key]
+            if not source.get("automations"):
                 continue
             merged = list(activity.get("automations") or [])
             seen = {a.get("id") for a in merged}

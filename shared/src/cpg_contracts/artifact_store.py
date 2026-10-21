@@ -90,6 +90,13 @@ class ArtifactStore:
         obj = self._get_client().get_object(Bucket=bucket, Key=key)
         return obj["Body"].read()
 
+    def get_raw_in_bucket(self, bucket: str, key: str) -> bytes:
+        """Fetch raw bytes using a literal key within this store's bucket."""
+        if bucket != self.bucket:
+            raise ValueError("Requested bucket does not match configured artifact store")
+        obj = self._get_client().get_object(Bucket=bucket, Key=key)
+        return obj["Body"].read()
+
     def put_raw(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> str:
         """Store raw bytes. Returns a qualified ref: 'bucket:key'."""
         self._put_via_presigned(key, data, content_type)

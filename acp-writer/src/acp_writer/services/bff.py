@@ -21,6 +21,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
+from cpg_contracts.artifact_paths import validated_run_artifact_key
 from cpg_contracts.artifact_store import ArtifactStore
 
 from acp_writer.services.ai_transparency import (
@@ -573,12 +574,15 @@ async def cancel_run(run_id: str):
 
 @app.get("/api/v1/runs/{run_id}/artifacts/{path:path}")
 def get_artifact(run_id: str, path: str):
-    store = _phi_store or _artifacts_store
+    try:
+        key = validated_run_artifact_key(run_id, path)
+    except ValueError:
+        return JSONResponse(status_code=400, content={"message": "Invalid artifact path"})
+    store = _phi_store
     if not store:
         return JSONResponse(status_code=503, content={"message": "No artifact store configured"})
-    key = f"{run_id}/{path}"
     try:
-        data = store.get_raw(key)
+        data = store.get_raw_in_bucket("cpg-phi", key)
     except Exception:
         return JSONResponse(status_code=404, content={"message": f"Artifact not found: {key}"})
     return Response(content=data, media_type="application/octet-stream")

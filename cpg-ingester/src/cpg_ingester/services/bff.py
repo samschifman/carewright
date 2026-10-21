@@ -16,6 +16,7 @@ from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
+from cpg_contracts.artifact_paths import validated_run_artifact_key
 from cpg_contracts.artifact_store import ArtifactStore
 
 from cpg_ingester.services.artifact_resolver import enrich_run_detail
@@ -191,8 +192,8 @@ def validate_review_payload(run_detail: dict, gate: str, review: dict) -> str | 
 
 
 # ---------------------------------------------------------------------------
-# MinIO-backed endpoints (upload, artifacts) — registered first so they
-# take priority over mock router paths when MinIO is configured
+# MinIO-backed endpoints are registered first so they take priority over
+# mock router paths when configured.
 # ---------------------------------------------------------------------------
 
 if _artifact_store:
@@ -216,14 +217,21 @@ if _artifact_store:
 
         return {"runId": run_id}
 
-    @app.get("/api/v1/runs/{run_id}/artifacts/{path:path}")
-    def get_artifact(run_id: str, path: str):
-        key = f"{run_id}/{path}"
-        try:
-            data = _artifact_store.get_raw(key)
-        except Exception:
-            return JSONResponse(status_code=404, content={"error": f"Artifact not found: {key}"})
-        return Response(content=data, media_type="application/octet-stream")
+
+@app.get("/api/v1/runs/{run_id}/artifacts/{path:path}")
+def get_artifact(run_id: str, path: str):
+    try:
+        key = validated_run_artifact_key(run_id, path)
+    except ValueError:
+        return JSONResponse(status_code=400, content={"error": "Invalid artifact path"})
+    store = _artifact_store
+    if not store:
+        return JSONResponse(status_code=503, content={"error": "No artifact store configured"})
+    try:
+        data = store.get_raw_in_bucket("cpg-uploads", key)
+    except Exception:
+        return JSONResponse(status_code=404, content={"error": f"Artifact not found: {key}"})
+    return Response(content=data, media_type="application/octet-stream")
 
 
 # ---------------------------------------------------------------------------

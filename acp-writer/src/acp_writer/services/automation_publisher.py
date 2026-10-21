@@ -43,6 +43,12 @@ def _normalized_optional(value: str | None) -> str | None:
     return normalized or None
 
 
+def _automation_auth_headers(token: str | None) -> dict[str, str]:
+    if not token:
+        raise ValueError("automation service token is not configured")
+    return {"X-Automation-Token": token}
+
+
 def is_terminal_publication(job: dict) -> bool:
     return job.get("state") in TERMINAL_PUBLICATION_STATES
 
@@ -444,8 +450,12 @@ class AutomationPublisher:
             response = client.post(
                 f"{self.automation_url}/api/v1/automations",
                 json=payload,
-                headers={"Idempotency-Key": job["job_id"]},
+                headers={
+                    "Idempotency-Key": job["job_id"],
+                    **_automation_auth_headers(self.automation_token),
+                },
                 timeout=5,
+                allow_redirects=False,
             )
             if response.status_code in {200, 201}:
                 try:
@@ -525,7 +535,9 @@ class AutomationPublisher:
         try:
             response = client.post(
                 f"{self.automation_url}/api/v1/automations/{careplan_id}/withdraw",
+                headers=_automation_auth_headers(self.automation_token),
                 timeout=5,
+                allow_redirects=False,
             )
             marker = {**marker, "receiver_status": response.status_code}
         except requests.RequestException as exc:

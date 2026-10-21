@@ -10,6 +10,8 @@ This service receives approved care-plan automations, validates their BPMN and F
 - `GET /api/v1/automations/{careplan_id}/{automation_id}` — retrieve a stored automation, latest revision by default; pass `revision` to retrieve a pinned revision.
 - `POST /api/v1/automations/{careplan_id}/withdraw` — persist an idempotent withdrawal marker.
 
+Both POST routes require `X-Automation-Token` matching `AUTOMATION_SERVICE_TOKEN`. A missing server token returns `503`; a missing or incorrect request token returns `401`. Health and read-only list/get routes remain unauthenticated, so keep this service on a trusted local network and do not expose it to an untrusted shared network. The Compose default `carewright-local-automation-dev-only` is a non-secret local-development value, not a cluster credential.
+
 On receipt, the service decodes the BPMN attachment in the DocumentReference, reruns L1–L4, and checks required Task and DocumentReference fields before storing anything. The JSON record and BPMN XML are written to `cpg-phi:automations/{careplan_id}/{automation_id}/{revision}.json` and `.bpmn` when the PHI store is configured.
 
 ## Local development

@@ -184,6 +184,7 @@ services:
       - KOGITO_URL=http://kogito:8081
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - AUTOMATION_SERVICE_URL=http://automation:8080
+      - AUTOMATION_SERVICE_TOKEN=${AUTOMATION_SERVICE_TOKEN:-carewright-local-automation-dev-only}
       - ACP_JOB_STORE_DIR=/data/jobs
       - LITELLM_URL=http://litellm:4000
       - LITELLM_API_KEY=sk-change-me
@@ -235,14 +236,13 @@ services:
     build:
       context: .
       dockerfile: automation/deploy/Containerfile
-    ports:
-      - "8096:8080"
     depends_on:
       mlflow:
         condition: service_healthy
     environment:
       - AUTOMATION_STORE_DIR=/data
       - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - AUTOMATION_SERVICE_TOKEN=${AUTOMATION_SERVICE_TOKEN:-carewright-local-automation-dev-only}
     volumes:
       - automation-data:/data
     healthcheck:

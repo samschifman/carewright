@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from automation_service import app as app_module
 from automation_service import store as store_module
@@ -66,11 +67,65 @@ def _payload(
     })
 
 
-def _client(monkeypatch, tmp_path):
+def _client(monkeypatch, tmp_path, *, token="test-token"):
     monkeypatch.setattr(store_module, "get_phi_store", lambda: None)
     store = AutomationStore(directory=tmp_path)
     monkeypatch.setattr(app_module, "_store", store)
-    return TestClient(app_module.app), store
+    if token is None:
+        monkeypatch.delenv("AUTOMATION_SERVICE_TOKEN", raising=False)
+    else:
+        monkeypatch.setenv("AUTOMATION_SERVICE_TOKEN", token)
+    client = TestClient(app_module.app, headers={"X-Automation-Token": "test-token"})
+    return client, store
+
+
+def test_write_routes_reject_missing_and_wrong_tokens_before_mutation(monkeypatch, tmp_path):
+    client, store = _client(monkeypatch, tmp_path)
+    payload = _payload()
+    body = payload.model_dump(mode="json")
+
+    with TestClient(app_module.app) as unauthenticated:
+        missing = unauthenticated.post("/api/v1/automations", json=body)
+        wrong = unauthenticated.post(
+            "/api/v1/automations/careplan-1/withdraw",
+            headers={"X-Automation-Token": "wrong-token"},
+        )
+        assert unauthenticated.get(
+            "/api/v1/automations", params={"careplan_id": "careplan-1"}
+        ).json() == []
+        assert unauthenticated.get(
+            "/api/v1/automations/careplan-1/automation-1"
+        ).status_code == 404
+
+    assert missing.status_code == 401
+    assert missing.json()["detail"] == "invalid automation token"
+    assert wrong.status_code == 401
+    assert wrong.json()["detail"] == "invalid automation token"
+    assert "test-token" not in missing.text + wrong.text
+    assert store.get_idempotency(payload.job_id) is None
+    assert store.list_records("careplan-1") == []
+    assert store.get_withdrawal("careplan-1") is None
+
+
+@pytest.mark.parametrize("server_token", [None, "", " ", "\t"])
+def test_write_routes_return_503_when_server_token_is_unconfigured(monkeypatch, tmp_path, server_token):
+    client, store = _client(monkeypatch, tmp_path, token=server_token)
+    payload = _payload()
+
+    publish = client.post(
+        "/api/v1/automations",
+        json=payload.model_dump(mode="json"),
+        headers={"Idempotency-Key": payload.job_id},
+    )
+    withdraw = client.post("/api/v1/automations/careplan-1/withdraw")
+
+    assert publish.status_code == 503
+    assert withdraw.status_code == 503
+    assert publish.json()["detail"] == "automation authentication is not configured"
+    assert withdraw.json()["detail"] == "automation authentication is not configured"
+    assert client.get("/health").status_code == 200
+    assert store.get_idempotency(payload.job_id) is None
+    assert store.get_withdrawal("careplan-1") is None
 
 
 def test_publish_replay_conflict_get_and_withdraw(monkeypatch, tmp_path):

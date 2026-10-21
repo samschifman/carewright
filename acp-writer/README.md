@@ -48,6 +48,10 @@ Both the decision engine and vector store are internal implementation details, h
 
 The decision engine also validates and stores immutable BPMN automation template versions; the BFF reloads published templates from MinIO at startup.
 
+### Automation service access
+
+The writer uses `AUTOMATION_SERVICE_URL` and `AUTOMATION_SERVICE_TOKEN` for automation publication and withdrawal, sending the token in `X-Automation-Token` without following redirects. The Compose default `carewright-local-automation-dev-only` is for local development only and must not be used as a cluster credential. The automation service's health and read-only list/get routes are unauthenticated, so this Compose-only service is intended for a trusted local network, not an untrusted shared network. The base Compose file does not publish its port; the local slice binds it to `127.0.0.1:8096`.
+
 ## Getting Started
 
 ```bash

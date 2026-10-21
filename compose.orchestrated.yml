@@ -124,6 +124,7 @@ services:
     environment:
       FHIR_SERVER_URL: http://medplum-server:8103/fhir/R4
       AUTOMATION_SERVICE_URL: http://automation:8080
+      AUTOMATION_SERVICE_TOKEN: ${AUTOMATION_SERVICE_TOKEN:-carewright-local-automation-dev-only}
       ARTIFACT_STORE_URL: http://artifact-store:9000
       ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
       ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}

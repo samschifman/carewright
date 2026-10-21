@@ -109,7 +109,7 @@ def clear_care_plans(monkeypatch, tmp_path):
         ),
     )
 
-    def fake_post(url, *, json=None, headers=None, timeout):
+    def fake_post(url, *, json=None, headers=None, timeout, allow_redirects=None):
         calls.append(json)
         if json is None:
             return SimpleNamespace(status_code=200, content=b"{}", text="", json=lambda: {})

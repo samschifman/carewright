@@ -356,6 +356,7 @@ def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp
     automation_store = AutomationStore(directory=tmp_path / "automation")
     automation_store.artifact_store = None
     monkeypatch.setattr(automation_service_module, "_store", automation_store)
+    monkeypatch.setenv("AUTOMATION_SERVICE_TOKEN", "test-token")
     job_store = JobStore(directory=tmp_path / "jobs")
     job_store.artifact_store = None
     publisher = AutomationPublisher(
@@ -375,7 +376,10 @@ def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp
         TestClient(automation_service_module.app) as automation_client,
         TestClient(fhir_server.app) as fhir_writer_client,
     ):
-        def dispatch_post(url, *, data=None, json=None, params=None, headers=None, timeout=None):
+        def dispatch_post(
+            url, *, data=None, json=None, params=None, headers=None, timeout=None,
+            allow_redirects=None,
+        ):
             parsed = urlsplit(url)
             query = parse_qs(parsed.query)
             query.update(params or {})
@@ -388,6 +392,8 @@ def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp
             if parsed.path == "/fhir/R4":
                 return fhir_backend_client.post(parsed.path, json=json, **common)
             if parsed.path == "/api/v1/automations":
+                assert (headers or {}).get("X-Automation-Token") == "test-token"
+                assert allow_redirects is False
                 return automation_client.post(parsed.path, json=json, **common)
             raise AssertionError("unexpected outbound POST in in-process slice test")
 
@@ -568,6 +574,7 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
     automation_store = AutomationStore(directory=tmp_path / "automation-service")
     automation_store.artifact_store = None
     monkeypatch.setattr(automation_service_module, "_store", automation_store)
+    monkeypatch.setenv("AUTOMATION_SERVICE_TOKEN", "test-token")
     job_store = JobStore(directory=tmp_path / "approval-jobs")
     job_store.artifact_store = None
     publisher = AutomationPublisher(
@@ -591,7 +598,10 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
         TestClient(automation_service_module.app) as automation_client,
         TestClient(fhir_server.app) as fhir_writer_client,
     ):
-        def dispatch_post(url, *, data=None, json=None, params=None, headers=None, timeout=None):
+        def dispatch_post(
+            url, *, data=None, json=None, params=None, headers=None, timeout=None,
+            allow_redirects=None,
+        ):
             parsed = urlsplit(url)
             query = parse_qs(parsed.query)
             query.update(params or {})
@@ -609,6 +619,8 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
             if parsed.path == "/fhir/R4":
                 return fhir_backend_client.post(parsed.path, json=json, **common)
             if parsed.path == "/api/v1/automations":
+                assert (headers or {}).get("X-Automation-Token") == "test-token"
+                assert allow_redirects is False
                 return automation_client.post(parsed.path, json=json, **common)
             raise AssertionError("unexpected outbound POST in live replay")
 

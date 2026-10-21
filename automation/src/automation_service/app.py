@@ -6,6 +6,7 @@ import base64
 from datetime import datetime, timezone
 from functools import wraps
 import hashlib
+import hmac
 import inspect
 import json
 import logging
@@ -14,7 +15,7 @@ import threading
 from typing import Any
 
 import mlflow
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 
 from cpg_contracts.automation.catalog import load_catalog
@@ -99,6 +100,21 @@ class RequestSizeLimitMiddleware:
 
 
 app.add_middleware(RequestSizeLimitMiddleware)
+
+
+def _require_automation_token(
+    provided_token: str | None = Header(default=None, alias="X-Automation-Token"),
+) -> None:
+    configured_token = os.getenv("AUTOMATION_SERVICE_TOKEN", "")
+    if not configured_token.strip():
+        raise HTTPException(
+            status_code=503,
+            detail="automation authentication is not configured",
+        )
+    if provided_token is None or not hmac.compare_digest(
+        provided_token.encode("utf-8"), configured_token.strip().encode("utf-8")
+    ):
+        raise HTTPException(status_code=401, detail="invalid automation token")
 
 
 def _trace_handler(name: str, *identifier_fields: str):
@@ -261,7 +277,7 @@ def health():
     return {"status": "UP", "service": "automation"}
 
 
-@app.post("/api/v1/automations")
+@app.post("/api/v1/automations", dependencies=[Depends(_require_automation_token)])
 @_trace_handler("automation.publish", "job_id", "careplan_id")
 def publish_automations(
     payload: PublicationPayload,
@@ -395,7 +411,10 @@ def get_automation(careplan_id: str, automation_id: str, revision: str | None = 
     return record
 
 
-@app.post("/api/v1/automations/{careplan_id}/withdraw")
+@app.post(
+    "/api/v1/automations/{careplan_id}/withdraw",
+    dependencies=[Depends(_require_automation_token)],
+)
 @_trace_handler("automation.withdraw", "careplan_id")
 def withdraw_automations(careplan_id: str):
     try:

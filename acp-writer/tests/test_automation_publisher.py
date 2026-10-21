@@ -203,8 +203,38 @@ def test_successful_publish_uses_job_id_as_idempotency_key(tmp_path):
     client = _Client()
     result = publisher.publish(pending, client)
     assert result["state"] == "published"
-    assert client.posts[0][1]["headers"] == {"Idempotency-Key": job["job_id"]}
+    assert client.posts[0][1]["headers"] == {
+        "Idempotency-Key": job["job_id"],
+        "X-Automation-Token": "test-token",
+    }
     assert client.posts[0][1]["timeout"] == 5
+    assert client.posts[0][1]["allow_redirects"] is False
+    stored = publisher.store.get("cp-1", job["job_id"])
+    assert "test-token" not in repr(stored)
+
+
+def test_publish_redirect_is_not_followed_and_remains_retryable(tmp_path):
+    publisher = _publisher(tmp_path)
+    job = _job(publisher)
+    pending = publisher.record_write(job, _response(job["bundle"]))
+    client = _Client(post_status=302)
+
+    result = publisher.publish(pending, client)
+
+    assert result["state"] == "pending"
+    assert client.posts[0][1]["allow_redirects"] is False
+
+
+def test_withdraw_uses_auth_header_without_following_redirects(tmp_path):
+    publisher = _publisher(tmp_path)
+    client = _Client(post_status=302)
+
+    result = publisher.withdraw("cp-1", client)
+
+    assert result["receiver_status"] == 302
+    assert client.posts[0][1]["headers"] == {"X-Automation-Token": "test-token"}
+    assert client.posts[0][1]["allow_redirects"] is False
+    assert "test-token" not in repr(publisher.store.get_withdrawal("cp-1"))
 
 
 def test_automation_configuration_normalizes_blank_values_and_explicit_empty_disables_env(tmp_path, monkeypatch):

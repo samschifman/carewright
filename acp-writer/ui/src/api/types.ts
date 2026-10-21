@@ -345,6 +345,12 @@ export interface components {
         CarePlanDetail: components["schemas"]["CarePlanSummary"] & {
             patient?: components["schemas"]["PatientSummary"];
             view?: components["schemas"]["CarePlanView"];
+            automationPublication?: components["schemas"]["AutomationPublicationView"];
+        };
+        /** @description Status-only automation publication view; contains no bundle or configuration values. */
+        AutomationPublicationView: {
+            /** @enum {string} */
+            status: "approving" | "pending" | "published" | "failed" | "withdrawn" | "unconfigured" | "not-applicable";
         };
         ReviewAction: {
             decision: components["schemas"]["ReviewDecision"];

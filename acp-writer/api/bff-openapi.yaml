@@ -510,6 +510,16 @@ components:
           properties:
             patient: { $ref: '#/components/schemas/PatientSummary' }
             view: { $ref: '#/components/schemas/CarePlanView' }
+            automationPublication: { $ref: '#/components/schemas/AutomationPublicationView' }
+
+    AutomationPublicationView:
+      type: object
+      description: Status-only automation publication view; contains no bundle or configuration values.
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [approving, pending, published, failed, withdrawn, unconfigured, not-applicable]
 
     # ---- Review submission ----
     ReviewAction:

@@ -102,7 +102,11 @@ def clear_care_plans(monkeypatch, tmp_path):
     monkeypatch.setattr(
         automation_publisher_module,
         "_publisher",
-        AutomationPublisher(JobStore(directory=tmp_path), automation_url="http://automation"),
+        AutomationPublisher(
+            JobStore(directory=tmp_path),
+            automation_url="http://automation",
+            automation_token="test-token",
+        ),
     )
 
     def fake_post(url, *, json=None, headers=None, timeout):
@@ -328,6 +332,7 @@ class TestApprovalWorkflow:
 
         cp = get_care_plan(cp_id)
         assert cp["status"] == "entered-in-error"
+        assert automation_publisher_module.get_publisher().store.get_withdrawal(cp_id)["status"] == "withdrawn"
 
         bundle = cp["bundle"]
         for entry in bundle["entry"]:
@@ -375,6 +380,7 @@ class TestApprovalWorkflow:
 
         approve_care_plan(cp_id, reviewer=ReviewerContext(display="Dr. Smith"))
         assert len([url for url, _ in calls if url == writer_module.FHIR_SERVER_URL]) == 1
+        assert get_care_plan(cp_id)["automation_publication"]["status"] == "not-applicable"
 
     def test_approval_redrive_after_write_crash_searches_before_reposting(self, monkeypatch):
         fhir_writes = []
@@ -422,7 +428,8 @@ class TestApprovalWorkflow:
 
         assert second["delivery_status"] == "delivered"
         assert len(fhir_writes) == 1, "re-drive reconciles the committed CarePlan instead of posting twice"
-        assert len(automation_writes) == 1
+        assert automation_writes == []
+        assert second["automation_publication"]["status"] == "not-applicable"
 
     def test_reject_not_found(self):
         assert reject_care_plan("nonexistent", "reason") is None

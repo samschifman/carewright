@@ -312,9 +312,21 @@ def _start_approval_job(careplan_id: str, bundle: dict, reviewer: "ReviewerConte
 @mlflow.trace(name="fhir_server_writer.resume_existing_approval")
 def _resume_existing_approval(job: dict) -> tuple[dict, dict] | None:
     """Recover an approving job before re-sending its transaction bundle."""
-    from acp_writer.services.automation_publisher import get_publisher
+    from acp_writer.services.automation_publisher import (
+        get_publisher,
+        is_terminal_publication,
+    )
 
     publisher = get_publisher()
+    if publisher.store.get_withdrawal(job["careplan_id"]) is not None:
+        result = publisher.publish(job)
+        delivery = {
+            "delivery_status": "delivered" if result.get("server_ids") else "stored_locally",
+            "fhir_server_response": result.get("transaction_response", {}),
+            "server_ids": result.get("server_ids", {}),
+        }
+        return delivery, _publication_view(result)
+
     if job.get("state") == "approving":
         recovered, lookup_ok = publisher.recover_approval_if_written(job)
         if not lookup_ok:
@@ -344,11 +356,14 @@ def _resume_existing_approval(job: dict) -> tuple[dict, dict] | None:
         }
         if job.get("state") in {"pending", "failed"} and job.get("publication_payload"):
             return delivery, _publish_pending(job)
-        return delivery, {
-            "status": job.get("state", "pending"),
-            "attempts": job.get("publish_attempts", 0),
-            "lastError": job.get("last_error"),
+        return delivery, _publication_view(job)
+    if is_terminal_publication(job):
+        delivery = {
+            "delivery_status": "stored_locally",
+            "fhir_server_response": job.get("transaction_response", {}),
+            "server_ids": {},
         }
+        return delivery, _publication_view(job)
     return None
 
 
@@ -382,12 +397,23 @@ def _publish_pending(pending: dict) -> dict:
     result = publisher.publish(pending)
     if result.get("state") == "pending":
         publisher.schedule_retries(result)
-    return {
-        "status": result.get("state"),
+    return _publication_view(result)
+
+
+def _publication_view(result: dict) -> dict:
+    view = {
+        "status": result.get("state", "pending"),
         "attempts": result.get("publish_attempts", 0),
-        "lastError": result.get("last_error"),
-        "lastAttemptAt": result.get("last_attempt_at"),
     }
+    if result.get("configuration_reason"):
+        view["configurationReason"] = result["configuration_reason"]
+    if result.get("last_attempt_at"):
+        view["lastAttemptAt"] = result["last_attempt_at"]
+    if result.get("last_error") and result.get("state") not in {
+        "withdrawn", "unconfigured", "not-applicable",
+    }:
+        view["lastError"] = result["last_error"]
+    return view
 
 
 def _extract_patient_name(bundle: dict) -> str:

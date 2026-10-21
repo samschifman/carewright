@@ -362,6 +362,7 @@ def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp
         job_store,
         fhir_url="http://fhir.test/fhir/R4",
         automation_url="http://automation.test",
+        automation_token="test-token",
     )
     monkeypatch.setattr(automation_publisher, "_publisher", publisher)
     monkeypatch.setattr(fhir_server_writer, "_care_plans", {})
@@ -573,6 +574,7 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
         job_store,
         fhir_url="http://fhir.test/fhir/R4",
         automation_url="http://automation.test",
+        automation_token="test-token",
     )
     monkeypatch.setattr(automation_publisher, "_publisher", publisher)
     monkeypatch.setattr(fhir_server_writer, "_care_plans", {})

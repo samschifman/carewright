@@ -788,7 +788,7 @@ def _to_careplan_detail(raw: dict) -> dict:
     patient = _extract_patient_from_bundle(bundle)
     goals, activities, conflicts = _extract_view_from_bundle(bundle)
 
-    return {
+    detail = {
         **summary,
         "patient": patient,
         "view": {
@@ -798,6 +798,10 @@ def _to_careplan_detail(raw: dict) -> dict:
             "fhirBundle": bundle if bundle.get("entry") else None,
         },
     }
+    publication = raw.get("automation_publication")
+    if isinstance(publication, dict) and isinstance(publication.get("status"), str):
+        detail["automationPublication"] = {"status": publication["status"]}
+    return detail
 
 
 def _extract_patient_from_bundle(bundle: dict) -> dict | None:

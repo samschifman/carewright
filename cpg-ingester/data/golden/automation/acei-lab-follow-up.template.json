@@ -133,17 +133,20 @@
         {
           "name": "lab_order",
           "type": "string",
-          "unit": null
+          "unit": null,
+          "values": null
         },
         {
           "name": "lab_timing_weeks",
           "type": "integer",
-          "unit": null
+          "unit": null,
+          "values": null
         },
         {
           "name": "result_found",
           "type": "boolean",
-          "unit": null
+          "unit": null,
+          "values": null
         }
       ],
       "flowElements": [

@@ -102,6 +102,8 @@ pods:
     port: 8080
     env:
       fhirServerUrl: http://cpg-mock-ehr-medplum-server:8103/fhir/R4
+      # Applies only when openshellMode is false; OpenShell mode sets fhir-server sandbox env in deploy/openshell/deploy.sh.
+      # automationServiceUrl: http://automation:8080
       # AI Transparency (issue #169): default human verifier recorded on approve
       # (a review request payload may override these per-review).
       reviewerDisplay: Demo Clinician

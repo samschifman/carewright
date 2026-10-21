@@ -18,7 +18,7 @@ from acp_writer.nodes.fhir_server_writer import (
     list_care_plans,
     reject_care_plan,
 )
-from acp_writer.services.automation_publisher import get_publisher
+from acp_writer.services.automation_publisher import get_publisher, publication_status_view
 
 logger = logging.getLogger(__name__)
 
@@ -108,5 +108,5 @@ def retry_automation_publication(careplan_id: str):
     result = get_publisher().retry(careplan_id)
     if result is None:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="No retryable publication job found")
-    return result
+        raise HTTPException(status_code=404, detail="No publication job found")
+    return publication_status_view(result)

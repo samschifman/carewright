@@ -375,57 +375,68 @@
         {
           "name": "reading_count",
           "type": "integer",
-          "unit": null
+          "unit": null,
+          "values": null
         },
         {
           "name": "avg_systolic",
           "type": "quantity",
-          "unit": "mm[Hg]"
+          "unit": "mm[Hg]",
+          "values": null
         },
         {
           "name": "avg_diastolic",
           "type": "quantity",
-          "unit": "mm[Hg]"
+          "unit": "mm[Hg]",
+          "values": null
         },
         {
           "name": "reminder_attempts",
           "type": "integer",
-          "unit": null
+          "unit": null,
+          "values": null
         },
         {
           "name": "systolic_consecutive_days",
           "type": "integer",
-          "unit": null
+          "unit": null,
+          "values": null
         },
         {
           "name": "diastolic_consecutive_days",
           "type": "integer",
-          "unit": null
+          "unit": null,
+          "values": null
         },
         {
           "name": "max_systolic",
           "type": "quantity",
-          "unit": "mm[Hg]"
+          "unit": "mm[Hg]",
+          "values": null
         },
         {
           "name": "max_diastolic",
           "type": "quantity",
-          "unit": "mm[Hg]"
+          "unit": "mm[Hg]",
+          "values": null
         },
         {
           "name": "repeat_request_id",
           "type": "string",
-          "unit": null
+          "unit": null,
+          "values": null
         },
         {
           "name": "repeat_systolic",
           "type": "quantity",
-          "unit": "mm[Hg]"
+          "unit": "mm[Hg]",
+          "values": null
         },
         {
           "name": "repeat_diastolic",
           "type": "quantity",
-          "unit": "mm[Hg]"
+          "unit": "mm[Hg]",
+          "values": null
         }
       ],
       "flowElements": [

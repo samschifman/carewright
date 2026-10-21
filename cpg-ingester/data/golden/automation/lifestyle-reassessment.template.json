@@ -136,12 +136,14 @@
         {
           "name": "education_delivered",
           "type": "boolean",
-          "unit": null
+          "unit": null,
+          "values": null
         },
         {
           "name": "visit_request_id",
           "type": "string",
-          "unit": null
+          "unit": null,
+          "values": null
         }
       ],
       "flowElements": [

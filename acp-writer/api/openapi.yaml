@@ -593,6 +593,31 @@ paths:
         "404":
           description: Care plan not found
 
+  /api/v1/careplans/{careplanId}/automations/publish:
+    post:
+      operationId: retryAutomationPublication
+      summary: Retry a pending automation publication
+      description: >
+        Retries only pending or failed publication jobs. Returns the unchanged
+        status of an existing terminal or approving job without replaying the
+        FHIR transaction. The response contains status metadata only.
+      tags: [careplans]
+      parameters:
+        - name: careplanId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current publication state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationPublicationStatus"
+        "404":
+          description: No publication job exists for the care plan
+
   # --- Health ---
 
   /health:
@@ -638,6 +663,20 @@ paths:
 
 components:
   schemas:
+
+    AutomationPublicationStatus:
+      type: object
+      required: [state, publish_attempts]
+      properties:
+        state:
+          type: string
+          enum: [approving, pending, published, failed, withdrawn, unconfigured, not-applicable]
+        publish_attempts:
+          type: integer
+          minimum: 0
+        configuration_reason:
+          type: string
+          enum: [missing-url, missing-token]
 
     AutomationValidationResult:
       type: object

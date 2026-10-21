@@ -26,12 +26,35 @@ from acp_writer.services.job_store import JobStore
 logger = logging.getLogger(__name__)
 
 FHIR_SERVER_URL = os.environ.get("FHIR_SERVER_URL", "http://localhost:8103/fhir/R4")
-AUTOMATION_SERVICE_URL = os.environ.get("AUTOMATION_SERVICE_URL", "http://localhost:8096")
+AUTOMATION_SERVICE_URL = os.environ.get("AUTOMATION_SERVICE_URL", "")
+AUTOMATION_SERVICE_TOKEN = os.environ.get("AUTOMATION_SERVICE_TOKEN", "")
+TERMINAL_PUBLICATION_STATES = frozenset({
+    "published", "withdrawn", "unconfigured", "not-applicable",
+})
 _store = JobStore()
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _normalized_optional(value: str | None) -> str | None:
+    normalized = value.strip() if isinstance(value, str) else ""
+    return normalized or None
+
+
+def is_terminal_publication(job: dict) -> bool:
+    return job.get("state") in TERMINAL_PUBLICATION_STATES
+
+
+def publication_status_view(job: dict) -> dict:
+    view = {
+        "state": job.get("state"),
+        "publish_attempts": job.get("publish_attempts", 0),
+    }
+    if job.get("configuration_reason"):
+        view["configuration_reason"] = job["configuration_reason"]
+    return view
 
 
 @mlflow.trace(name="automation.publication.entry_index")
@@ -192,10 +215,44 @@ class AutomationPublisher:
         *,
         fhir_url: str | None = None,
         automation_url: str | None = None,
+        automation_token: str | None = None,
     ) -> None:
         self.store = store or _store
         self.fhir_url = (fhir_url or FHIR_SERVER_URL).rstrip("/")
-        self.automation_url = (automation_url or AUTOMATION_SERVICE_URL).rstrip("/")
+        url_value = AUTOMATION_SERVICE_URL if automation_url is None else automation_url
+        token_value = AUTOMATION_SERVICE_TOKEN if automation_token is None else automation_token
+        normalized_url = _normalized_optional(url_value)
+        self.automation_url = normalized_url.rstrip("/") if normalized_url else None
+        self.automation_token = _normalized_optional(token_value)
+
+    def _post_write_state(self, job: dict) -> tuple[str, str | None]:
+        if not job.get("revisions"):
+            return "not-applicable", None
+        if not self.automation_url:
+            return "unconfigured", "missing-url"
+        if not self.automation_token:
+            return "unconfigured", "missing-token"
+        return "pending", None
+
+    def _mark_withdrawn(self, job: dict) -> dict:
+        current = self.store.get(job["careplan_id"], job["job_id"]) or job
+        if current.get("state") == "withdrawn":
+            return current
+        updated = {**current, "state": "withdrawn", "updated_at": _now()}
+        updated.pop("configuration_reason", None)
+        self.store.put(updated)
+        return updated
+
+    def _mark_post_write_state(self, job: dict) -> dict:
+        state, reason = self._post_write_state(job)
+        updated = {**job, "state": state, "updated_at": _now()}
+        updated.pop("last_error", None)
+        if reason:
+            updated["configuration_reason"] = reason
+        else:
+            updated.pop("configuration_reason", None)
+        self.store.put(updated)
+        return updated
 
     @mlflow.trace(name="automation.publication.start_approval")
     def start_approval(
@@ -259,13 +316,11 @@ class AutomationPublisher:
             **job,
             "server_ids": references,
             "publication_payload": payload,
-            "state": "pending",
             "attempts": job.get("attempts", 0) + 1,
             "transaction_response": transaction_response,
             "updated_at": _now(),
         }
-        self.store.put(updated)
-        return updated
+        return self._mark_post_write_state(updated)
 
     @mlflow.trace(name="automation.publication.record_recovered_write")
     def record_recovered_write(self, job: dict, careplan_resource: dict) -> dict:
@@ -312,12 +367,10 @@ class AutomationPublisher:
             **job,
             "server_ids": references,
             "publication_payload": payload,
-            "state": "pending",
             "attempts": job.get("attempts", 0) + 1,
             "updated_at": _now(),
         }
-        self.store.put(updated)
-        return updated
+        return self._mark_post_write_state(updated)
 
     def recover_approval_if_written(
         self,
@@ -362,11 +415,21 @@ class AutomationPublisher:
     def publish(self, job: dict, client: Any = requests) -> dict:
         """Make one idempotent publication attempt, honoring withdrawal tombstones."""
         if self.store.get_withdrawal(job["careplan_id"]) is not None:
-            updated = {**job, "state": "withdrawn", "updated_at": _now()}
-            self.store.put(updated)
-            return updated
+            return self._mark_withdrawn(job)
+        if is_terminal_publication(job):
+            return job
         if job.get("state") not in {"pending", "failed"}:
             return job
+        state, reason = self._post_write_state(job)
+        if state != "pending":
+            updated = {**job, "state": state, "updated_at": _now()}
+            updated.pop("last_error", None)
+            if reason:
+                updated["configuration_reason"] = reason
+            else:
+                updated.pop("configuration_reason", None)
+            self.store.put(updated)
+            return updated
         payload = job.get("publication_payload")
         if not payload:
             return {**job, "state": "failed", "last_error": "publication payload missing"}
@@ -412,6 +475,14 @@ class AutomationPublisher:
     @mlflow.trace(name="automation.publication.schedule_retries")
     def schedule_retries(self, job: dict, client: Any = requests) -> None:
         """Schedule up to three delayed attempts after the inline publication."""
+        if self.store.get_withdrawal(job["careplan_id"]) is not None:
+            self._mark_withdrawn(job)
+            return
+        if job.get("state") != "pending" or is_terminal_publication(job):
+            return
+        if not self.automation_url or not self.automation_token:
+            self._mark_post_write_state(job)
+            return
         thread = threading.Thread(
             target=self._retry_worker,
             args=(job["careplan_id"], job["job_id"], client),
@@ -425,16 +496,18 @@ class AutomationPublisher:
         for delay in (2, 8, 30):
             time.sleep(delay)
             job = self.store.get(careplan_id, job_id)
-            if job is None or job.get("state") in {"published", "withdrawn"}:
+            if job is None:
                 return
             if self.store.get_withdrawal(careplan_id) is not None:
-                self.store.put({**job, "state": "withdrawn", "updated_at": _now()})
+                self._mark_withdrawn(job)
+                return
+            if is_terminal_publication(job):
                 return
             updated = self.publish(job, client)
-            if updated.get("state") in {"published", "withdrawn"}:
+            if is_terminal_publication(updated):
                 return
         job = self.store.get(careplan_id, job_id)
-        if job and job.get("state") != "published":
+        if job and job.get("state") in {"pending", "failed"} and not is_terminal_publication(job):
             self.store.put({**job, "state": "failed", "updated_at": _now()})
 
     @mlflow.trace(name="automation.publication.withdraw")
@@ -443,7 +516,12 @@ class AutomationPublisher:
         marker = self.store.get_withdrawal(careplan_id)
         if marker is None:
             marker = {"careplan_id": careplan_id, "status": "withdrawn", "withdrawn_at": _now()}
-            self.store.put_withdrawal(careplan_id, marker)
+        marker = {**marker, "careplan_id": careplan_id, "status": "withdrawn"}
+        self.store.put_withdrawal(careplan_id, marker)
+        for job in self.store.list(careplan_id):
+            self._mark_withdrawn(job)
+        if not self.automation_url or not self.automation_token:
+            return {**marker, "remote_status": "unconfigured"}
         try:
             response = client.post(
                 f"{self.automation_url}/api/v1/automations/{careplan_id}/withdraw",
@@ -456,10 +534,18 @@ class AutomationPublisher:
 
     @mlflow.trace(name="automation.publication.retry")
     def retry(self, careplan_id: str, client: Any = requests) -> dict | None:
-        jobs = [job for job in self.store.list(careplan_id) if job.get("state") in {"pending", "failed"}]
+        jobs = self.store.list(careplan_id)
         if not jobs:
             return None
-        job = max(jobs, key=lambda item: item.get("updated_at", ""))
+        if self.store.get_withdrawal(careplan_id) is not None:
+            jobs = [self._mark_withdrawn(job) for job in jobs]
+        retryable = [job for job in jobs if job.get("state") in {"pending", "failed"}]
+        if retryable:
+            job = max(retryable, key=lambda item: item.get("updated_at", ""))
+        else:
+            terminal = [job for job in jobs if is_terminal_publication(job)]
+            job = max(terminal or jobs, key=lambda item: item.get("updated_at", ""))
+            return job
         result = self.publish(job, client)
         if result.get("state") == "pending":
             self.schedule_retries(result, client)
@@ -470,6 +556,9 @@ class AutomationPublisher:
         """Resume interrupted FHIR writes and queued automation publication jobs."""
         for job in self.store.list():
             if self.store.get_withdrawal(job["careplan_id"]):
+                self._mark_withdrawn(job)
+                continue
+            if is_terminal_publication(job):
                 continue
             if job.get("state") == "approving":
                 recovered, lookup_ok = self.recover_approval_if_written(job, fhir_client)
@@ -493,7 +582,10 @@ class AutomationPublisher:
                     except (requests.RequestException, ValueError) as exc:
                         logger.warning("Could not resume approval job %s: %s", job["job_id"], exc)
                         continue
-            if job.get("state") in {"pending", "failed"} and job.get("publish_attempts", 0) < 4:
+            if (
+                job.get("state") in {"pending", "failed"}
+                and job.get("publish_attempts", 0) < 4
+            ):
                 result = self.publish(job, automation_client)
                 if result.get("state") == "pending":
                     self.schedule_retries(result, automation_client)

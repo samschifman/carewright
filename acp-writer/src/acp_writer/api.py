@@ -619,11 +619,14 @@ async def update_careplan_status(careplan_id: str, request: Request):
 
 @app.post("/api/v1/careplans/{careplan_id}/automations/publish")
 def retry_automation_publication(careplan_id: str):
-    from acp_writer.services.automation_publisher import get_publisher
+    from acp_writer.services.automation_publisher import (
+        get_publisher,
+        publication_status_view,
+    )
     result = get_publisher().retry(careplan_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="No retryable publication job found")
-    return result
+        raise HTTPException(status_code=404, detail="No publication job found")
+    return publication_status_view(result)
 
 
 # --- Decision Models ---

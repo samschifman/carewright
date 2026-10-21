@@ -196,6 +196,7 @@ done < "$dmn_list"
 # Step 4: Register the latest version of each BPMN automation template
 log "Registering BPMN automation templates..."
 bpmn_count=0
+bpmn_failure_count=0
 automation_url="http://localhost:8080/api/v1/automation/templates?source_cpg=$encoded_cpg"
 if [ "$REPLACE" = true ]; then
     automation_url="$automation_url&replace=true"
@@ -227,7 +228,7 @@ while IFS= read -r line; do
     [ -z "$line" ] && continue
     template_ref=$(printf '%s' "$line" | python3 -c 'import json,sys; print(json.load(sys.stdin)["template_ref"])')
     template_id=$(printf '%s' "$line" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("template_id", "unknown"))')
-    oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c '
+    if ! oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c '
 import os, sys, boto3
 ref = sys.argv[1]
 bucket, key = ref.split(":", 1) if ":" in ref else ("cpg-artifacts", ref)
@@ -238,26 +239,45 @@ s3 = boto3.client("s3",
     aws_access_key_id=os.getenv("ARTIFACT_STORE_ACCESS_KEY"),
     aws_secret_access_key=os.getenv("ARTIFACT_STORE_SECRET_KEY"))
 sys.stdout.buffer.write(s3.get_object(Bucket=bucket, Key=key)["Body"].read())
-' "$template_ref" 2>/dev/null > /tmp/bpmn-template.json
+' "$template_ref" > /tmp/bpmn-template.json 2>/dev/null; then
+        echo "WARNING: Could not retrieve BPMN template '$template_id' for CPG '$CPG_ID'; skipping" >&2
+        bpmn_failure_count=$((bpmn_failure_count + 1))
+        continue
+    fi
 
-    oc cp /tmp/bpmn-template.json "$ROUTER_POD:/tmp/bpmn-template.json" -n "$NAMESPACE"
-    response=$(oc exec "$ROUTER_POD" -n "$NAMESPACE" -- \
+    if ! oc cp /tmp/bpmn-template.json "$ROUTER_POD:/tmp/bpmn-template.json" -n "$NAMESPACE"; then
+        echo "WARNING: Could not stage BPMN template '$template_id' for CPG '$CPG_ID'; skipping" >&2
+        bpmn_failure_count=$((bpmn_failure_count + 1))
+        continue
+    fi
+
+    if response=$(oc exec "$ROUTER_POD" -n "$NAMESPACE" -- \
         curl -sS -w '\n__HTTP_STATUS__:%{http_code}' --max-time 30 \
         -X POST -H "Host: acp-decision-engine" \
         -H "Content-Type: application/json" \
         --data-binary @/tmp/bpmn-template.json \
-        "$automation_url" 2>/dev/null)
-    code=$(printf '%s' "$response" | sed -n 's/.*__HTTP_STATUS__:\([0-9][0-9][0-9]\)$/\1/p')
-    body=$(printf '%s' "$response" | sed 's/__HTTP_STATUS__:[0-9][0-9][0-9]$//')
-    log "  $template_id: HTTP $code"
+        "$automation_url" 2>/dev/null); then
+        code=$(printf '%s' "$response" | sed -n 's/.*__HTTP_STATUS__:\([0-9][0-9][0-9]\)$/\1/p')
+        body=$(printf '%s' "$response" | sed 's/__HTTP_STATUS__:[0-9][0-9][0-9]$//')
+    else
+        code="transport-error"
+        body=""
+    fi
+
+    if [[ "$code" == "transport-error" ]]; then
+        log "  $template_id: transport error"
+    else
+        log "  $template_id: HTTP $code"
+    fi
     if [[ ! "$code" =~ ^2[0-9][0-9]$ ]]; then
-        echo "ERROR: Failed to register BPMN template '$template_id' for CPG '$CPG_ID' (HTTP $code)" >&2
+        echo "WARNING: Failed to register BPMN template '$template_id' for CPG '$CPG_ID' ($code); continuing" >&2
         if [ -n "$body" ]; then
             printf '    response: %s\n' "$body" >&2
         fi
-        exit 1
+        bpmn_failure_count=$((bpmn_failure_count + 1))
+        continue
     fi
     bpmn_count=$((bpmn_count + 1))
 done < "$bpmn_latest_list"
 
-log_step "Published artifacts loaded: 1 guideline, 1 recommendations bundle, $dmn_count DMN models, $bpmn_count automation templates"
+log_step "Published artifacts loaded: 1 guideline, 1 recommendations bundle, $dmn_count DMN models, $bpmn_count automation templates registered, $bpmn_failure_count failed"

@@ -66,6 +66,10 @@ spec:
             - name: FHIR_SERVER_URL
               value: {{ $pod.env.fhirServerUrl | quote }}
             {{- end }}
+            {{- if $pod.env.automationServiceUrl }}
+            - name: AUTOMATION_SERVICE_URL
+              value: {{ $pod.env.automationServiceUrl | quote }}
+            {{- end }}
             {{- if $pod.env.decisionEngineUrl }}
             - name: DECISION_ENGINE_URL
               value: {{ $pod.env.decisionEngineUrl | quote }}

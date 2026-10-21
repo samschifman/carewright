@@ -177,18 +177,22 @@ deploy_sandboxes() {
         "LLM_MODEL_CARD_URL=${LLM_MODEL_CARD_URL}"
 
     # FHIR Server
+    local -a fhir_server_env=(
+        "${common_env[@]}"
+        "PYTHONPATH=/app/src"
+        # Automation service is not deployed in this release; when it is, pass AUTOMATION_SERVICE_URL= here.
+        "FHIR_SERVER_URL=http://cpg-mock-ehr-medplum-server.${NAMESPACE}.svc.cluster.local:8103/fhir/R4"
+        "FHIR_CLIENT_ID=${FHIR_CLIENT_ID:-}"
+        "FHIR_CLIENT_SECRET=${FHIR_CLIENT_SECRET:-}"
+        "ACP_REVIEWER_DISPLAY=${ACP_REVIEWER_DISPLAY}"
+        "ACP_REVIEWER_REFERENCE=${ACP_REVIEWER_REFERENCE}"
+        "ACP_REVIEWER_ID_SYSTEM=${ACP_REVIEWER_ID_SYSTEM}"
+        "ACP_REVIEWER_ID_VALUE=${ACP_REVIEWER_ID_VALUE}"
+    )
     create_acp_sandbox "sb-fhir-server" "acp-writer-fhir-srv" "acp-writer-fhir-srv.yaml" \
         "acp-writer-fhir-server" \
         "uvicorn acp_writer.services.fhir_server:app --host 0.0.0.0 --port 8080" \
-        "${common_env[@]}" \
-        "PYTHONPATH=/app/src" \
-        "FHIR_SERVER_URL=http://cpg-mock-ehr-medplum-server.${NAMESPACE}.svc.cluster.local:8103/fhir/R4" \
-        "FHIR_CLIENT_ID=${FHIR_CLIENT_ID:-}" \
-        "FHIR_CLIENT_SECRET=${FHIR_CLIENT_SECRET:-}" \
-        "ACP_REVIEWER_DISPLAY=${ACP_REVIEWER_DISPLAY}" \
-        "ACP_REVIEWER_REFERENCE=${ACP_REVIEWER_REFERENCE}" \
-        "ACP_REVIEWER_ID_SYSTEM=${ACP_REVIEWER_ID_SYSTEM}" \
-        "ACP_REVIEWER_ID_VALUE=${ACP_REVIEWER_ID_VALUE}"
+        "${fhir_server_env[@]}"
 
     # Wait for background sandbox-create processes to settle
     sleep 5

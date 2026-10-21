@@ -23,9 +23,9 @@ describe("slice care-plan fixture", () => {
       name: `Activities (${sliceCarePlanDetail.view?.activities?.length ?? 0})`,
     }));
     fireEvent.click(screen.getAllByRole("button", { name: /automations \(1\)/i })[0]);
-    expect(screen.getAllByText("treatment-linked-follow-up-and-home-reading-review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("missing-home-readings-reminder-and-direct-outreach").length).toBeGreaterThan(0);
     expect(screen.getAllByText("SYN-HTN-2026-002").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("switch", { name: /enable automation/i })[0]).toBeDisabled();
-    expect(screen.getAllByLabelText("treatment-linked-follow-up-and-home-reading-review BPMN").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("missing-home-readings-reminder-and-direct-outreach BPMN").length).toBeGreaterThan(0);
   });
 });

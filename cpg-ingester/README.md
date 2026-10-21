@@ -247,6 +247,8 @@ Without `SONATAFLOW_URL` / `MINIO_ENDPOINT` set, the BFF starts in mock mode aut
 | Variable | Default | Purpose |
 |---|---|---|
 | `SONATAFLOW_URL` | _(empty)_ | SonataFlow base URL. When absent, enables mock mode |
+| `SONATAFLOW_WORKFLOW_NAME` | `cpgingester` | Workflow path/ID; the CareWright operator sets this to the generated SonataFlow name |
+| `ACP_WRITER_BFF_URL` | _(empty)_ | Care Plan Writer BFF address; enables downstream notification when set |
 | `MINIO_ENDPOINT` | _(empty)_ | MinIO endpoint. When absent, enables mock mode |
 | `MLFLOW_TRACKING_URI` | _(empty)_ | MLflow tracing endpoint |
 

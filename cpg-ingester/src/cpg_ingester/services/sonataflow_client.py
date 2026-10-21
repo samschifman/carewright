@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 ACP_WRITER_BFF_URL = os.environ.get("ACP_WRITER_BFF_URL", "")
 
-WORKFLOW_NAME = "cpgingester"
+WORKFLOW_NAME = os.environ.get("SONATAFLOW_WORKFLOW_NAME", "cpgingester")
 
 PIPELINE_STEPS = [
     "Parse", "Analyze", "ReviewManifest",

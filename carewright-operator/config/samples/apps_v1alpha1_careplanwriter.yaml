@@ -1,0 +1,69 @@
+apiVersion: apps.carewright.io/v1alpha1
+kind: CarePlanWriter
+metadata:
+  labels:
+    app.kubernetes.io/name: carewright-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: careplanwriter-sample
+spec:
+  sandbox:
+    gateway:
+      endpoint: http://openshell.openshell.svc.cluster.local:8080
+      insecure: true
+    workspace: default
+  artifactStore:
+    managed:
+      name: carewright-artifacts
+      storageSize: 5Gi
+      servers: 1
+      volumesPerServer: 1
+    artifactBucket: cpg-artifacts
+    phiBucket: cpg-phi
+  observability:
+    mlflowTrackingURI: http://mlflow:5000
+  llm:
+    url: http://litellm:4000
+    model: default
+    credentialsProvider: llm-credentials
+    requestTimeoutSeconds: 600
+  fhirTarget:
+    url: http://cpg-mock-ehr-medplum-server:8103/fhir/R4
+    credentialsProvider: fhir-client-credentials
+  aiTransparency:
+    capturePrompts: true
+    modelCardURL: ""
+    reviewer:
+      display: Demo Clinician
+      reference: Practitioner/demo-clinician
+      identifierSystem: ""
+      identifierValue: ""
+  patientData:
+    image: quay.io/carewright/acp-writer-patient-data:latest
+    pythonPath: /app/src
+  llmReasoning:
+    image: quay.io/carewright/acp-writer-llm:latest
+    pythonPath: /app/src
+    embedding:
+      provider: openai
+      model: text-embedding-3-small
+      url: http://litellm:4000
+  decisionEngine:
+    image: quay.io/carewright/acp-writer-decision:latest
+    pythonPath: /app/src
+  fhirGeneration:
+    image: quay.io/carewright/acp-writer-fhir-gen:latest
+    pythonPath: /app/src
+  fhirServer:
+    image: quay.io/carewright/acp-writer-fhir-srv:latest
+    pythonPath: /app/src
+  bff:
+    image: quay.io/carewright/acp-writer-bff:latest
+    pythonPath: /app/src
+  ui:
+    image: quay.io/carewright/acp-writer-ui:latest
+  mcp:
+    image: quay.io/carewright/acp-writer-mcp:latest
+    pythonPath: /app/src
+  decisionService:
+    image: quay.io/carewright/decision-service:latest
+    javaOptions: -Dquarkus.http.host=0.0.0.0

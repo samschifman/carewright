@@ -1,0 +1,60 @@
+apiVersion: apps.carewright.io/v1alpha1
+kind: CarePlanWriter
+metadata:
+  name: care-plan-writer
+  namespace: jrao-carewright
+spec:
+  sandbox:
+    gateway:
+      endpoint: http://jrao-carewright-openshell.jrao-carewright.svc.cluster.local:8080
+      insecure: true
+    workspace: default
+  artifactStore:
+    url: http://minio.jrao-carewright.svc.cluster.local:9000
+    artifactBucket: cpg-artifacts
+    phiBucket: cpg-phi
+    credentials:
+      type: carewright-minio
+      secretRef:
+        name: carewright-artifact-credentials
+  llm:
+    url: https://api.enmaas.devshift.net
+    model: rits/zai-org/glm-5-3
+    credentials:
+      type: carewright-openai
+      secretRef:
+        name: carewright-llm-credentials
+  patientData:
+    image: quay.io/carewright/acp-writer-patient-data:latest
+    pythonPath: /app/src
+  llmReasoning:
+    image: quay.io/carewright/acp-writer-llm:latest
+    pythonPath: /app/src
+    embedding:
+      provider: openai
+      model: qwen3-embedding-0.6b
+      url: http://qwen3-embedding-predictor.gpt-oss.svc.cluster.local
+    extraEnv:
+      # Qwen has no API-key authentication. This non-secret placeholder prevents
+      # the embedding client from falling back to the EnMaaS LLM_API_KEY.
+      EMBEDDING_API_KEY: unused
+  decisionEngine:
+    image: quay.io/carewright/acp-writer-decision:latest
+    pythonPath: /app/src
+  fhirGeneration:
+    image: quay.io/carewright/acp-writer-fhir-gen:latest
+    pythonPath: /app/src
+  fhirServer:
+    image: quay.io/carewright/acp-writer-fhir-srv:latest
+    pythonPath: /app/src
+  bff:
+    image: quay.io/carewright/acp-writer-bff:latest
+    pythonPath: /app/src
+  ui:
+    image: quay.io/carewright/acp-writer-ui:latest
+  mcp:
+    image: quay.io/carewright/acp-writer-mcp:latest
+    pythonPath: /app/src
+  decisionService:
+    image: quay.io/carewright/decision-service:latest
+    javaOptions: -Dquarkus.http.host=0.0.0.0

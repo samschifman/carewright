@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jrao-carewright
+
+resources:
+  - ../carewright
+
+images:
+  - name: quay.io/carewright/carewright-operator
+    newTag: latest
+
+patches:
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRoleBinding
+      name: carewright-operator-manager-rolebinding
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: jrao-carewright-operator-manager-rolebinding
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRoleBinding
+      name: carewright-operator-metrics-auth-rolebinding
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: jrao-carewright-operator-metrics-auth-rolebinding
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: carewright-operator-controller-manager
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: WATCH_NAMESPACE
+          value: jrao-carewright
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always

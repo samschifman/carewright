@@ -1,0 +1,55 @@
+apiVersion: apps.carewright.io/v1alpha1
+kind: CPGIngester
+metadata:
+  labels:
+    app.kubernetes.io/name: carewright-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: cpgingester-sample
+spec:
+  sandbox:
+    gateway:
+      endpoint: http://openshell.openshell.svc.cluster.local:8080
+      insecure: true
+    workspace: default
+  artifactStore:
+    managed:
+      name: carewright-artifacts
+      storageSize: 5Gi
+      servers: 1
+      volumesPerServer: 1
+    artifactBucket: cpg-artifacts
+  observability:
+    mlflowTrackingURI: http://mlflow:5000
+  llm:
+    url: http://litellm:4000
+    model: default
+    credentialsProvider: llm-credentials
+    requestTimeoutSeconds: 600
+  carePlanWriterRef:
+    name: careplanwriter-sample
+  ingestion:
+    image: quay.io/carewright/cpg-ingester-ingestion:latest
+    logLevel: DEBUG
+    doclingLogLevel: DEBUG
+    pythonUnbuffered: true
+    doclingCacheDirectory: /app/.cache/docling
+    doclingArtifactsPath: /app/.cache/docling/models
+    huggingFaceTransferEnabled: false
+    huggingFaceOffline: true
+    ocrEnabled: true
+  llmAnalysis:
+    image: quay.io/carewright/cpg-ingester-llm:latest
+    pythonPath: /app/src
+    figureInterpretationEnabled: true
+    figureInterpretationMaxFigures: 100
+  assembly:
+    image: quay.io/carewright/cpg-ingester-assembly:latest
+    pythonPath: /app/src
+  delivery:
+    image: quay.io/carewright/cpg-ingester-delivery:latest
+    pythonPath: /app/src
+  bff:
+    image: quay.io/carewright/cpg-ingester-bff:latest
+    pythonPath: /app/src
+  ui:
+    image: quay.io/carewright/cpg-ingester-ui:latest

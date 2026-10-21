@@ -89,6 +89,10 @@ pytest tests/ -k "not integration"
 LITELLM_URL=http://localhost:4000 pytest tests/test_e2e.py -v
 ```
 
+For an operator-managed BFF, `SONATAFLOW_URL` is the workflow API base URL and
+`SONATAFLOW_WORKFLOW_NAME` is the generated SonataFlow workflow name. The latter
+defaults to `acpwriter` for standalone deployments.
+
 ## API Contract
 
 REST API defined in [`api/openapi.yaml`](api/openapi.yaml). MCP tools in [`api/mcp-tools.json`](api/mcp-tools.json).

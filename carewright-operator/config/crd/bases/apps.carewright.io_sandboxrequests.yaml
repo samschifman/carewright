@@ -1,0 +1,468 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: sandboxrequests.apps.carewright.io
+spec:
+  group: apps.carewright.io
+  names:
+    kind: SandboxRequest
+    listKind: SandboxRequestList
+    plural: sandboxrequests
+    singular: sandboxrequest
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.sandboxName
+      name: Sandbox
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SandboxRequest is the Schema for the sandboxrequests API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              SandboxRequestSpec defines an OpenShell sandbox and the process it should run.
+              The environment map is intended for non-secret values. OpenShell providers should
+              be used to make credentials available to the sandbox.
+            properties:
+              approvalMode:
+                description: ApprovalMode controls how OpenShell handles tool approval
+                  requests.
+                enum:
+                - manual
+                - auto
+                type: string
+              command:
+                description: Command is the command and arguments executed in the
+                  sandbox.
+                items:
+                  type: string
+                type: array
+              env:
+                additionalProperties:
+                  type: string
+                description: Env contains non-secret environment variables passed
+                  to the sandbox.
+                type: object
+              gateway:
+                description: Gateway selects the OpenShell gateway. The controller's
+                  configured endpoint is used when omitted.
+                properties:
+                  endpoint:
+                    description: Endpoint is the URL of an OpenShell gateway.
+                    type: string
+                  insecure:
+                    description: Insecure permits plaintext HTTP or skips certificate
+                      verification for HTTPS.
+                    type: boolean
+                  name:
+                    description: |-
+                      Name is retained for compatibility with CLI-based controllers. SDK-based
+                      controllers require Endpoint instead.
+                    type: string
+                type: object
+              image:
+                description: Image is the container image used to create the sandbox.
+                minLength: 1
+                type: string
+              labels:
+                additionalProperties:
+                  type: string
+                description: Labels are attached to the OpenShell sandbox.
+                type: object
+              networkAccess:
+                description: |-
+                  NetworkAccess contains additional named egress endpoints merged into the
+                  referenced OpenShell policy.
+                items:
+                  description: SandboxNetworkAccessSpec adds a named outbound endpoint
+                    to the sandbox policy.
+                  properties:
+                    host:
+                      description: Host is the DNS name the sandbox may contact.
+                      minLength: 1
+                      type: string
+                    name:
+                      description: Name is the policy rule name.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    port:
+                      description: Port is the destination TCP port.
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    protocol:
+                      default: rest
+                      description: Protocol selects OpenShell's application protocol
+                        inspection.
+                      enum:
+                      - http
+                      - https
+                      - rest
+                      type: string
+                  required:
+                  - host
+                  - name
+                  - port
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              policyRef:
+                description: PolicyRef selects an OpenShell policy stored in a ConfigMap
+                  in this namespace.
+                properties:
+                  key:
+                    description: The key to select.
+                    type: string
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  optional:
+                    description: Specify whether the ConfigMap or its key must be
+                      defined
+                    type: boolean
+                required:
+                - key
+                type: object
+                x-kubernetes-map-type: atomic
+              providerRegistrations:
+                description: |-
+                  ProviderRegistrations are registered from Secrets before sandbox creation.
+                  Each registration name must also appear in Providers.
+                items:
+                  description: |-
+                    SandboxProviderRegistration declares a provider that the controller registers
+                    from a namespace-local Secret before creating the sandbox.
+                  properties:
+                    config:
+                      additionalProperties:
+                        type: string
+                      description: Config holds non-secret OpenShell provider settings.
+                      type: object
+                    name:
+                      description: Name is the provider name in the selected OpenShell
+                        workspace.
+                      minLength: 1
+                      type: string
+                    secretRef:
+                      description: SecretRef names the Secret containing provider
+                        credentials.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type:
+                      description: Type is an OpenShell provider profile ID.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - secretRef
+                  - type
+                  type: object
+                  x-kubernetes-validations:
+                  - message: secretRef.name is required
+                    rule: self.secretRef.name.size() > 0
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              providers:
+                description: Providers are OpenShell provider names used to inject
+                  credentials securely.
+                items:
+                  type: string
+                type: array
+              resources:
+                description: Resources requests CPU, memory, and GPU resources for
+                  the sandbox.
+                properties:
+                  cpu:
+                    description: CPU is an OpenShell CPU quantity, for example "500m"
+                      or "2".
+                    type: string
+                  gpu:
+                    description: GPU is the number of GPUs requested by the sandbox.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  memory:
+                    description: Memory is an OpenShell memory quantity, for example
+                      "512Mi" or "2Gi".
+                    type: string
+                type: object
+              sandboxName:
+                description: SandboxName overrides the OpenShell sandbox name. It
+                  defaults to metadata.name.
+                maxLength: 63
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                type: string
+              services:
+                description: |-
+                  Services are HTTP endpoints the OpenShell gateway should expose from the sandbox.
+                  Changing only this field does not recreate the sandbox.
+                items:
+                  description: SandboxServiceSpec exposes an HTTP service running
+                    inside the sandbox.
+                  properties:
+                    name:
+                      description: Name identifies the service within the sandbox.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    targetPort:
+                      description: TargetPort is the TCP port on which the sandbox
+                        process listens.
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                  required:
+                  - name
+                  - targetPort
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              workspace:
+                default: default
+                description: Workspace is the OpenShell workspace containing the sandbox.
+                type: string
+            required:
+            - image
+            type: object
+            x-kubernetes-validations:
+            - message: gateway.name and gateway.endpoint are mutually exclusive
+              rule: '!has(self.gateway) || !(has(self.gateway.name) && has(self.gateway.endpoint))'
+          status:
+            description: SandboxRequestStatus defines the observed OpenShell sandbox
+              state.
+            properties:
+              conditions:
+                description: Conditions describe whether the sandbox is available
+                  or reconciliation failed.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              gateway:
+                description: Gateway is the gateway location where the observed sandbox
+                  was created.
+                properties:
+                  endpoint:
+                    description: Endpoint is the URL of an OpenShell gateway.
+                    type: string
+                  insecure:
+                    description: Insecure permits plaintext HTTP or skips certificate
+                      verification for HTTPS.
+                    type: boolean
+                  name:
+                    description: |-
+                      Name is retained for compatibility with CLI-based controllers. SDK-based
+                      controllers require Endpoint instead.
+                    type: string
+                type: object
+              managedProviders:
+                description: ManagedProviders records providers that may need cleanup.
+                items:
+                  description: |-
+                    ManagedProviderStatus records a provider registered by this request so it
+                    can be released even after the request changes its gateway or Secret.
+                  properties:
+                    gateway:
+                      description: Gateway is the gateway where the provider was registered.
+                      properties:
+                        endpoint:
+                          description: Endpoint is the URL of an OpenShell gateway.
+                          type: string
+                        insecure:
+                          description: Insecure permits plaintext HTTP or skips certificate
+                            verification for HTTPS.
+                          type: boolean
+                        name:
+                          description: |-
+                            Name is retained for compatibility with CLI-based controllers. SDK-based
+                            controllers require Endpoint instead.
+                          type: string
+                      type: object
+                    name:
+                      description: Name is the provider name in OpenShell.
+                      type: string
+                    secretName:
+                      description: SecretName is the namespace-local Secret that supplied
+                        its credentials.
+                      type: string
+                    workspace:
+                      description: Workspace is the provider's OpenShell workspace.
+                      type: string
+                  required:
+                  - name
+                  - secretName
+                  - workspace
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation processed
+                  by the controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the state reported by OpenShell.
+                type: string
+              providerSyncMarkers:
+                additionalProperties:
+                  type: string
+                description: |-
+                  ProviderSyncMarkers record the provider ID and Secret version last synced
+                  by this request. OpenShell does not persist annotation changes on provider updates.
+                type: object
+              sandboxID:
+                description: SandboxID is the identifier reported by OpenShell.
+                type: string
+              sandboxName:
+                description: SandboxName is the effective OpenShell sandbox name.
+                type: string
+              services:
+                description: Services contains gateway-generated endpoints for the
+                  requested services.
+                items:
+                  description: SandboxServiceStatus reports an HTTP endpoint generated
+                    by the OpenShell gateway.
+                  properties:
+                    id:
+                      description: ID is the endpoint identifier reported by OpenShell.
+                      type: string
+                    name:
+                      description: Name identifies the service from spec.services.
+                      type: string
+                    targetPort:
+                      description: TargetPort is the TCP port exposed in the sandbox.
+                      format: int32
+                      type: integer
+                    url:
+                      description: URL is the gateway-generated URL for the service.
+                      type: string
+                  required:
+                  - name
+                  - targetPort
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              specHash:
+                description: SpecHash identifies the request and policy content used
+                  to create the sandbox.
+                type: string
+              workspace:
+                description: Workspace is the workspace where the observed sandbox
+                  was created.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

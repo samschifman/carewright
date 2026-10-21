@@ -1,0 +1,27 @@
+id: carewright-openai
+display_name: CareWright Inference API
+description: OpenAI-compatible API credentials for CareWright LLM consumers
+category: inference
+inference_capable: true
+credentials:
+  - name: api_key
+    description: LLM API bearer token
+    env_vars: [LLM_API_KEY, OPENAI_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials: [api_key]
+endpoints:
+  - host: __LLM_HOST__
+    port: __LLM_PORT__
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries:
+  - /sandbox/.venv/bin/python
+  - /sandbox/.venv/bin/python3
+  - /usr/bin/python3
+  - /usr/bin/python3.*
+  - /usr/bin/curl
+  - /bin/bash

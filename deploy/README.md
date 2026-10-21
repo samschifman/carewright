@@ -2,6 +2,8 @@
 
 This guide covers deploying the full CPG-to-ACP system to an OpenShift cluster with MaaS and OpenShell.
 
+> **Deployment paths:** This guide describes the existing script/Helm-based deployment. The Kubernetes operator is now maintained in [`carewright-operator/`](../carewright-operator/) and has a separate external-prerequisites bootstrap plus CR-based pipeline deployment path. For that path, start with [`carewright-operator/README.md`](../carewright-operator/README.md#bootstrap-prerequisites-on-openshift). Do not run both deployment paths in the same namespace; they would manage overlapping application resources.
+
 ## Prerequisites
 
 Before deploying, ensure:

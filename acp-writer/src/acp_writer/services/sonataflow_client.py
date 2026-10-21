@@ -1,6 +1,7 @@
 """SonataFlow REST/GraphQL client and workflow state mapping for the acp-writer BFF."""
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -9,7 +10,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-WORKFLOW_NAME = "acpwriter"
+WORKFLOW_NAME = os.environ.get("SONATAFLOW_WORKFLOW_NAME", "acpwriter")
 
 PIPELINE_STEPS = [
     "ScanPatient", "ResolveGuidelines", "ExecuteDMN", "RetrieveRecommendations",

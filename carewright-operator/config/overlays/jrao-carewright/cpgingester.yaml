@@ -1,0 +1,53 @@
+apiVersion: apps.carewright.io/v1alpha1
+kind: CPGIngester
+metadata:
+  name: cpg-ingester
+  namespace: jrao-carewright
+spec:
+  sandbox:
+    gateway:
+      endpoint: http://jrao-carewright-openshell.jrao-carewright.svc.cluster.local:8080
+      insecure: true
+    workspace: default
+  artifactStore:
+    url: http://minio.jrao-carewright.svc.cluster.local:9000
+    artifactBucket: cpg-artifacts
+    phiBucket: cpg-phi
+    credentials:
+      type: carewright-minio
+      secretRef:
+        name: carewright-artifact-credentials
+  llm:
+    url: https://api.enmaas.devshift.net
+    model: rits/zai-org/glm-5-3
+    credentials:
+      type: carewright-openai
+      secretRef:
+        name: carewright-llm-credentials
+  carePlanWriterRef:
+    name: care-plan-writer
+  ingestion:
+    image: quay.io/carewright/cpg-ingester-ingestion:latest
+    logLevel: INFO
+    doclingLogLevel: INFO
+    pythonUnbuffered: true
+    doclingCacheDirectory: /app/.cache/docling
+    doclingArtifactsPath: /app/.cache/docling/models
+    huggingFaceOffline: true
+    ocrEnabled: true
+  llmAnalysis:
+    image: quay.io/carewright/cpg-ingester-llm:latest
+    pythonPath: /app/src
+    figureInterpretationEnabled: true
+    figureInterpretationMaxFigures: 100
+  assembly:
+    image: quay.io/carewright/cpg-ingester-assembly:latest
+    pythonPath: /app/src
+  delivery:
+    image: quay.io/carewright/cpg-ingester-delivery:latest
+    pythonPath: /app/src
+  bff:
+    image: quay.io/carewright/cpg-ingester-bff:latest
+    pythonPath: /app/src
+  ui:
+    image: quay.io/carewright/cpg-ingester-ui:latest

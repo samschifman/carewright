@@ -97,6 +97,13 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=min,scope=${{ matrix.image }}
 
+      - name: Update latest tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker buildx imagetools create \
+            --tag quay.io/carewright/${{ matrix.image }}:latest \
+            quay.io/carewright/${{ matrix.image }}:${{ needs.changes.outputs.tag }}
+
       - name: Report runner disk after Docling image build
         if: always() && matrix.image == 'cpg-ingester-ingestion'
         run: df -h /
@@ -157,6 +164,13 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=min,scope=${{ matrix.image }}
 
+      - name: Update latest tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker buildx imagetools create \
+            --tag quay.io/carewright/${{ matrix.image }}:latest \
+            quay.io/carewright/${{ matrix.image }}:${{ needs.changes.outputs.tag }}
+
   build-mock-ehr:
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.mock_ehr == 'true'
@@ -190,3 +204,10 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=min,scope=${{ matrix.image }}
+
+      - name: Update latest tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker buildx imagetools create \
+            --tag quay.io/carewright/${{ matrix.image }}:latest \
+            quay.io/carewright/${{ matrix.image }}:${{ needs.changes.outputs.tag }}

@@ -1,0 +1,37 @@
+id: carewright-minio
+display_name: CareWright MinIO
+description: Credentials for the CareWright in-cluster MinIO artifact store
+category: data
+credentials:
+  - name: access_key
+    description: Legacy CareWright MinIO access key
+    env_vars: [ARTIFACT_STORE_ACCESS_KEY]
+    required: true
+  - name: secret_key
+    description: Legacy CareWright MinIO secret key
+    env_vars: [ARTIFACT_STORE_SECRET_KEY]
+    required: true
+  - name: access_key_id
+    description: MinIO access key
+    env_vars: [AWS_ACCESS_KEY_ID]
+    required: true
+  - name: secret_access_key
+    description: MinIO secret key
+    env_vars: [AWS_SECRET_ACCESS_KEY]
+    required: true
+endpoints:
+  - host: minio.__NAMESPACE__.svc.cluster.local
+    port: 9000
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+    credential_signing: sigv4
+    signing_service: s3
+    signing_region: us-east-1
+binaries:
+  - /sandbox/.venv/bin/python
+  - /sandbox/.venv/bin/python3
+  - /usr/bin/python3
+  - /usr/bin/python3.*
+  - /usr/bin/curl
+  - /bin/bash

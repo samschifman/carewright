@@ -17,6 +17,10 @@ class ExpressionError(ValueError):
     """Raised when an expression is malformed or cannot be typed."""
 
 
+class ExpressionLimitError(ExpressionError):
+    """Raised when expression source or structure exceeds a fixed limit."""
+
+
 class UnboundIdentifier(ExpressionError):
     """Raised when evaluation references a name absent from the runtime values."""
 
@@ -134,10 +138,21 @@ _DURATION_VALUE_RE = re.compile(
 )
 _IDENTIFIER_RE = re.compile(r"[a-z][a-z0-9_]*")
 _COMPARISON_OPERATORS = frozenset({"==", "!=", "<", "<=", ">", ">="})
+MAX_SOURCE_LENGTH = 4096
+MAX_NON_EOF_TOKENS = 256
+MAX_PARENTHESIS_DEPTH = 32
+MAX_CONSECUTIVE_UNARY_OPERATORS = 32
+MAX_AST_DEPTH = 64
 
 
 def _tokenize(source: str) -> list[_Token]:
     tokens: list[_Token] = []
+
+    def append_token(kind: str, value: str, position: int) -> None:
+        if len(tokens) >= MAX_NON_EOF_TOKENS:
+            raise ExpressionLimitError("expression exceeds the token count limit")
+        tokens.append(_Token(kind, value, position))
+
     position = 0
     while position < len(source):
         if source[position].isspace():
@@ -147,28 +162,28 @@ def _tokenize(source: str) -> list[_Token]:
         duration_match = _DURATION_RE.match(source, position)
         if duration_match is not None:
             value = duration_match.group(0)
-            tokens.append(_Token("duration", value, position))
+            append_token("duration", value, position)
             position = duration_match.end()
             continue
 
         string_match = _STRING_RE.match(source, position)
         if string_match is not None:
             value = string_match.group(0)
-            tokens.append(_Token("string", value, position))
+            append_token("string", value, position)
             position = string_match.end()
             continue
 
         number_match = _NUMBER_RE.match(source, position)
         if number_match is not None:
             value = number_match.group(0)
-            tokens.append(_Token("number", value, position))
+            append_token("number", value, position)
             position = number_match.end()
             continue
 
         identifier_match = _IDENTIFIER_RE.match(source, position)
         if identifier_match is not None:
             value = identifier_match.group(0)
-            tokens.append(_Token("identifier", value, position))
+            append_token("identifier", value, position)
             position = identifier_match.end()
             continue
 
@@ -181,7 +196,7 @@ def _tokenize(source: str) -> list[_Token]:
             None,
         )
         if operator is not None:
-            tokens.append(_Token("operator", operator, position))
+            append_token("operator", operator, position)
             position += len(operator)
             continue
 
@@ -193,9 +208,34 @@ def _tokenize(source: str) -> list[_Token]:
     return tokens
 
 
+def _validate_parenthesis_depth(tokens: list[_Token]) -> None:
+    depth = 0
+    for token in tokens:
+        if token.kind != "operator":
+            continue
+        if token.value == "(":
+            depth += 1
+            if depth > MAX_PARENTHESIS_DEPTH:
+                raise ExpressionLimitError(
+                    "expression exceeds the parenthesis nesting limit"
+                )
+        elif token.value == ")":
+            depth = max(0, depth - 1)
+
+
+def _validate_ast_depth(root: Expr) -> None:
+    pending = [(root, 1)]
+    while pending:
+        node, depth = pending.pop()
+        if depth > MAX_AST_DEPTH:
+            raise ExpressionLimitError("expression exceeds the AST depth limit")
+        pending.extend((child, depth + 1) for child in node.children())
+
+
 class _Parser:
     def __init__(self, source: str) -> None:
         self.tokens = _tokenize(source)
+        _validate_parenthesis_depth(self.tokens)
         self.index = 0
 
     @property
@@ -244,9 +284,13 @@ class _Parser:
             expression = BinaryNode("and", expression, self._parse_not())
         return expression
 
-    def _parse_not(self) -> Expr:
+    def _parse_not(self, consecutive: int = 0) -> Expr:
         if self._accept_value("not"):
-            return UnaryNode("not", self._parse_not())
+            if consecutive >= MAX_CONSECUTIVE_UNARY_OPERATORS:
+                raise ExpressionLimitError(
+                    "expression exceeds the unary operator limit"
+                )
+            return UnaryNode("not", self._parse_not(consecutive + 1))
         return self._parse_comparison()
 
     def _parse_comparison(self) -> Expr:
@@ -337,6 +381,7 @@ def _as_expression(expression: Expr | str) -> Expr:
         return parse(expression)
     if not isinstance(expression, Expr):
         raise ExpressionError("expression must be source text or an expression node")
+    _validate_ast_depth(expression)
     return expression
 
 
@@ -345,7 +390,14 @@ def parse(source: str) -> Expr:
     """Parse one expression into an immutable syntax tree."""
     if not isinstance(source, str):
         raise ExpressionError("expression source must be a string")
-    return _Parser(source).parse()
+    if len(source) > MAX_SOURCE_LENGTH:
+        raise ExpressionLimitError("expression exceeds the source length limit")
+    try:
+        expression = _Parser(source).parse()
+        _validate_ast_depth(expression)
+        return expression
+    except RecursionError:
+        raise ExpressionLimitError("expression exceeds the parser recursion limit") from None
 
 
 @trace

@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from lxml import etree
 
 from cpg_contracts.automation.catalog import load_catalog
@@ -293,6 +294,37 @@ def test_ladder_reports_missing_instance_context_at_l5a() -> None:
     assert result.ok is False
     assert result.rungs_passed == ["L0", "L1", "L2", "L3", "L4"]
     assert result.errors()[0].code == "instance-context"
+
+
+@pytest.mark.parametrize("location", ["condition", "invariant"])
+def test_expression_limit_is_a_l0_finding_without_compilation(
+    monkeypatch, location: str
+) -> None:
+    ir = fixture_ir()
+    source = "(" * 33 + "true" + ")" * 33
+    if location == "condition":
+        flow = next(
+            element
+            for element in ir.process.flowElements
+            if isinstance(element, SequenceFlow) and element.conditionExpression
+        )
+        flow.conditionExpression = source
+    else:
+        ir.process.acp.invariants.append(source)
+
+    monkeypatch.setattr(
+        "cpg_contracts.automation.validators.ladder.compile",
+        lambda *_args, **_kwargs: pytest.fail("limited expression must not compile"),
+    )
+    result = run_static_ladder(ir, catalog=load_catalog(), stage="template")
+    finding = next(
+        item for item in result.findings if item.code == "expression-limit"
+    )
+
+    assert finding.rung == "L0"
+    assert finding.message == "expression exceeds the parenthesis nesting limit"
+    assert source not in finding.message
+    assert result.rungs_passed == []
 
 
 def test_public_ladder_entrypoint_is_traced_when_mlflow_is_installed() -> None:

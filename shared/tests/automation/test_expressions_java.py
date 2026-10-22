@@ -8,7 +8,11 @@ import pytest
 
 from cpg_contracts.automation.expressions import (
     ExpressionError,
+    ExpressionLimitError,
+    MAX_AST_DEPTH,
+    LiteralNode,
     TypeInfo,
+    UnaryNode,
     expression_environment,
     parse,
     to_java,
@@ -25,6 +29,15 @@ def fixture_ir() -> ProcessIR:
 
 def fixture_env() -> dict[str, TypeInfo]:
     return expression_environment(fixture_ir().process)
+
+
+def test_java_generation_rejects_overdeep_expression_node_before_recursing() -> None:
+    expression = LiteralNode(True, "boolean")
+    for _ in range(MAX_AST_DEPTH):
+        expression = UnaryNode("not", expression)
+
+    with pytest.raises(ExpressionLimitError, match="AST depth limit"):
+        to_java(expression, {})
 
 
 def test_fixture_conditions_match_appendix_a_exactly() -> None:

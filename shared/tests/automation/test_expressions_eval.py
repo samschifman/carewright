@@ -9,7 +9,11 @@ import pytest
 
 from cpg_contracts.automation.expressions import (
     ExpressionError,
+    ExpressionLimitError,
+    MAX_AST_DEPTH,
+    LiteralNode,
     TypeInfo,
+    UnaryNode,
     UnboundIdentifier,
     check_invariants,
     evaluate,
@@ -55,6 +59,15 @@ def runtime_values() -> dict[str, object]:
         "kind": "reminder",
         "enabled": True,
     }
+
+
+def test_evaluate_rejects_overdeep_expression_node_before_recursing() -> None:
+    expression = LiteralNode(True, "boolean")
+    for _ in range(MAX_AST_DEPTH):
+        expression = UnaryNode("not", expression)
+
+    with pytest.raises(ExpressionLimitError, match="AST depth limit"):
+        evaluate(expression, {})
 
 
 @pytest.mark.parametrize(

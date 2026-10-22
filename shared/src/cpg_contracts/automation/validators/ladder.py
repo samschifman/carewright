@@ -13,6 +13,7 @@ from cpg_contracts.automation.catalog import Catalog
 from cpg_contracts.automation.compiler import ParseError, compile, parse
 from cpg_contracts.automation.expressions import (
     ExpressionError,
+    ExpressionLimitError,
     check_invariants,
     expression_environment,
     parse_duration,
@@ -60,6 +61,22 @@ def _finding(rung: str, code: str, message: str, element_id: str | None = None) 
         message=message,
         element_id=element_id,
     )
+
+
+def _expression_limit_cause(error: BaseException) -> ExpressionLimitError | None:
+    pending = [error]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+        if isinstance(current, ExpressionLimitError):
+            return current
+        for cause in (current.__cause__, current.__context__):
+            if cause is not None:
+                pending.append(cause)
+    return None
 
 
 def _runtime_value(parameter: Parameter, value: object) -> object:
@@ -270,6 +287,10 @@ def _l0(
             result_type = typecheck(element.conditionExpression, environment)
             if result_type != "boolean":
                 raise ExpressionError("condition must have boolean type")
+        except ExpressionLimitError as exc:
+            findings.append(
+                _finding("L0", "expression-limit", str(exc), element.id)
+            )
         except ExpressionError as exc:
             findings.append(
                 _finding("L0", "condition-expression", str(exc), element.id)
@@ -282,6 +303,8 @@ def _l0(
             supplied_values,
         )
         findings.extend(invariant_findings)
+    except ExpressionLimitError as exc:
+        findings.append(_finding("L0", "expression-limit", str(exc)))
     except (ExpressionError, TypeError, ValueError) as exc:
         findings.append(_finding("L0", "invariant-expression", str(exc)))
     return findings, deferred
@@ -334,6 +357,15 @@ def run_static_ladder(
         try:
             process_ir = parse(xml)
         except (ParseError, ValueError, ValidationError) as exc:
+            limit_error = _expression_limit_cause(exc)
+            if limit_error is not None:
+                finding = _finding("L0", "expression-limit", str(limit_error))
+                return _result(
+                    findings=[finding],
+                    rungs_passed=[],
+                    deferred=[],
+                    failing_rung="L0",
+                )
             finding = _finding("L0", "xml-ir-parse", f"BPMN XML cannot be recovered as a process IR: {exc}")
             return _result(findings=[finding], rungs_passed=[], deferred=[], failing_rung="L0")
     else:

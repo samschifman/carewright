@@ -9,10 +9,17 @@ import pytest
 from cpg_contracts.automation.expressions import (
     BinaryNode,
     ExpressionError,
+    ExpressionLimitError,
     IdentifierNode,
     LiteralNode,
+    MAX_AST_DEPTH,
+    MAX_CONSECUTIVE_UNARY_OPERATORS,
+    MAX_NON_EOF_TOKENS,
+    MAX_PARENTHESIS_DEPTH,
+    MAX_SOURCE_LENGTH,
     TypeInfo,
     UnaryNode,
+    _tokenize,
     expression_environment,
     identifiers,
     literals,
@@ -31,6 +38,87 @@ def fixture_ir() -> ProcessIR:
 
 def fixture_env() -> dict[str, TypeInfo]:
     return expression_environment(fixture_ir().process)
+
+
+def test_source_length_limit_accepts_boundary_and_rejects_one_over() -> None:
+    at_limit = "true" + " " * (MAX_SOURCE_LENGTH - len("true"))
+    assert type(parse(at_limit)) is LiteralNode
+
+    with pytest.raises(ExpressionLimitError) as raised:
+        parse(at_limit + " ")
+
+    assert str(raised.value) == "expression exceeds the source length limit"
+
+
+def test_token_limit_accepts_boundary_and_rejects_one_over() -> None:
+    at_limit = " ".join(["true"] * MAX_NON_EOF_TOKENS)
+    assert len(_tokenize(at_limit)) - 1 == MAX_NON_EOF_TOKENS
+
+    with pytest.raises(ExpressionLimitError) as raised:
+        _tokenize(" ".join(["true"] * (MAX_NON_EOF_TOKENS + 1)))
+
+    assert str(raised.value) == "expression exceeds the token count limit"
+
+
+def test_parenthesis_limit_counts_tokens_not_quoted_characters() -> None:
+    at_limit = "(" * MAX_PARENTHESIS_DEPTH + "true" + ")" * MAX_PARENTHESIS_DEPTH
+    assert isinstance(parse(at_limit), LiteralNode)
+    assert isinstance(parse("'('"), LiteralNode)
+
+    with pytest.raises(ExpressionLimitError) as raised:
+        parse("(" * (MAX_PARENTHESIS_DEPTH + 1) + "true" + ")" * (MAX_PARENTHESIS_DEPTH + 1))
+
+    assert str(raised.value) == "expression exceeds the parenthesis nesting limit"
+
+
+def test_five_thousand_nested_parentheses_fail_at_source_limit() -> None:
+    source = "(" * 5000 + "true" + ")" * 5000
+
+    with pytest.raises(ExpressionLimitError) as raised:
+        parse(source)
+
+    assert str(raised.value) == "expression exceeds the source length limit"
+
+
+def test_consecutive_unary_limit_accepts_boundary_and_rejects_one_over() -> None:
+    at_limit = "not " * MAX_CONSECUTIVE_UNARY_OPERATORS + "true"
+    assert type(parse(at_limit)) is UnaryNode
+
+    with pytest.raises(ExpressionLimitError) as raised:
+        parse("not " * (MAX_CONSECUTIVE_UNARY_OPERATORS + 1) + "true")
+
+    assert str(raised.value) == "expression exceeds the unary operator limit"
+
+
+def test_ast_depth_limit_accepts_boundary_and_rejects_one_over() -> None:
+    at_limit = " or ".join(["true"] * MAX_AST_DEPTH)
+    assert type(parse(at_limit)) is BinaryNode
+
+    with pytest.raises(ExpressionLimitError) as raised:
+        parse(" or ".join(["true"] * (MAX_AST_DEPTH + 1)))
+
+    assert str(raised.value) == "expression exceeds the AST depth limit"
+
+
+def test_parser_recursion_error_becomes_expression_limit(monkeypatch) -> None:
+    def recurse(_parser):
+        raise RecursionError
+
+    monkeypatch.setattr("cpg_contracts.automation.expressions._Parser.parse", recurse)
+
+    with pytest.raises(ExpressionLimitError) as raised:
+        parse("true")
+
+    assert str(raised.value) == "expression exceeds the parser recursion limit"
+
+
+def test_typecheck_rejects_overdeep_expression_node_before_recursing() -> None:
+    expression = LiteralNode(True, "boolean")
+    for _ in range(MAX_AST_DEPTH):
+        expression = UnaryNode("not", expression)
+
+    with pytest.raises(ExpressionLimitError, match="AST depth limit"):
+        typecheck(expression, {})
 
 
 def test_fixture_conditions_and_invariant_parse_and_typecheck() -> None:

@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
         - name: minio
-          image: quay.io/minio/minio:latest
+          image: quay.io/jrao/minio@sha256:9c25bac3d44ef57943e1ed9ca808a6c6c04d128a5e38937db6818a16a4aa5473  # RELEASE.2025-09-07T16-13-09Z, same pinned image the carewright-operator bootstrap uses; quay.io/minio/minio was withdrawn
           args: ["server", "/data", "--console-address", ":9001"]
           env:
             - name: MINIO_ROOT_USER

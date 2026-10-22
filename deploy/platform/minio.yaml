@@ -23,6 +23,8 @@ metadata:
     app: minio
 spec:
   replicas: 1
+  strategy:
+    type: Recreate  # single RWO volume: the old pod must release it before the new one can attach
   selector:
     matchLabels:
       app: minio

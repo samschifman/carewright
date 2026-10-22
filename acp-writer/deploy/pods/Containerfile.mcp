@@ -3,7 +3,7 @@ USER 0
 WORKDIR /app
 COPY shared/ /app/shared/
 RUN pip install --no-cache-dir /app/shared/
-RUN pip install --no-cache-dir mlflow requests fastapi uvicorn "mcp[cli]>=1.0"
+RUN pip install --no-cache-dir mlflow requests fastapi uvicorn "mcp[cli]>=1.0,<2"
 COPY acp-writer/src/ /app/src/
 ENV PYTHONPATH=/app/src
 RUN chmod -R g=u /app

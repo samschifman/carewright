@@ -17,6 +17,7 @@ from cpg_contracts.automation.ir import (
     ir_version,
 )
 from cpg_contracts.automation.validators.ladder import run_static_ladder
+from cpg_contracts.automation.validators.patterns import PatternError
 
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "automation"
@@ -90,6 +91,57 @@ def test_authored_string_parameter_with_nonempty_default_passes_l0() -> None:
 
     assert result.rungs_passed[0] == "L0"
     assert not any(item.code == "parameter-authored-default" for item in result.findings)
+
+
+def test_l0_validates_declared_pattern_without_a_default() -> None:
+    ir = fixture_ir()
+    ir.process.acp.parameters.append(
+        Parameter(
+            name="pattern_without_default",
+            type="string",
+            required=True,
+            constraints=Constraints(pattern="("),
+        )
+    )
+
+    result = run_static_ladder(ir, catalog=load_catalog(), stage="template")
+    finding = next(
+        item for item in result.findings if item.code == "constraint-pattern-invalid"
+    )
+
+    assert finding.rung == "L0"
+    assert finding.element_id == "pattern_without_default"
+    assert finding.message == "constraint pattern is invalid"
+
+
+def test_l0_maps_matching_timeout_to_a_pattern_finding(monkeypatch) -> None:
+    ir = fixture_ir()
+    ir.process.acp.parameters.append(
+        Parameter(
+            name="timed_pattern",
+            type="string",
+            required=True,
+            default="secret-subject",
+            source=SourceRef(kind="authored"),
+            constraints=Constraints(pattern="secret-pattern"),
+        )
+    )
+
+    def timeout(_pattern: str, _subject: str) -> bool:
+        raise PatternError("constraint-pattern-timeout")
+
+    monkeypatch.setattr(
+        "cpg_contracts.automation.validators.ladder.match_pattern", timeout
+    )
+    result = run_static_ladder(ir, catalog=load_catalog(), stage="template")
+    finding = next(
+        item for item in result.findings if item.code == "constraint-pattern-timeout"
+    )
+
+    assert finding.rung == "L0"
+    assert finding.element_id == "timed_pattern"
+    assert "secret-pattern" not in finding.message
+    assert "secret-subject" not in finding.message
 
 
 def test_enum_constrained_string_parameter_has_enum_expression_type() -> None:

@@ -71,6 +71,7 @@ from cpg_contracts.automation.validators.catalog_conformance import (
     UCUM_SYNTAX,
     UCUM_UNITS,
 )
+from cpg_contracts.automation.validators.patterns import PatternError, match_pattern
 from cpg_contracts.automation.validators.results import Finding, Severity
 from cpg_contracts.automation.validators.textmatch import contains, normalize
 
@@ -353,7 +354,9 @@ def _within_constraints(parameter: Parameter, value: Any) -> bool:
             return False
     if constraints.enum is not None and value not in constraints.enum:
         return False
-    if constraints.pattern is not None and not re.fullmatch(constraints.pattern, str(value)):
+    if constraints.pattern is not None and not match_pattern(
+        constraints.pattern, str(value)
+    ):
         return False
     return True
 
@@ -440,15 +443,21 @@ def _check_template_parameters(process: Process) -> list[Finding]:
                         element_id=parameter.name,
                     )
                 )
-        if parameter.default is not None and not _within_constraints(
-            parameter, parameter.default
-        ):
-            findings.append(
-                _finding(
-                    "T2",
-                    f"default for parameter {parameter.name!r} is outside its constraints",
+        if parameter.default is not None:
+            try:
+                within_constraints = _within_constraints(parameter, parameter.default)
+            except PatternError as exc:
+                findings.append(
+                    _finding(exc.code, str(exc), element_id=parameter.name)
                 )
-            )
+            else:
+                if not within_constraints:
+                    findings.append(
+                        _finding(
+                            "T2",
+                            f"default for parameter {parameter.name!r} is outside its constraints",
+                        )
+                    )
     return findings
 
 
@@ -1786,10 +1795,17 @@ def _check_bindings_and_invariants(
             findings.append(
                 _finding("I4", f"quantity binding for {parameter.name!r} has a different unit", element_id=parameter.name)
             )
-        if not _within_constraints(parameter, value):
+        try:
+            within_constraints = _within_constraints(parameter, value)
+        except PatternError as exc:
             findings.append(
-                _finding("I4", f"binding for {parameter.name!r} is outside its constraints", element_id=parameter.name)
+                _finding(exc.code, str(exc), element_id=parameter.name)
             )
+        else:
+            if not within_constraints:
+                findings.append(
+                    _finding("I4", f"binding for {parameter.name!r} is outside its constraints", element_id=parameter.name)
+                )
         values[parameter.name] = _binding_runtime_value(parameter, binding)
 
     if process.acp.invariants:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 import math
-import re
 from typing import Literal
 
 from pydantic import ValidationError
@@ -39,6 +38,11 @@ from cpg_contracts.automation.validators.grounding import (
 )
 from cpg_contracts.automation.validators.lint import validate_structure
 from cpg_contracts.automation.validators.phi import scan_phi
+from cpg_contracts.automation.validators.patterns import (
+    PatternError,
+    match_pattern,
+    validate_pattern,
+)
 from cpg_contracts.automation.validators.preflight import validate_preflight
 from cpg_contracts.automation.validators.results import Finding, LadderResult
 from cpg_contracts.automation.validators.xsd import validate_xsd
@@ -84,7 +88,12 @@ def _matches_type(parameter: Parameter, value: object) -> bool:
     return False
 
 
-def _within_constraints(parameter: Parameter, value: object) -> bool:
+def _within_constraints(
+    parameter: Parameter,
+    value: object,
+    *,
+    skip_pattern: bool = False,
+) -> bool:
     constraints = parameter.constraints
     if constraints is None:
         return True
@@ -103,7 +112,11 @@ def _within_constraints(parameter: Parameter, value: object) -> bool:
             return False
     if constraints.enum is not None and value not in constraints.enum:
         return False
-    if constraints.pattern is not None and not re.fullmatch(constraints.pattern, str(value)):
+    if (
+        constraints.pattern is not None
+        and not skip_pattern
+        and not match_pattern(constraints.pattern, str(value))
+    ):
         return False
     return True
 
@@ -141,6 +154,18 @@ def _l0(
                 )
 
     parameters = {parameter.name: parameter for parameter in ir.process.acp.parameters}
+    invalid_patterns: set[str] = set()
+    for parameter in parameters.values():
+        pattern = parameter.constraints.pattern if parameter.constraints else None
+        if pattern is None:
+            continue
+        try:
+            validate_pattern(pattern)
+        except PatternError as exc:
+            invalid_patterns.add(parameter.name)
+            findings.append(
+                _finding("L0", exc.code, str(exc), parameter.name)
+            )
     supplied_values: dict[str, object] = {}
     if ir.process.kind == "template":
         for parameter in parameters.values():
@@ -169,15 +194,24 @@ def _l0(
                     )
                 )
                 continue
-            if not _within_constraints(parameter, parameter.default):
-                findings.append(
-                    _finding(
-                        "L0",
-                        "parameter-default-constraint",
-                        f"default for parameter {parameter.name!r} is outside its constraints",
-                        parameter.name,
-                    )
+            try:
+                within_constraints = _within_constraints(
+                    parameter,
+                    parameter.default,
+                    skip_pattern=parameter.name in invalid_patterns,
                 )
+            except PatternError as exc:
+                findings.append(_finding("L0", exc.code, str(exc), parameter.name))
+            else:
+                if not within_constraints:
+                    findings.append(
+                        _finding(
+                            "L0",
+                            "parameter-default-constraint",
+                            f"default for parameter {parameter.name!r} is outside its constraints",
+                            parameter.name,
+                        )
+                    )
             try:
                 supplied_values[parameter.name] = _runtime_value(parameter, parameter.default)
             except ExpressionError as exc:
@@ -203,15 +237,24 @@ def _l0(
                     )
                 )
                 continue
-            if not _within_constraints(parameter, value):
-                findings.append(
-                    _finding(
-                        "L0",
-                        "parameter-binding-constraint",
-                        f"binding for parameter {name!r} is outside its constraints",
-                        name,
-                    )
+            try:
+                within_constraints = _within_constraints(
+                    parameter,
+                    value,
+                    skip_pattern=parameter.name in invalid_patterns,
                 )
+            except PatternError as exc:
+                findings.append(_finding("L0", exc.code, str(exc), name))
+            else:
+                if not within_constraints:
+                    findings.append(
+                        _finding(
+                            "L0",
+                            "parameter-binding-constraint",
+                            f"binding for parameter {name!r} is outside its constraints",
+                            name,
+                        )
+                    )
             try:
                 supplied_values[name] = _runtime_value(parameter, value)
             except ExpressionError as exc:

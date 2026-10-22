@@ -59,6 +59,25 @@ def test_normalize_expands_abbreviations_and_contains_uses_fuzzy_token_windows()
     )
 
 
+def test_exact_whole_token_match_near_end_of_long_section_skips_fuzzy_matching(
+    monkeypatch,
+) -> None:
+    from cpg_contracts.automation.validators import textmatch
+
+    def fail_if_called(*_args, **_kwargs):
+        pytest.fail("exact whole-token match must not enter fuzzy matching")
+
+    monkeypatch.setattr(textmatch, "SequenceMatcher", fail_if_called)
+    citation = "The patient should measure blood pressure daily."
+    section = "introductory filler " * 1001 + citation
+
+    assert contains(section, citation)
+
+
+def test_exact_matching_uses_whole_token_boundaries() -> None:
+    assert not contains("The patient has hypertension.", "hyper")
+
+
 def test_source_citation_must_be_found_in_the_section() -> None:
     ir = fixture_ir()
     task = next(item for item in ir.process.flowElements if item.id == "notify")

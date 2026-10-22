@@ -8,6 +8,10 @@ import re
 
 from cpg_contracts.automation._tracing import trace
 
+MAX_FUZZY_CITATION_TOKENS = 80
+MAX_FUZZY_SECTION_TOKENS = 1000
+MAX_FUZZY_WINDOW_COMPARISONS = 10_000
+
 
 @trace(name="bpmn.l5.text_normalize")
 def normalize(text: str, abbreviations: Mapping[str, str] | None = None) -> str:
@@ -33,10 +37,21 @@ def contains(
     *,
     abbreviations: Mapping[str, str] | None = None,
 ) -> bool:
-    """Check whether a normalized source snippet occurs in a section text window."""
-    section_tokens = normalize(section, abbreviations).split()
-    snippet_tokens = normalize(snippet, abbreviations).split()
+    """Check exact normalized containment, then bounded fuzzy token windows."""
+    normalized_section = normalize(section, abbreviations)
+    normalized_snippet = normalize(snippet, abbreviations)
+    section_tokens = normalized_section.split()
+    snippet_tokens = normalized_snippet.split()
     if not snippet_tokens:
+        return False
+
+    if f" {normalized_snippet} " in f" {normalized_section} ":
+        return True
+
+    if (
+        len(snippet_tokens) > MAX_FUZZY_CITATION_TOKENS
+        or len(section_tokens) > MAX_FUZZY_SECTION_TOKENS
+    ):
         return False
     if len(snippet_tokens) > len(section_tokens):
         return False
@@ -51,6 +66,13 @@ def contains(
     tolerance = max(1, round(width * (1 - threshold)))
     min_width = max(1, width - tolerance)
     max_width = min(len(section_tokens), width + tolerance)
+    proposed_comparisons = sum(
+        len(section_tokens) - window_width + 1
+        for window_width in range(min_width, max_width + 1)
+    )
+    if proposed_comparisons > MAX_FUZZY_WINDOW_COMPARISONS:
+        return False
+
     for window_width in range(min_width, max_width + 1):
         for start in range(len(section_tokens) - window_width + 1):
             window = section_tokens[start : start + window_width]

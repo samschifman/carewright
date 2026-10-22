@@ -14,3 +14,5 @@ Internal development documents for the CPG-to-ACP project. Not intended for user
 | `ui/` | UI/UX spikes and wireframes (Phase 4) |
 
 Top-level files: project plan, project proposal, and intro deck.
+
+- [`design/automation-design.md`](design/automation-design.md) — point-in-time automation design copy, captured 2026-10-22; errata E1–E40 are appended as written.

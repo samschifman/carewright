@@ -19,10 +19,11 @@ Phase 2 — Generation (parallel with adversarial review):
 
 See `dev_docs/design/cpg-ingester-design.md` for the full design rationale.
 
-## Two Outputs
+## Outputs
 
 1. **DMN decision tables** — Computable logic extracted from clinical decision algorithms, delivered to acp-writer's Drools/Kogito decision service (DMN 1.4).
 2. **Recommendations** — Non-computable narrative content for RAG retrieval. Contract defined in `shared/cpg_contracts/` (`Recommendation`, `RecommendationBundle`).
+3. **Automation templates** — BPMN process templates grounded in identified CPG items and reviewed in the **Automations** tab before delivery to acp-writer.
 
 ## Setup
 
@@ -54,6 +55,9 @@ Environment variables (alternative to CLI flags):
 - `DMN_PREFLIGHT_URL` — optional decision-service validation endpoint; when set,
   accepted DMN is validated at `<url>?validate_only=true` and failures feed the
   repair loop. Unset means preflight is disabled.
+- `BPMN_PREFLIGHT_URL` — optional Kogito automation-template validation endpoint;
+  when set, generated and reviewer-edited templates are submitted with
+  `validate_only=true`. Unset disables this additional engine preflight.
 
 Docling / figure knobs (all optional; blank or unset means the default):
 - `INGESTION_OCR_ENABLED` — run the conditional OCR re-parse for scanned/image-only
@@ -165,6 +169,7 @@ A PatternFly 6 + React 19 SPA for uploading CPGs, monitoring pipeline progress, 
 | Structure Review | `/runs/:id` (tab) | TreeView of CPG sections with classifications |
 | Decision Review | `/runs/:id` (tab) | DMN models with decision tables, per-item feedback |
 | Recommendation Review | `/runs/:id` (tab) | Recommendations with certainty grades, per-item feedback |
+| Automations | `/runs/:id` (tab) | Generated BPMN templates, validation findings, diagrams, and review feedback |
 | Assembly Report | `/runs/:id` (tab) | Integrity checks, escalated items |
 | Approval & Delivery | `/runs/:id` (tab) | Artifact delivery to acp-writer, per-artifact status |
 

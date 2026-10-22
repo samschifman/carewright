@@ -46,6 +46,7 @@ Each component boundary uses a standards-based contract:
 | Patient data | **FHIR** (IPS) | mock-EHR | acp-writer |
 | Care plans | **FHIR** (CarePlan) | acp-writer | mock-EHR |
 | Process automation | **BPMN** | acp-writer | automation |
+| Automation templates | **cpg-contracts** (`AutomationTemplate`) | cpg-ingester | acp-writer (registry) |
 
 Producers must not assume a specific consumer runtime. Consumers are pluggable behind the standard.
 
@@ -71,6 +72,7 @@ Producers must not assume a specific consumer runtime. Consumers are pluggable b
   - **Gitleaks pre-commit hook** (`.githooks/pre-commit`) — local scanning before each commit. Activate with: `brew install gitleaks && git config core.hooksPath .githooks`
 - Keep components independent. Avoid adding cross-component dependencies unless the contract goes through `shared/`.
 - Prefer standard interfaces (MCP, REST, FHIR, DMN, BPMN) over proprietary integrations.
+- Do not put guideline-specific clinical language, thresholds, drug names, intervals, codes, or URLs in prompts or source. Look up codes rather than inventing them; report reviewer rejection patterns instead of patching clinical content into prompts or source.
 
 ### Observability
 - All new functions that perform meaningful work (API calls, LLM invocations, data transformations, external service calls) must be traced with `@mlflow.trace`. This is not optional.

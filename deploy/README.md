@@ -437,6 +437,10 @@ The supplied CPG id is sent as the DMN models' `source_cpg`. If a model id is al
 
 Run the cluster-free loader tests with `bash deploy/tests/test-load-published-artifacts.sh`.
 
+### Automation templates
+
+Loader step 4 registers published automation templates with the acp-writer decision engine. Template rejections are warnings and are counted in the loader summary; they do not turn optional template registration into a deployment failure. The automation service is not deployed on the cluster in this release, so cluster care-plan automation publications are `unconfigured` and remain stored with the CarePlan rather than being sent to a runtime.
+
 ## SonataFlow Workflow Configuration
 
 Each workflow (cpg-ingester and acp-writer) requires a **props ConfigMap** that maps CloudEvent channels to HTTP callback endpoints (e.g. `mp.messaging.incoming.parse-done.path=/wait-parse`). Without these, async workflow steps complete but their callbacks are rejected with 404, and the workflow stalls.

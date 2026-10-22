@@ -33,8 +33,11 @@ def _instance(workflowdata: dict) -> dict:
     }
 
 
-# fhirReviewData present, no careplanReview/writeResult -> ReviewCarePlan gate.
-AT_GATE = _instance({"fhirReviewData": {"completed_at": "2026-01-01T01:00:00Z"}})
+# careplanReviewCount is injected immediately before the ReviewCarePlan gate.
+AT_GATE = _instance({
+    "fhirReviewData": {"completed_at": "2026-01-01T01:00:00Z"},
+    "careplanReviewCount": 0,
+})
 # approve consumed -> WriteFHIR, run no longer awaiting the careplan gate.
 PAST_GATE = _instance(
     {

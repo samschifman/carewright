@@ -12,6 +12,11 @@ revised by re-composing with the clinician's feedback. These tests pin the
 mapper's view of where the loop is.
 """
 
+from unittest.mock import AsyncMock
+
+from fastapi.testclient import TestClient
+
+from acp_writer.services import bff
 from acp_writer.services.sonataflow_client import (
     infer_current_state,
     map_to_run_detail,
@@ -73,3 +78,68 @@ def test_second_round_gate_surfaces_previous_feedback():
         "comment": "Tighten the HbA1c target",
         "feedback": [{"itemId": "g1", "comment": "too loose"}],
     }
+
+
+def test_fhir_review_iteration_is_running_without_awaiting_review():
+    instance = {
+        "id": "run-1",
+        "status": "ACTIVE",
+        "workflowdata": {
+            "fhirGenData": {"completed_at": "2026-01-01T00:30:00Z"},
+            "fhirReviewData": {"completed_at": "2026-01-01T01:00:00Z"},
+        },
+    }
+
+    detail = map_to_run_detail(instance)
+
+    assert detail["status"] == "running"
+    assert detail["awaitingReview"] is None
+
+
+def test_careplan_review_count_marks_the_review_gate():
+    instance = {
+        "id": "run-1",
+        "status": "ACTIVE",
+        "workflowdata": {
+            "fhirReviewData": {"completed_at": "2026-01-01T01:00:00Z"},
+            "careplanReviewCount": 0,
+        },
+    }
+
+    detail = map_to_run_detail(instance)
+
+    assert detail["status"] == "awaiting_careplan_review"
+    assert detail["awaitingReview"] == "careplan"
+
+
+def test_submit_review_during_fhir_review_returns_409(monkeypatch):
+    instance = {
+        "id": "sf-1",
+        "status": "ACTIVE",
+        "workflowdata": {
+            "fhirGenData": {"completed_at": "2026-01-01T00:30:00Z"},
+            "fhirReviewData": {"completed_at": "2026-01-01T01:00:00Z"},
+        },
+    }
+
+    class FakeSonataFlow:
+        def __init__(self):
+            self.send_review = AsyncMock()
+
+        async def get_instance_by_business_key(self, _business_key):
+            return instance
+
+        async def get_instance(self, _instance_id):
+            return instance
+
+    fake = FakeSonataFlow()
+    monkeypatch.setattr(bff, "_sonataflow", fake)
+    monkeypatch.setattr(bff, "_pending_runs", {})
+
+    response = TestClient(bff.app).post(
+        "/api/v1/runs/run-1/review/careplan",
+        json={"decision": "approve", "reviewRound": 0},
+    )
+
+    assert response.status_code == 409
+    fake.send_review.assert_not_awaited()

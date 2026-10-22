@@ -8,7 +8,9 @@ instance.
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 import requests
@@ -21,6 +23,8 @@ def post_callback(
     process_instance_id: str,
     event_type: str,
     data: dict,
+    *,
+    session: Any | None = None,
 ) -> bool:
     """POST a CloudEvent to the SonataFlow callback URL.
 
@@ -36,22 +40,25 @@ def post_callback(
         "datacontenttype": "application/json",
         "data": data,
     }
-    try:
-        r = requests.post(
-            callback_url,
-            json=cloud_event,
-            headers={"Content-Type": "application/cloudevents+json"},
-            timeout=30,
-        )
-        r.raise_for_status()
-        logger.info(
-            "Callback delivered: type=%s instance=%s url=%s",
-            event_type, process_instance_id, callback_url,
-        )
-        return True
-    except Exception as e:
-        logger.error(
-            "Callback failed: type=%s instance=%s url=%s error=%s",
-            event_type, process_instance_id, callback_url, e,
-        )
-        return False
+    client = session if session is not None else requests
+    backoff = (2, 10)
+    for attempt in range(3):
+        try:
+            response = client.post(
+                callback_url,
+                json=cloud_event,
+                headers={"Content-Type": "application/cloudevents+json"},
+                timeout=(30, 60),
+            )
+            response.raise_for_status()
+            logger.info("Callback delivered: type=%s instance=%s", event_type, process_instance_id)
+            return True
+        except (requests.ConnectionError, requests.Timeout):
+            logger.warning("Callback attempt failed: type=%s instance=%s", event_type, process_instance_id)
+            if attempt == 2:
+                return False
+            time.sleep(backoff[attempt])
+        except Exception:
+            logger.error("Callback failed: type=%s instance=%s", event_type, process_instance_id)
+            return False
+    return False

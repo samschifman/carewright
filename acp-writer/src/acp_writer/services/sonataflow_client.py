@@ -92,8 +92,10 @@ def infer_current_state(data: dict, instance_status: str) -> str:
             return "GenerateBundle"
         return "ComposePlan"
 
-    if "fhirReviewData" in data:
+    if "careplanReviewCount" in data:
         return "ReviewCarePlan"
+    if "fhirReviewData" in data:
+        return "ReviewFHIR"
     if "fhirGenData" in data:
         return "ReviewFHIR"
     if "composerData" in data:

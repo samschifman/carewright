@@ -1,0 +1,4 @@
+# Install from cpg-ingester; editable local packages are installed separately.
+mlflow>=3.16.1
+pytest>=8
+langchain-openai>=0.3

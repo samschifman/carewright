@@ -33,7 +33,7 @@ network_policies:
       - path: "**"
   llm_inference:
     name: llm-inference
-    # LLM traffic routes through the MaaS gateway (in-cluster)
+    # LLM traffic routes through the configured LLM gateway (in-cluster MaaS or external EnMaaS)
     endpoints:
       - host: "**.svc.cluster.local"
         port: 443
@@ -47,6 +47,9 @@ network_policies:
         allowed_ips:
           - "172.30.0.0/16"
           - "10.128.0.0/14"
+      - host: "${LLM_HOST}"
+        port: 443
+        enforcement: enforce
     binaries:
       - path: "**"
   callback:

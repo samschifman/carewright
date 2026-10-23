@@ -34,7 +34,10 @@ load_config() {
     export IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD 2>/dev/null || echo 'latest')}"
     # Extract MLflow hostname for use in OpenShell policy templates
     export MLFLOW_HOST
-    MLFLOW_HOST=$(echo "${MLFLOW_TRACKING_URI:-}" | sed 's|https\?://||' | sed 's|/.*||')
+    MLFLOW_HOST=$(echo "${MLFLOW_TRACKING_URI:-}" | sed 's|^[^:]*://||' | sed 's|/.*||' | sed 's|:[0-9]*$||')
+    # Extract LLM gateway hostname for use in OpenShell policy templates
+    export LLM_HOST
+    LLM_HOST=$(echo "${MAAS_GATEWAY_URL:-}" | sed 's|^[^:]*://||' | sed 's|/.*||' | sed 's|:[0-9]*$||')
 }
 
 # --- Preflight validation ---

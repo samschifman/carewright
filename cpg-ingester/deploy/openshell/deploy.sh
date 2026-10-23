@@ -46,7 +46,11 @@ RENDERED_POLICY_DIR="$REPO_ROOT/deploy/.rendered/cpg-ingester-policies"
 render_templates_dir "$SCRIPT_DIR/policies" "$RENDERED_POLICY_DIR"
 POLICY_DIR="$RENDERED_POLICY_DIR"
 
-LLM_BASE_URL="${MAAS_GATEWAY_URL}/${MAAS_ROUTE_SEGMENT}"
+if [ -n "${MAAS_ROUTE_SEGMENT:-}" ]; then
+    LLM_BASE_URL="${MAAS_GATEWAY_URL}/${MAAS_ROUTE_SEGMENT}"
+else
+    LLM_BASE_URL="${MAAS_GATEWAY_URL}"
+fi
 LLM_MODEL="${CPG_INGESTER_LLM_MODEL:-$LLM_MODEL_DEFAULT}"
 
 # Docling/figure knobs (defaults match the code; override via cluster.env).

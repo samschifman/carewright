@@ -54,7 +54,11 @@ RENDERED_POLICY_DIR="$REPO_ROOT/deploy/.rendered/acp-writer-policies"
 render_templates_dir "$SCRIPT_DIR/policies" "$RENDERED_POLICY_DIR"
 POLICY_DIR="$RENDERED_POLICY_DIR"
 
-LLM_BASE_URL="${MAAS_GATEWAY_URL}/${MAAS_ROUTE_SEGMENT}"
+if [ -n "${MAAS_ROUTE_SEGMENT:-}" ]; then
+    LLM_BASE_URL="${MAAS_GATEWAY_URL}/${MAAS_ROUTE_SEGMENT}"
+else
+    LLM_BASE_URL="${MAAS_GATEWAY_URL}"
+fi
 LLM_MODEL="${ACP_WRITER_LLM_MODEL:-$LLM_MODEL_DEFAULT}"
 
 # AI Transparency on FHIR (issue #169). Prompts embed patient data — set

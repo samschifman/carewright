@@ -112,6 +112,15 @@ workflow pauses at those gates until a human acts. Poll
 `GET http://127.0.0.1:18081/api/v1/runs/<runId>` until its status is
 `completed`; this delivers the ingested guideline to CarePlanWriter.
 
+To exercise BPMN generation specifically, upload
+`cpg-ingester/data/synthetic-hypertension-cpg-v2.pdf` with BPMN-capable
+component image tags. At the artifact review gate, inspect the **Automations**
+tab and review any generated templates. Accepted templates are delivered through
+the same artifact notification; no additional operator-managed sandbox or
+SonataFlow resource is created for each template. Kogito preflight is optional
+and remains disabled unless `BPMN_PREFLIGHT_URL` is configured for the ingester
+LLM-analysis sandbox together with appropriate egress policy.
+
 Then forward the writer BFF in a separate terminal:
 
 ```sh

@@ -86,6 +86,8 @@ spec:
 
 The operator creates the ingester's SandboxRequests, SonataFlow workflow, BFF/UI Deployments and Services, and UI Route. `carePlanWriterRef` can resolve after the writer is created in step 4, but do not start an ingestion run until both pipelines are available.
 
+With BPMN-capable component images, process items in a CPG also produce automation templates. The creator, validator, and reviewer run inside the existing `llm-analysis` sandbox; they do not require a new CR or sandbox. The operator's embedded workflow forwards the previous analysis/generation results and automation review data needed by those components. Engine preflight remains optional and disabled when `BPMN_PREFLIGHT_URL` is unset.
+
 ## 4. Create the Care Plan Writer
 
 Apply the [complete CarePlanWriter manifest](config/overlays/jrao-carewright/careplanwriter.yaml):
@@ -95,6 +97,8 @@ oc apply -f carewright-operator/config/overlays/jrao-carewright/careplanwriter.y
 ```
 
 It uses the same gateway, artifact store, and LLM credentials, and also configures the embedding endpoint in `spec.llmReasoning.embedding`. The operator creates its SandboxRequests, SonataFlow workflow, BFF/UI resources, and UI Route. Change endpoint, model, or bucket settings in **both** manifests if you customized the bootstrap; do not edit the generated children.
+
+The writer BFF receives published BPMN templates through the existing ingester notification, registers them with its decision-engine service, and reloads published artifacts when the BFF starts. The operator's writer workflow passes a stable `careplan_id` through bundle generation and FHIR approval. The separate automation receiver is not deployed by this operator; approved plans can still be stored without publication to that service.
 
 ## 5. Check the generated resources
 

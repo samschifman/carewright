@@ -119,6 +119,7 @@ spec:
               callback_url: "http://cpgingester:80/wait-analyze"
               process_instance_id: "$WORKFLOW.instanceId"
               parse_result_ref: "${ .parseResult.parse_result_ref }"
+              prior_analysis_result_ref: "${ .analysisResult.analysis_result_ref }"
               review_feedback: "${ .manifestReview.feedback }"
               review_comment: "${ .manifestReview.overallComment }"
               review_iteration: "${ .manifestReviewCount }"
@@ -209,6 +210,7 @@ spec:
               callback_url: "http://cpgingester:80/wait-generate"
               process_instance_id: "$WORKFLOW.instanceId"
               analysis_result_ref: "${ .analysisResult.analysis_result_ref }"
+              prior_generate_result_ref: "${ .generateResult.generate_result_ref }"
               review_feedback: "${ .artifactsReview.feedback }"
               review_comment: "${ .artifactsReview.overallComment }"
               review_iteration: "${ .artifactReviewCount }"
@@ -259,6 +261,7 @@ spec:
               generate_result_ref: "${ .generateResult.generate_result_ref }"
               review_iteration: "${ .artifactReviewCount }"
               previous_feedback: "${ .artifactsReview }"
+              automation_counts: "${ .generateResult.automation_counts }"
         eventRef: artifactsReviewed
         eventDataFilter:
           toStateData: "${ .artifactsReview }"
@@ -296,6 +299,7 @@ spec:
               refName: assemble
               arguments:
                 generate_result_ref: "${ .generateResult.generate_result_ref }"
+                artifact_review: "${ .artifactsReview }"
             actionDataFilter:
               results: "${ . }"
               toStateData: "${ .assemblyResult }"

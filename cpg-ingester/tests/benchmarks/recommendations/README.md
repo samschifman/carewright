@@ -1,15 +1,19 @@
 # Recommendation extractor evaluator
 
-This is the **evaluator-only first layer** for GitHub #34 / RHAIENG-6456.
+The current draft integrates the frozen V13 application prompt. Read
+[V13 integration evidence and remaining validation work](V13-INTEGRATION.md)
+for its changes, strict results, provisional diagnostics, and MLflow artifacts.
+
+The **evaluator-only first layer** for GitHub #34 / RHAIENG-6456 is described below.
 It invokes the production `rec_extractor`, scores its recommendations against
 source-derived references, and uses the merged `carewright-prompt-eval` interface
-**1.0.0**. It does not change production prompts or recommendation contracts.
+**1.0.0**. That first layer changed neither prompts nor recommendation contracts.
 
 The handwritten examples in `tests/rec_eval_fixtures.py` are unit-test inputs,
 not reviewed clinical goldens or a benchmark baseline. Campaign corpus authoring
 (synthetic hypertension, diabetes, and runtime-acquired real CPGs), review,
 semantic-reviewer evaluation, live baselines, and tuning are subsequent layers.
-No live model was used to develop this layer.
+No live model was used to develop the evaluator layer.
 See [verification results and full-suite limitations](VERIFICATION.md).
 
 ## Install and test

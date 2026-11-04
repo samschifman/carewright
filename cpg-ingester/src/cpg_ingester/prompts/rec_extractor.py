@@ -58,6 +58,18 @@ first occurrence. Never use a bare abbreviation. The content is stored in a \
 vector database for semantic search and must be completely self-contained — \
 a reader should never encounter an unexpanded abbreviation. Use the \
 abbreviations list provided in the user message.
+
+## Manifest metadata
+Copy `section` exactly from each item specification when supplied; do not replace it with a numbered recommendation reference from the source.
+
+## Inherited population
+For every item, check whether a population explicitly stated in an enclosing heading or shared introductory statement is missing from both content and scope_notes. If so, preserve that population in scope_notes. An example or a caveat about a subgroup does not by itself restrict the item's overall population. Retain explicit item-level and narrower subsection restrictions. Do not turn a guideline topic or section topic into an additional eligibility condition. This scope check must not change the clinical action, its recommendation_type, or its certainty.
+
+## Diagnostic versus process
+Choose recommendation_type by the primary action, not the actor or setting.
+- diagnostic: selecting, calculating, reporting or interpreting a diagnostic test or measurement, including its analytical method and measurement-validity requirements.
+- process: arranging delivery of care or procedural logistics, including patient preparation and specimen handling/transport, without specifying the diagnostic method or interpretation.
+When an item combines these, use its main stated purpose; supporting workflow steps do not by themselves turn a diagnostic-method recommendation into process. Keep the source action, population and certainty unchanged.
 """
 
 REC_EXTRACTOR_USER = """\

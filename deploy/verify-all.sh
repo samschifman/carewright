@@ -71,7 +71,8 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
-# MaaS (one test call through the gateway).
+# MaaS (one test call through the gateway). MAAS_ROUTE_SEGMENT may be empty (EnMaaS):
+# joining with a bare '/' then yields '//v1/...', which the gateway rejects with 503.
 # SECURITY: the API key is piped over stdin — it must NEVER appear in the
 # oc exec argument list (argv is visible in the pod's process list and is
 # recorded in the K8s API server audit log of the exec request).
@@ -82,7 +83,7 @@ maas_code=$(read_secret llm-credentials LLM_API_KEY | \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $(cat)" \
             -d "{\"model\":\"$2\",\"messages\":[{\"role\":\"user\",\"content\":\"test\"}]}"
-    ' _ "${MAAS_GATEWAY_URL}/${MAAS_ROUTE_SEGMENT}" "$LLM_MODEL_DEFAULT" \
+    ' _ "${MAAS_GATEWAY_URL}${MAAS_ROUTE_SEGMENT:+/$MAAS_ROUTE_SEGMENT}" "$LLM_MODEL_DEFAULT" \
     2>/dev/null || echo "000")
 if [ "$maas_code" = "200" ]; then
     echo "  ✓ MaaS LLM call: HTTP 200"

@@ -267,6 +267,14 @@ def _validate_dmn_with_engine(dmn_xml: str) -> dict | None:
             "severity": "ERROR",
             "text": f"decision engine validation request failed: {exc}",
         }]}
+    if response.status_code == 400:
+        try:
+            rejection = response.json()
+        except ValueError:
+            rejection = None
+        if isinstance(rejection, dict) and rejection.get("error") == "unsupported-dmn-feature":
+            return {"valid": False, "error": "unsupported-dmn-feature",
+                    "messages": rejection.get("messages", [])}
     if response.status_code >= 400:
         body = getattr(response, "text", "")[:500]
         logger.error("DMN engine validation returned HTTP %s: %s", response.status_code, body)
@@ -468,9 +476,9 @@ def _automation_validation_result(payload: dict) -> dict:
 def _validation_failure_response(validation: dict) -> JSONResponse:
     messages = validation.get("messages", [])
     return JSONResponse(
-        status_code=422,
+        status_code=400 if validation.get("error") == "unsupported-dmn-feature" else 422,
         content={
-            "error": "DMN engine validation failed",
+            "error": validation.get("error", "DMN engine validation failed"),
             "messages": messages,
         },
     )

@@ -12,6 +12,8 @@ import java.util.Map;
 import jakarta.ws.rs.core.Response;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class JitDmnResourceTest {
 
@@ -98,6 +100,109 @@ class JitDmnResourceTest {
 
         assertEquals(400, resource.evaluate(request).getStatus());
         assertEquals(400, resource.evaluate(null).getStatus());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Java", "PMML"})
+    void externalFunctionKindsAreRejectedBeforeCompilation(String kind) {
+        String bkm = """
+            <businessKnowledgeModel id="unsafe_bkm" name="External function">
+              <encapsulatedLogic id="unsafe_function" kind="%s">
+                <formalParameter name="x" typeRef="string"/>
+                <context>
+                  <contextEntry><variable name="class"/>
+                    <literalExpression><text>"java.lang.System"</text></literalExpression>
+                  </contextEntry>
+                  <contextEntry><variable name="method signature"/>
+                    <literalExpression><text>"getenv(java.lang.String)"</text></literalExpression>
+                  </contextEntry>
+                </context>
+              </encapsulatedLogic>
+            </businessKnowledgeModel>
+            """.formatted(kind);
+        assertUnsupported(validModel().replace("</definitions>", bkm + "</definitions>"),
+            "functionDefinition kind=" + kind.toUpperCase());
+    }
+
+    @Test
+    void feelExternalFunctionIsRejectedOnBothEndpoints() {
+        String xml = literalModel("""
+            function(x) external { java: { class: "java.lang.System",
+            method signature: "getenv(java.lang.String)" } }
+            """);
+        assertUnsupported(xml, "external function in FEEL");
+    }
+
+    @Test
+    void nestedJavaFunctionIsRejected() {
+        String xml = literalModel("1").replace(
+            "<literalExpression><text>1</text></literalExpression>", """
+            <context><contextEntry><variable name="nested"/>
+              <functionDefinition id="nested_java" kind="Java">
+                <literalExpression><text>1</text></literalExpression>
+              </functionDefinition>
+            </contextEntry></context>
+            """);
+        assertUnsupported(xml, "functionDefinition kind=JAVA");
+    }
+
+    @Test
+    void pmmlImportIsRejectedCaseInsensitively() {
+        String xml = validModel().replace("<decision id=", """
+            <import id="pmml_import" name="Scoring" namespace="urn:test:scoring"
+                    importType="application/pMmL+xml"/>
+            <decision id=""");
+        assertUnsupported(xml, "PMML import");
+    }
+
+    @Test
+    void decodedTableCellCannotHideExternalKeywordFromTextScan() {
+        String xml = validModel().replace("<![CDATA[\"adult\"]]>", "function(x) &#101;xternal &#123; java: {} }");
+        assertUnsupported(xml, "external function in FEEL at output_entry_1");
+    }
+
+    @Test
+    void externalWordInDescriptionIsAllowed() {
+        String xml = validModel().replace("<decision id=", """
+            <description>Data obtained from external systems.</description>
+            <decision id=""");
+        assertEquals(200, resource.validate(request(xml)).getStatus());
+        assertEquals(200, resource.evaluate(evaluationRequest(xml)).getStatus());
+    }
+
+    @Test
+    void ordinaryFeelFunctionIsAllowed() {
+        assertTrue(DmnSafetyGuard.findUnsupported(literalModel("function(x) x + 1")).isEmpty());
+    }
+
+    private void assertUnsupported(String xml, String finding) {
+        for (Response response : java.util.List.of(
+                resource.validate(request(xml)), resource.evaluate(evaluationRequest(xml)))) {
+            assertEquals(400, response.getStatus());
+            Map<?, ?> body = (Map<?, ?>) response.getEntity();
+            assertEquals("unsupported-dmn-feature", body.get("error"));
+            assertTrue(((java.util.List<?>) body.get("messages")).stream()
+                .anyMatch(message -> message.toString().contains(finding)), body.toString());
+        }
+    }
+
+    private static JitDmnResource.JitRequest evaluationRequest(String xml) {
+        JitDmnResource.JitRequest request = new JitDmnResource.JitRequest();
+        request.dmn_xml_base64 = Base64.getEncoder().encodeToString(xml.getBytes(StandardCharsets.UTF_8));
+        request.inputs = Map.of("age", 21);
+        return request;
+    }
+
+    private static String literalModel(String text) {
+        return """
+            <definitions xmlns="https://www.omg.org/spec/DMN/20211108/MODEL/"
+                         id="literal" name="Literal" namespace="urn:test:literal">
+              <decision id="decision" name="Result">
+                <variable name="Result"/>
+                <literalExpression><text>%s</text></literalExpression>
+              </decision>
+            </definitions>
+            """.formatted(text);
     }
 
     private static JitDmnResource.ValidationRequest request(String xml) {

@@ -2,6 +2,8 @@
 
 > **Note:** This plan is directional. Phases, priorities, and technology choices are subject to change as the project evolves and as the Red Hat AI platform matures. Phase ordering beyond Phase 3 may be adjusted based on priorities and dependencies.
 
+> **Historical (November 5, 2026):** this phase plan is retained as a point-in-time record. Current work toward the first tagged release is planned by track in [`release-plan.md`](release-plan.md), which supersedes the phases, tracks and backlog below.
+
 ## Goal
 
 Transform Clinical Practice Guidelines into patient-specific, FHIR-compliant, actionable care plans — running on OpenShift with Red Hat AI platform capabilities. Enable parallel development across areas with cross-cutting milestones.

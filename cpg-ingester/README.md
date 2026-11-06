@@ -203,6 +203,21 @@ cpg-ingester/ui/Containerfile       # Multi-stage build
 cpg-ingester/ui/nginx.conf       # Template with ${BFF_HOST} substitution
 ```
 
+### Async service callbacks
+
+When running async services by hand, set `WORKFLOW_CALLBACK_ORIGIN` to the
+SonataFlow origin reachable **from those services**, for example
+`WORKFLOW_CALLBACK_ORIGIN=http://localhost:8097`. A comma-separated list of
+origins is supported. Each entry must be `http://host[:port]` or
+`https://host[:port]`; paths and credentials are not allowed. A callback must
+match a configured scheme, host, and effective port. Missing configuration or
+a disallowed callback returns HTTP 400 before background work starts; callback
+delivery rechecks the origin and never follows redirects.
+
+`compose.orchestrated.yml` sets `http://sonataflow-devmode:8080` on each async
+service. Operator-managed deployments also need their workflow Service origin
+in this variable; the operator wiring is delivered separately in Track B6.
+
 ## Backend-for-Frontend (BFF)
 
 A FastAPI service that mediates between the SPA and SonataFlow/MinIO. The UI talks **only** to the BFF — never directly to SonataFlow or MinIO.
@@ -325,3 +340,11 @@ podman-compose --profile ingester-pods up cpg-ingester-bff cpg-ingester-ui
 
 - `data/synthetic-hypertension-cpg.pdf` — Synthetic CPG for testing
 - `data/golden/` — Golden DMN files for validation
+
+## Operator browser sessions
+
+Mint a ten-minute, single-use link with `carewright-operator/scripts/ingester-launch-link.sh <namespace> <cpgingester-name>` (run from the repository root). The service token stays inside the BFF pod. Treat the printed URL as a bearer credential; do not paste it into logs or public chat. Following the link consumes it before session creation, sets an HttpOnly operator cookie and redirects to `/`. Responses and the UI set `Referrer-Policy: no-referrer`; nginx API access logging is off. Configure upstream ingress logging to avoid recording launch paths.
+
+Set exact `CPG_PUBLIC_ORIGIN`, `SERVICE_TOKEN_CPG_BFF` and `CPG_SIGNING_KEY`. The UI obtains a CSRF token from `/api/v1/session` and sends it on upload/review/cancel/rerun/logout. Reviews require current `reviewRound` and `artifactRevision`; completion time is server assigned. Stale rounds fail with 409; confirmed duplicates send no second event. All operator reads require a session. `CPG_DEV_AUTO_SESSION=true` enables an explicitly logged development auto-session only when SonataFlow is absent; it is off by default. Use one BFF replica/worker, with Recreate updates. See [security](../docs/security.md).
+
+Review-gate cancellation requires both SonataFlow and the artifact store: without MinIO it returns `503 approval-store-unavailable`, preserving the signed round binding.

@@ -28,7 +28,7 @@ export function useReviewGate(run: RunDetail) {
   const approveMutation = useMutation({
     mutationFn: (extras?: ReviewExtras) => {
       if (!gate) throw new Error('No review gate active');
-      const action = withReviewExtras('approve', extras);
+      const action = { ...withReviewExtras('approve', extras), reviewRound: run.reviewIteration, artifactRevision: run.artifactRevision };
       return api.submitReview(run.id, gate, action);
     },
     onSuccess: () => {
@@ -46,6 +46,8 @@ export function useReviewGate(run: RunDetail) {
       if (!gate) throw new Error('No review gate active');
       const action: ReviewAction = {
         action: 'request_changes',
+        reviewRound: run.reviewIteration,
+        artifactRevision: run.artifactRevision,
         feedback: params.feedback,
         overallComment: params.overallComment,
         parameterEdits: params.parameterEdits,

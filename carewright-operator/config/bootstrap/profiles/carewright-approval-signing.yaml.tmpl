@@ -1,0 +1,14 @@
+id: carewright-approval-signing
+display_name: CareWright approval-signing
+description: Process environment credentials; no endpoint access granted
+category: data
+credentials:
+  - name: APPROVAL_SIGNING_KEY
+    env_vars: [APPROVAL_SIGNING_KEY]
+    required: true
+endpoints: []
+binaries:
+  - /sandbox/.venv/bin/python
+  - /sandbox/.venv/bin/python3
+  - /usr/bin/python3
+  - /usr/bin/python3.*

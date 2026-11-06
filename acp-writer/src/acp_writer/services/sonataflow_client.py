@@ -381,13 +381,13 @@ class SonataFlowClient:
         )
         resp.raise_for_status()
 
-    async def send_review(self, instance_id: str, gate: str, review_data: dict) -> None:
+    async def send_review(self, instance_id: str, gate: str, review_data: dict, *, event_id: str | None = None) -> None:
         event_type = _REVIEW_EVENT_TYPE[gate]
         wait_path = _REVIEW_WAIT_PATH[gate]
         review_data.setdefault("completed_at", datetime.now(timezone.utc).isoformat())
         cloud_event = {
             "specversion": "1.0",
-            "id": str(uuid4()),
+            "id": event_id or str(uuid4()),
             "source": "bff",
             "type": event_type,
             "kogitoprocrefid": instance_id,

@@ -135,3 +135,11 @@ Routes. Those are the operator's responsibility after bootstrap. The checked-in
 pipeline samples still use managed MinIO and externally registered LLM
 `credentialsProvider` names; change them to the printed external URL and
 `credentials` blocks before applying them with this bootstrap setup.
+
+## Application sessions and credentials
+
+Bootstrap creates `carewright-service-tokens`, `carewright-approval-signing-key`, `carewright-session-signing-key` and `carewright-ingester-signing-key` if absent and validates the required keys on reuse. It imports credential-only `carewright-service-tokens` and `carewright-approval-signing` OpenShell profiles, granting no endpoint access. Both pipelines reference `spec.serviceTokens`. Writer alone references `spec.approvalSigning` and `spec.sessionSigning`; ingester uses `spec.signing`. Session and ingester signing fields are plain `secretRef` entries, without OpenShell providers. Validate these profiles against the installed gateway before deploying; local gateway validation and cluster runtime probes are not substitutes for each other.
+
+Writer `spec.smart` supplies Secret-backed credentials (`SMART_CLIENT_ID`, `SMART_CLIENT_SECRET`), issuer allowlist, exact public origin/redirect URI, scopes, and optional internal FHIR base. Medplum must register the UI Route's `/api/v1/launch` and `/api/v1/launch/callback` paths. Backend secrets never enter the UI. The BFF receives individual Secret keys; only the FHIR publication sandbox receives the signing provider. Workflow pods receive token references, and callback components receive the workflow origin. Reconcile uses a single BFF replica and Recreate updates; custom BFF commands must retain one worker and disable access logging.
+
+From the repository root, run `carewright-operator/scripts/ingester-launch-link.sh <namespace> <cpgingester-name>` to mint an operator session link. Its token remains in the pod; the printed URL is a ten-minute, single-use bearer credential. Sign out from the UI to revoke the session. Run `tests/security/access-matrix.sh` for deployment boundaries and record the manual clinician launch/review/logout path. See the root `docs/security.md` for the full access/secret inventory and accepted gaps.

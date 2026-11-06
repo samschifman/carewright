@@ -63,6 +63,9 @@ var _ = Describe("CPGIngester Controller", func() {
 		resource := &appsv1alpha1.CPGIngester{
 			ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
 			Spec: appsv1alpha1.CPGIngesterSpec{
+				Signing:       &appsv1alpha1.SecretSourceSpec{SecretRef: corev1.LocalObjectReference{Name: "ingester-signing"}},
+				PublicOrigin:  "https://ingester.test",
+				ServiceTokens: &appsv1alpha1.ProviderSourceSpec{Type: "carewright-service-tokens", SecretRef: corev1.LocalObjectReference{Name: "service-tokens"}},
 				Sandbox: appsv1alpha1.PipelineSandboxSpec{
 					Gateway:   appsv1alpha1.SandboxGatewaySpec{Endpoint: "http://openshell.test:8080", Insecure: true},
 					Workspace: "pipelines",
@@ -103,6 +106,7 @@ var _ = Describe("CPGIngester Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 		artifactProvider, _ := managedProvider(resource, "artifact", "", resource.Spec.ArtifactStore.Credentials)
+		serviceProvider, _ := managedProvider(resource, "service-tokens", "", resource.Spec.ServiceTokens)
 
 		reconciler := &CPGIngesterReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
 		_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: resourceKey})
@@ -140,6 +144,11 @@ var _ = Describe("CPGIngester Controller", func() {
 		defaultPolicyName := ""
 		for index := range requests.Items {
 			request := &requests.Items[index]
+			Expect(request.Spec.Providers).To(ContainElement(serviceProvider))
+			for _, provider := range request.Spec.Providers {
+				Expect(provider).NotTo(ContainSubstring("approval-signing"))
+			}
+			Expect(request.Spec.Env).To(HaveKeyWithValue("WORKFLOW_CALLBACK_ORIGIN", "https://workflow.gateway.test"))
 			if request.Labels[componentLabel] == "assembly" {
 				continue
 			}
@@ -179,7 +188,7 @@ var _ = Describe("CPGIngester Controller", func() {
 		Expect(assembly.Spec.NetworkAccess).To(ConsistOf(
 			appsv1alpha1.SandboxNetworkAccessSpec{Name: "sonataflow", Host: "workflow.gateway.test", Port: 443, Protocol: "rest"},
 		))
-		Expect(assembly.Spec.Providers).To(ConsistOf(artifactProvider, "extra-provider", "minio-provider"))
+		Expect(assembly.Spec.Providers).To(ConsistOf(artifactProvider, serviceProvider, "extra-provider", "minio-provider"))
 		Expect(assembly.Spec.Env).To(HaveKeyWithValue("ARTIFACT_STORE_URL", "http://minio.test:9000"))
 		Expect(assembly.Spec.Env).To(HaveKeyWithValue("MLFLOW_TRACKING_URI", "http://mlflow.test:5000"))
 		Expect(assembly.Spec.Env).To(HaveKeyWithValue("PYTHONPATH", "/app/src"))
@@ -188,7 +197,7 @@ var _ = Describe("CPGIngester Controller", func() {
 
 		analysis := &appsv1alpha1.SandboxRequest{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName + "-llm-analysis", Namespace: "default"}, analysis)).To(Succeed())
-		Expect(analysis.Spec.Providers).To(ConsistOf(artifactProvider, "llm-provider"))
+		Expect(analysis.Spec.Providers).To(ConsistOf(artifactProvider, serviceProvider, "llm-provider"))
 		Expect(analysis.Spec.Env).To(HaveKeyWithValue("LITELLM_URL", "http://litellm.test:4000"))
 		Expect(analysis.Spec.Env).To(HaveKeyWithValue("FIGURE_INTERPRETATION_MAX_FIGURES", "12"))
 		Expect(analysis.Spec.NetworkAccess).To(ContainElement(appsv1alpha1.SandboxNetworkAccessSpec{
@@ -197,6 +206,19 @@ var _ = Describe("CPGIngester Controller", func() {
 		bff := &appsv1.Deployment{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName + "-bff", Namespace: "default"}, bff)).To(Succeed())
 		Expect(bff.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "SONATAFLOW_URL", Value: "https://workflow.gateway.test"}))
+		bffEnv := map[string]corev1.EnvVar{}
+		for _, entry := range bff.Spec.Template.Spec.Containers[0].Env {
+			bffEnv[entry.Name] = entry
+		}
+		Expect(bffEnv["CPG_SIGNING_KEY"].ValueFrom).NotTo(BeNil())
+		Expect(bffEnv["CPG_SIGNING_KEY"].ValueFrom.SecretKeyRef).To(Equal(&corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "ingester-signing"}, Key: "CPG_SIGNING_KEY",
+		}))
+		Expect(bffEnv["CPG_SIGNING_KEY"].Value).To(BeEmpty())
+		Expect(bffEnv).NotTo(HaveKey("APPROVAL_SIGNING_KEY"))
+		Expect(bffEnv).NotTo(HaveKey("SESSION_SIGNING_KEY"))
+		Expect(bffEnv["CPG_PUBLIC_ORIGIN"].Value).To(Equal("https://ingester.test"))
+
 		Expect(bff.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "SONATAFLOW_WORKFLOW_NAME", Value: workflowResourceName(resource)}))
 
 		updated := &appsv1alpha1.CPGIngester{}

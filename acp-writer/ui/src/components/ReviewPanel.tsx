@@ -11,7 +11,6 @@ import {
   Stack,
   StackItem,
   TextArea,
-  TextInput,
 } from "@patternfly/react-core";
 import type { CarePlanView, ReviewAction } from "@app/api/models";
 import { GoalCard } from "./GoalCard";
@@ -29,6 +28,7 @@ const MAX_REVIEW_RETRIES = 3;
 interface ReviewPanelProps {
   carePlan: CarePlanView;
   reviewIteration?: number;
+  artifactRevision?: string;
   previousFeedback?: ReviewAction | null;
   onSubmit: (action: ReviewAction) => Promise<void>;
 }
@@ -36,11 +36,11 @@ interface ReviewPanelProps {
 export function ReviewPanel({
   carePlan,
   reviewIteration,
+  artifactRevision,
   previousFeedback,
   onSubmit,
 }: ReviewPanelProps) {
   const [mode, setMode] = useState<"idle" | "changes">("idle");
-  const [clinician, setClinician] = useState("");
   const [comment, setComment] = useState("");
   // Submission lifecycle: editing -> submitting -> submitted. On a failed submit
   // we return to editing and surface `error` so the clinician can retry
@@ -195,23 +195,13 @@ export function ReviewPanel({
             </StackItem>
           )}
 
-          <StackItem>
-            <TextInput
-              aria-label="Clinician name"
-              placeholder="Clinician name"
-              value={clinician}
-              isDisabled={submitting}
-              onChange={(_e, v) => setClinician(v)}
-            />
-          </StackItem>
-
           {mode === "changes" && (
             <StackItem>
               <TextArea
                 aria-label="Overall comment"
                 placeholder="What should change?"
                 value={comment}
-                isDisabled={submitting}
+                isDisabled={submitting || !artifactRevision || reviewIteration === undefined}
                 onChange={(_e, v) => setComment(v)}
               />
             </StackItem>
@@ -225,12 +215,12 @@ export function ReviewPanel({
                     <Button
                       variant="primary"
                       isLoading={submitting}
-                      isDisabled={submitting}
+                      isDisabled={submitting || !artifactRevision || reviewIteration === undefined}
                       onClick={() =>
                         submit({
                           decision: "approve",
-                          clinician: clinician || undefined,
-                          reviewRound: reviewIteration,
+                          artifactRevision: artifactRevision!,
+                          reviewRound: reviewIteration!,
                         })
                       }
                     >
@@ -240,7 +230,7 @@ export function ReviewPanel({
                   <FlexItem>
                     <Button
                       variant="secondary"
-                      isDisabled={submitting}
+                      isDisabled={submitting || !artifactRevision || reviewIteration === undefined}
                       onClick={() => setMode("changes")}
                     >
                       Request changes
@@ -253,13 +243,13 @@ export function ReviewPanel({
                     <Button
                       variant="primary"
                       isLoading={submitting}
-                      isDisabled={submitting || !comment.trim()}
+                      isDisabled={submitting || !artifactRevision || reviewIteration === undefined || !comment.trim()}
                       onClick={() =>
                         submit({
                           decision: "request_changes",
-                          clinician: clinician || undefined,
+                          artifactRevision: artifactRevision!,
                           comment: comment.trim(),
-                          reviewRound: reviewIteration,
+                          reviewRound: reviewIteration!,
                         })
                       }
                     >
@@ -267,7 +257,7 @@ export function ReviewPanel({
                     </Button>
                   </FlexItem>
                   <FlexItem>
-                    <Button variant="link" isDisabled={submitting} onClick={() => setMode("idle")}>
+                    <Button variant="link" isDisabled={submitting || !artifactRevision || reviewIteration === undefined} onClick={() => setMode("idle")}>
                       Cancel
                     </Button>
                   </FlexItem>

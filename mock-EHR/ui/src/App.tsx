@@ -9,6 +9,7 @@ import {
 } from '@tabler/icons-react';
 import { Suspense } from 'react';
 import { Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router';
+import { OAuthPage } from './pages/OAuthPage';
 import { APP_NAME } from './config';
 import { AllergiesTab } from './pages/AllergiesTab';
 import { CarePlansTab } from './pages/CarePlansTab';
@@ -31,6 +32,8 @@ export function App() {
   if (medplum.isLoading()) {
     return null;
   }
+
+  if (location.pathname === '/oauth') return <OAuthPage />;
 
   if (!profile) {
     return (

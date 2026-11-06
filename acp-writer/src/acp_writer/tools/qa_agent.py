@@ -12,12 +12,6 @@ import logging
 from datetime import date
 from typing import Any
 
-import mlflow
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel, Field
-
 from acp_writer.llm_json import strip_code_fence
 from acp_writer.tools.bundle_inventory import BundleInventory, build_bundle_inventory
 from acp_writer.tools.concept_resolution import resolve_concept_in_bundle
@@ -31,6 +25,11 @@ from acp_writer.tools.temporal_queries import (
     observation_count,
     rate_of_change,
 )
+from cpg_contracts.tracing import trace_safe
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -317,7 +316,7 @@ def _build_tools(
     ]
 
 
-@mlflow.trace(name="qa_agent_answer")
+@trace_safe(name="qa_agent_answer")
 def agent_answer(
     question: str,
     bundle: dict,
@@ -365,7 +364,7 @@ def agent_answer(
         return parsed
 
     except Exception as exc:
-        logger.warning("QA agent failed: %s", exc)
+        logger.warning('QA agent failed exception_type=%s (details redacted)', type(exc).__name__)
         return {"answer": None, "provenance": [], "insufficient_data": True,
                 "error": str(exc), "tool_ledger": []}
 

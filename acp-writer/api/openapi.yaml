@@ -26,6 +26,7 @@ paths:
 
   /api/v1/guidelines:
     post:
+      security: [{serviceToken: []}]
       operationId: registerGuideline
       summary: Register a clinical practice guideline
       description: |
@@ -85,6 +86,7 @@ paths:
           description: Guideline not found
 
     delete:
+      security: [{serviceToken: []}]
       operationId: removeGuideline
       summary: Remove a guideline and all associated artifacts
       description: |
@@ -101,6 +103,7 @@ paths:
 
   /api/v1/decisions/models:
     post:
+      security: [{serviceToken: []}]
       operationId: deployDecisionModel
       summary: Deploy a DMN decision model
       description: |
@@ -204,6 +207,7 @@ paths:
           description: Model not found
 
     delete:
+      security: [{serviceToken: []}]
       operationId: removeDecisionModel
       summary: Remove a deployed decision model
       tags: [decisions]
@@ -215,6 +219,7 @@ paths:
 
   /api/v1/automation/templates:
     post:
+      security: [{serviceToken: []}]
       operationId: registerAutomationTemplate
       summary: Validate and register an immutable automation template
       parameters:
@@ -282,6 +287,7 @@ paths:
 
   /api/v1/automation/validate:
     post:
+      security: [{serviceToken: []}]
       operationId: validateAutomation
       summary: Validate an automation IR or BPMN definition
       requestBody:
@@ -325,6 +331,7 @@ paths:
 
   /api/v1/decisions/evaluate/{modelId}:
     post:
+      security: [{serviceToken: []}]
       operationId: evaluateDecision
       summary: Evaluate a decision model with test inputs
       description: |
@@ -372,6 +379,7 @@ paths:
 
   /api/v1/knowledge/recommendations:
     post:
+      security: [{serviceToken: []}]
       operationId: ingestRecommendation
       summary: Ingest a single recommendation
       tags: [knowledge]
@@ -413,6 +421,7 @@ paths:
 
   /api/v1/knowledge/recommendations/batch:
     post:
+      security: [{serviceToken: []}]
       operationId: ingestRecommendationBatch
       summary: Ingest a batch of recommendations
       tags: [knowledge]
@@ -461,6 +470,7 @@ paths:
 
   /api/v1/knowledge/search:
     post:
+      security: [{serviceToken: []}]
       operationId: searchRecommendations
       summary: Semantic search over recommendations
       tags: [knowledge]
@@ -482,6 +492,7 @@ paths:
 
   /api/v1/careplans:
     post:
+      security: [{serviceToken: []}]
       operationId: generateCarePlan
       summary: Generate a care plan from patient data
       description: |
@@ -518,6 +529,7 @@ paths:
                 $ref: "#/components/schemas/Error"
 
     get:
+      security: [{serviceToken: []}]
       operationId: listCarePlans
       summary: List generated care plans
       tags: [careplans]
@@ -552,6 +564,7 @@ paths:
           type: string
 
     get:
+      security: [{serviceToken: []}]
       operationId: getCarePlan
       summary: Retrieve a generated care plan
       tags: [careplans]
@@ -568,6 +581,7 @@ paths:
 
   /api/v1/careplans/{careplanId}/status:
     put:
+      security: [{serviceToken: []}]
       operationId: updateCarePlanStatus
       summary: Update care plan status
       tags: [careplans]
@@ -582,7 +596,23 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CarePlanStatusUpdate"
+              type: object
+              required:
+              - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - active
+                  - entered-in-error
+                approval_ref:
+                  type: string
+                  description: Required for active; signed approval record.
+                fhir_bundle_ref:
+                  type: string
+                  description: Required for active; exact reviewed artifact.
+                reason:
+                  type: string
       responses:
         "200":
           description: Status updated
@@ -595,6 +625,7 @@ paths:
 
   /api/v1/careplans/{careplanId}/automations/publish:
     post:
+      security: [{serviceToken: []}]
       operationId: retryAutomationPublication
       summary: Retry a pending automation publication
       description: >
@@ -661,7 +692,49 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServiceStatus"
 
+  /api/v1/write:
+    post:
+      operationId: writeApprovedBundle
+      summary: Publish the exact artifact admitted by a signed approval record
+      security:
+      - serviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - approval_ref
+              - fhir_bundle_ref
+              - careplan_id
+              properties:
+                approval_ref:
+                  type: string
+                fhir_bundle_ref:
+                  type: string
+                careplan_id:
+                  type: string
+      responses:
+        '200':
+          description: Published
+        '400':
+          description: Invalid reference
+        '401':
+          description: Missing or invalid service token
+        '403':
+          description: Missing or invalid signed approval
+        '409':
+          description: Artifact or workflow mismatch
+        '503':
+          description: Credential or storage unavailable
+
 components:
+  securitySchemes:
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
   schemas:
 
     AutomationPublicationStatus:

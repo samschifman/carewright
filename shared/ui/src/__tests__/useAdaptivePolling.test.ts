@@ -143,4 +143,15 @@ describe("useAdaptivePolling", () => {
     await act(() => vi.advanceTimersByTimeAsync(1000));
     expect(result.current.lastChanged!.getTime()).not.toBe(firstChange);
   });
+  it("stops retrying terminal authorization errors", async () => {
+    const failure = new Error("out of scope");
+    const fetcher = vi.fn().mockRejectedValue(failure);
+    const { result } = renderHook(() => useAdaptivePolling({
+      fetcher, initialInterval: 1000, shouldRetry: () => false,
+    }));
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(result.current.error).toBe(failure);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
 });

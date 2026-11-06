@@ -216,3 +216,25 @@ type WorkloadStatus struct {
 	// +optional
 	Endpoints map[string]string `json:"endpoints,omitempty"`
 }
+
+// SecretSourceSpec selects credentials used directly by a BFF Deployment.
+// +kubebuilder:validation:XValidation:rule="has(self.secretRef.name) && size(self.secretRef.name) > 0",message="secretRef.name is required"
+type SecretSourceSpec struct {
+	SecretRef corev1.LocalObjectReference `json:"secretRef"`
+}
+
+// SmartClientSpec configures server-side SMART OAuth; credentials never reach the UI.
+type SmartClientSpec struct {
+	// +optional
+	Credentials *SecretSourceSpec `json:"credentials,omitempty"`
+	// +optional
+	IssAllowlist []string `json:"issAllowlist,omitempty"`
+	// +optional
+	RedirectURI string `json:"redirectURI,omitempty"`
+	// +optional
+	PublicOrigin string `json:"publicOrigin,omitempty"`
+	// +optional
+	Scopes string `json:"scopes,omitempty"`
+	// +optional
+	InternalFHIRBase string `json:"internalFHIRBase,omitempty"`
+}

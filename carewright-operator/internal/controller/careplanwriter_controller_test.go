@@ -27,6 +27,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -65,6 +66,11 @@ var _ = Describe("CarePlanWriter Controller", func() {
 		resource := &appsv1alpha1.CarePlanWriter{
 			ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
 			Spec: appsv1alpha1.CarePlanWriterSpec{
+				ServiceTokens:   &appsv1alpha1.ProviderSourceSpec{Type: "carewright-service-tokens", SecretRef: corev1.LocalObjectReference{Name: "service-tokens"}},
+				SessionSigning:  &appsv1alpha1.SecretSourceSpec{SecretRef: corev1.LocalObjectReference{Name: "session-key"}},
+				ApprovalSigning: &appsv1alpha1.ProviderSourceSpec{Type: "carewright-approval-signing", SecretRef: corev1.LocalObjectReference{Name: "signing-key"}},
+				Smart:           &appsv1alpha1.SmartClientSpec{Credentials: &appsv1alpha1.SecretSourceSpec{SecretRef: corev1.LocalObjectReference{Name: "smart-client"}}, IssAllowlist: []string{"https://ehr.test/fhir/R4/"}, PublicOrigin: "https://writer.test", RedirectURI: "https://writer.test/api/v1/launch/callback"},
+
 				Sandbox:       appsv1alpha1.PipelineSandboxSpec{Gateway: appsv1alpha1.SandboxGatewaySpec{Endpoint: "https://openshell.test"}, ApprovalMode: "auto"},
 				ArtifactStore: &appsv1alpha1.ArtifactStoreSpec{URL: "http://minio.test:9000", ArtifactBucket: "artifacts", PHIBucket: "phi", Credentials: &appsv1alpha1.ProviderSourceSpec{Type: "carewright-minio", SecretRef: corev1.LocalObjectReference{Name: "artifact-secret"}}},
 				Observability: &appsv1alpha1.ObservabilitySpec{MLflowTrackingURI: "http://mlflow.test:5000"},
@@ -91,6 +97,8 @@ var _ = Describe("CarePlanWriter Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 		artifactProvider, _ := managedProvider(resource, "artifact", "", resource.Spec.ArtifactStore.Credentials)
+		serviceProvider, _ := managedProvider(resource, "service-tokens", "", resource.Spec.ServiceTokens)
+		signingProvider, _ := managedProvider(resource, "approval-signing", "", resource.Spec.ApprovalSigning)
 
 		stale := &appsv1alpha1.SandboxRequest{
 			ObjectMeta: metav1.ObjectMeta{
@@ -159,8 +167,17 @@ var _ = Describe("CarePlanWriter Controller", func() {
 
 		reasoning := &appsv1alpha1.SandboxRequest{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName + "-llm-reasoning", Namespace: "default"}, reasoning)).To(Succeed())
+		for _, name := range []string{"patient-data", "llm-reasoning", "decision-engine", "fhir-generation", "fhir-server", "mcp", "decision-service"} {
+			request := &appsv1alpha1.SandboxRequest{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName + "-" + name, Namespace: "default"}, request)).To(Succeed())
+			Expect(request.Spec.Providers).To(ContainElement(serviceProvider))
+			if name != "fhir-server" {
+				Expect(request.Spec.Providers).NotTo(ContainElement(signingProvider))
+			}
+			Expect(request.Spec.Env).To(HaveKeyWithValue("WORKFLOW_CALLBACK_ORIGIN", "https://writer-workflow.gateway.test"))
+		}
 		Expect(reasoning.Spec.ApprovalMode).To(Equal("auto"))
-		Expect(reasoning.Spec.Providers).To(ConsistOf(artifactProvider, "llm-provider", "embedding-provider"))
+		Expect(reasoning.Spec.Providers).To(ConsistOf(artifactProvider, "llm-provider", "embedding-provider", serviceProvider))
 		Expect(reasoning.Spec.Env).To(HaveKeyWithValue("EMBEDDING_BASE_URL", "https://embedding.test"))
 		Expect(reasoning.Spec.Env).NotTo(HaveKey("DECISION_ENGINE_URL"))
 		Expect(reasoning.Spec.NetworkAccess).To(ConsistOf(
@@ -171,7 +188,7 @@ var _ = Describe("CarePlanWriter Controller", func() {
 
 		fhir := &appsv1alpha1.SandboxRequest{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName + "-fhir-server", Namespace: "default"}, fhir)).To(Succeed())
-		Expect(fhir.Spec.Providers).To(ConsistOf(artifactProvider, "fhir-provider"))
+		Expect(fhir.Spec.Providers).To(ConsistOf(artifactProvider, "fhir-provider", serviceProvider, signingProvider))
 		Expect(fhir.Spec.Env).To(HaveKeyWithValue("FHIR_SERVER_URL", "https://fhir.test/R4"))
 		Expect(fhir.Spec.Env).To(HaveKeyWithValue("ACP_REVIEWER_DISPLAY", "Clinician"))
 		Expect(fhir.Spec.NetworkAccess).To(ContainElement(appsv1alpha1.SandboxNetworkAccessSpec{
@@ -226,6 +243,15 @@ var _ = Describe("CarePlanWriter Controller", func() {
 		bff := &appsv1.Deployment{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: resourceName + "-bff", Namespace: "default"}, bff)).To(Succeed())
 		bffEnv := bff.Spec.Template.Spec.Containers[0].Env
+		Expect(bff.Spec.Replicas).To(Equal(ptrTo(int32(1))))
+		Expect(bff.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
+		for key, secret := range map[string]string{"SESSION_SIGNING_KEY": "session-key", "APPROVAL_SIGNING_KEY": "signing-key", "SMART_CLIENT_SECRET": "smart-client", "SERVICE_TOKEN_ACP_FHIR_SERVER": "service-tokens"} {
+			Expect(bffEnv).To(ContainElement(corev1.EnvVar{Name: key, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: secret}, Key: key}}}))
+		}
+		Expect(bffEnv).To(ContainElement(corev1.EnvVar{Name: "SMART_ISS_ALLOWLIST", Value: "https://ehr.test/fhir/R4/"}))
+		entries, _, _ := unstructured.NestedSlice(workflow.Object, "spec", "podTemplate", "container", "env")
+		Expect(entries).To(ContainElement(map[string]interface{}{"name": "SERVICE_TOKEN_ACP_FHIR_SERVER", "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": "service-tokens", "key": "SERVICE_TOKEN_ACP_FHIR_SERVER"}}}))
+
 		Expect(bffEnv).To(ContainElement(corev1.EnvVar{Name: "SONATAFLOW_URL", Value: "https://writer-workflow.gateway.test"}))
 		Expect(bffEnv).To(ContainElement(corev1.EnvVar{Name: "SONATAFLOW_WORKFLOW_NAME", Value: workflowResourceName(resource)}))
 		for _, peer := range []struct{ name, value string }{{"LLM_REASONING_URL", "https://llm-reasoning.gateway.test"}, {"DECISION_ENGINE_URL", "https://decision-engine.gateway.test"}, {"FHIR_SERVER_URL", "https://fhir-server.gateway.test"}} {

@@ -7,11 +7,9 @@ source_cpg, recommendation_type, and strength.
 import logging
 from typing import Any
 
-import mlflow
-
-from cpg_contracts import RecommendationSearchRequest
-
 from acp_writer.state import CarePlanComposerState
+from cpg_contracts import RecommendationSearchRequest
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +39,7 @@ def _build_search_query(
     return " ".join(parts) if parts else "clinical recommendation"
 
 
-@mlflow.trace(name="recommendation_retriever")
+@trace_safe(name="recommendation_retriever")
 def recommendation_retriever(state: CarePlanComposerState, *, vector_store: Any) -> dict:
     """Retrieve applicable recommendations from the vector store."""
     logger.info("── Recommendation Retriever ──")
@@ -56,7 +54,7 @@ def recommendation_retriever(state: CarePlanComposerState, *, vector_store: Any)
     cpg_ids = [cpg.get("cpg_id") for cpg in applicable_cpgs if cpg.get("cpg_id")]
 
     query = _build_search_query(condition_codes, dmn_results)
-    logger.info("Search query: %s", query[:100])
+    logger.info('Search query (details redacted)')
 
     all_recs: list[dict[str, Any]] = []
 

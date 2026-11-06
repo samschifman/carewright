@@ -5,16 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-import mlflow
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
-
 from cpg_contracts.automation.catalog import load_catalog
 from cpg_contracts.automation.compiler import compile
 from cpg_contracts.automation.ir import BusinessRuleTask, ir_version
 from cpg_contracts.automation.templates import AutomationTemplate
 from cpg_contracts.automation.validators.ladder import run_static_ladder
-from cpg_contracts.decisions import DecisionModelSummary, normalize_decision_model_summary
+from cpg_contracts.decisions import (
+    DecisionModelSummary,
+    normalize_decision_model_summary,
+)
+from cpg_contracts.service_auth import require_service_token
+from cpg_contracts.tracing import trace_safe
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 
 @dataclass(frozen=True)
@@ -46,7 +49,7 @@ class AutomationRegistry:
         self._templates: dict[tuple[str, str], AutomationTemplate] = {}
         self._latest: dict[str, str] = {}
 
-    @mlflow.trace(name="automation_registry.register")
+    @trace_safe(name="automation_registry.register")
     def register(
         self,
         template: AutomationTemplate,
@@ -206,8 +209,8 @@ class AutomationRegistry:
 router = APIRouter()
 
 
-@router.post("/api/v1/automation/templates")
-@mlflow.trace(name="automation.register_template")
+@router.post("/api/v1/automation/templates", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_DECISION_ENGINE'))])
+@trace_safe(name="automation.register_template")
 async def register_automation_template(
     request: Request,
     source_cpg: str,
@@ -243,7 +246,7 @@ async def register_automation_template(
 
 
 @router.get("/api/v1/automation/templates")
-@mlflow.trace(name="automation.list_templates")
+@trace_safe(name="automation.list_templates")
 def list_automation_templates(
     request: Request,
     recommendation_id: str | None = None,
@@ -259,7 +262,7 @@ def list_automation_templates(
 
 
 @router.get("/api/v1/automation/templates/{template_id}")
-@mlflow.trace(name="automation.get_template")
+@trace_safe(name="automation.get_template", ids=('template_id',))
 def get_automation_template(request: Request, template_id: str, version: str | None = None):
     template = request.app.state.automation_registry.get(template_id, version)
     if template is None:
@@ -267,8 +270,8 @@ def get_automation_template(request: Request, template_id: str, version: str | N
     return template.model_dump(mode="json")
 
 
-@router.post("/api/v1/automation/validate")
-@mlflow.trace(name="automation.validate_endpoint")
+@router.post("/api/v1/automation/validate", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_DECISION_ENGINE'))])
+@trace_safe(name="automation.validate_endpoint")
 async def validate_automation(request: Request):
     try:
         payload = await request.json()

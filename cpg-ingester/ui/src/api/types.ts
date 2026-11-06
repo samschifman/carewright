@@ -224,6 +224,8 @@ export interface AutomationAcknowledgement {
 }
 
 export interface ReviewAction {
+  reviewRound?: number;
+  artifactRevision?: string;
   action: 'approve' | 'request_changes';
   feedback?: ReviewFeedbackItem[];
   overallComment?: string;
@@ -242,6 +244,7 @@ export interface RunWarning {
 }
 
 export interface RunDetail {
+  artifactRevision?: string;
   id: string;
   status: RunStatus;
   cpgName: string;

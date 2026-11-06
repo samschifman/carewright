@@ -6,7 +6,7 @@ services:
     image: quay.io/carewright/postgres:16
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: medplum
       POSTGRES_PASSWORD: medplum
@@ -32,7 +32,7 @@ services:
     image: quay.io/carewright/redis:7
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     command: redis-server --requirepass medplum
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "medplum", "ping"]
@@ -44,7 +44,7 @@ services:
     image: quay.io/carewright/medplum-server:5.1.27
     restart: unless-stopped
     ports:
-      - "8103:8103"
+      - "127.0.0.1:8103:8103"
     depends_on:
       medplum-postgres:
         condition: service_healthy
@@ -101,13 +101,12 @@ services:
     environment:
       MEDPLUM_BASE_URL: "http://medplum-server:8103"
       DATA_DIR: "/data"
-      SMART_CONFIG_DIR: "/config/acp-writer-ui"
+      SMART_CONFIG_DIR: "/config"
       FHIR_ENV_DIR: "/config"
       MEDPLUM_SKIP_LOAD: "${MEDPLUM_SKIP_LOAD:-0}"
     volumes:
       - ./mock-EHR/deploy/load-medplum.sh:/load-medplum.sh:ro
       - ./mock-EHR/data:/data:ro
-      - ./acp-writer/ui/public:/config/acp-writer-ui
       - ./.medplum:/config
     entrypoint: ["/bin/bash", "/load-medplum.sh"]
 
@@ -115,7 +114,7 @@ services:
     image: quay.io/carewright/medplum-app:5.1.27
     restart: unless-stopped
     ports:
-      - "3002:3000"
+      - "127.0.0.1:3002:3000"
     depends_on:
       medplum-server:
         condition: service_healthy
@@ -124,8 +123,10 @@ services:
     build:
       context: ./mock-EHR/ui
       dockerfile: Containerfile
+      args:
+        VITE_SMART_REDIRECT_ORIGINS: ${VITE_SMART_REDIRECT_ORIGINS:-http://localhost:3001}
     ports:
-      - "3000:8080"
+      - "127.0.0.1:3000:8080"
     depends_on:
       medplum-server:
         condition: service_healthy
@@ -137,7 +138,7 @@ services:
       context: ./acp-writer/decision-service
       dockerfile: deploy/Containerfile
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/q/health/ready"]
       interval: 5s
@@ -149,14 +150,14 @@ services:
       context: ./platform/litellm
       dockerfile: deploy/Containerfile
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     env_file:
       - ./platform/litellm/deploy/.env
 
   mlflow:
     image: ghcr.io/mlflow/mlflow:v3.14.0
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
@@ -169,7 +170,7 @@ services:
       context: .
       dockerfile: acp-writer/deploy/Containerfile
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     depends_on:
       kogito:
         condition: service_healthy
@@ -182,6 +183,10 @@ services:
       medplum-server:
         condition: service_healthy
     environment:
+      - SERVICE_TOKEN_ACP_DECISION_ENGINE=${SERVICE_TOKEN_ACP_DECISION_ENGINE:-carewright-local-service-token-acp-decision-engine-dev-only}
+      - SERVICE_TOKEN_ACP_LLM_REASONING=${SERVICE_TOKEN_ACP_LLM_REASONING:-carewright-local-service-token-acp-llm-reasoning-dev-only}
+      - SERVICE_TOKEN_ACP_FHIR_SERVER=${SERVICE_TOKEN_ACP_FHIR_SERVER:-carewright-local-service-token-acp-fhir-server-dev-only}
+      - APPROVAL_SIGNING_KEY=${APPROVAL_SIGNING_KEY:-carewright-local-approval-signing-key-dev-only}
       - KOGITO_URL=http://kogito:8081
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - AUTOMATION_SERVICE_URL=http://automation:8080
@@ -217,16 +222,12 @@ services:
       context: .
       dockerfile: acp-writer/ui/Containerfile
     ports:
-      - "3001:8080"
+      - "127.0.0.1:3001:8080"
     depends_on:
       acp-writer:
         condition: service_healthy
     environment:
       - BFF_HOST=acp-writer:8082
-    volumes:
-      # Written by medplum-loader on every load; the client id changes with
-      # every fresh Medplum, so it must never be baked into the image.
-      - ./acp-writer/ui/public/smart-config.json:/opt/app-root/src/smart-config.json:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health"]
       interval: 5s
@@ -262,6 +263,7 @@ services:
       mlflow:
         condition: service_healthy
     environment:
+      - SERVICE_TOKEN_ACP_DECISION_ENGINE=${SERVICE_TOKEN_ACP_DECISION_ENGINE:-carewright-local-service-token-acp-decision-engine-dev-only}
       - ACP_WRITER_URL=http://acp-writer:8082
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       # Docling/figure knobs (defaults shown; blank/unset also = default).
@@ -278,8 +280,9 @@ services:
       context: .
       dockerfile: cpg-ingester/deploy/pods/Containerfile.ingestion
     ports:
-      - "8090:8080"
+      - "127.0.0.1:8090:8080"
     environment:
+      - SERVICE_TOKEN_CPG_INGESTION=${SERVICE_TOKEN_CPG_INGESTION:-carewright-local-service-token-cpg-ingestion-dev-only}
       - INGESTION_OCR_ENABLED=true  # conditional OCR re-parse for scanned PDFs
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
@@ -297,6 +300,7 @@ services:
       mlflow:
         condition: service_healthy
     environment:
+      - SERVICE_TOKEN_CPG_LLM_ANALYSIS=${SERVICE_TOKEN_CPG_LLM_ANALYSIS:-carewright-local-service-token-cpg-llm-analysis-dev-only}
       - LITELLM_URL=http://litellm:4000
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       # Vision figure interpretation runs in this (LLM-egress) pod.
@@ -321,6 +325,8 @@ services:
       retries: 10
     profiles:
       - ingester-pods
+    environment:
+      SERVICE_TOKEN_CPG_ASSEMBLY: ${SERVICE_TOKEN_CPG_ASSEMBLY:-carewright-local-service-token-cpg-assembly-dev-only}
 
   cpg-ingester-delivery:
     build:
@@ -333,14 +339,20 @@ services:
       retries: 10
     profiles:
       - ingester-pods
+    environment:
+      SERVICE_TOKEN_CPG_DELIVERY: ${SERVICE_TOKEN_CPG_DELIVERY:-carewright-local-service-token-cpg-delivery-dev-only}
 
   cpg-ingester-bff:
     build:
       context: .
       dockerfile: cpg-ingester/deploy/pods/Containerfile.bff
     ports:
-      - "8095:8080"
+      - "127.0.0.1:8095:8080"
     environment:
+      SERVICE_TOKEN_CPG_BFF: ${SERVICE_TOKEN_CPG_BFF:-carewright-local-service-token-cpg-bff-dev-only}
+      CPG_SIGNING_KEY: ${CPG_SIGNING_KEY:-carewright-local-cpg-signing-key-dev-only}
+      CPG_PUBLIC_ORIGIN: http://localhost:3003
+      SESSION_COOKIE_SECURE: "false"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 5s
@@ -354,7 +366,7 @@ services:
       context: .
       dockerfile: cpg-ingester/ui/Containerfile
     ports:
-      - "3003:8080"
+      - "127.0.0.1:3003:8080"
     depends_on:
       cpg-ingester-bff:
         condition: service_healthy

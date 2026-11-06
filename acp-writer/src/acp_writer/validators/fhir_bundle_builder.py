@@ -14,11 +14,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-import mlflow
-
 from acp_writer.planning_brief import ActivityType, PlanningBrief
 from acp_writer.services import ai_transparency as ait
 from acp_writer.services.ai_transparency import ACP_EXT_BASE, aiast_security
+from cpg_contracts.tracing import trace_safe
 
 # Retained for import back-compat; sourced from the IG-conformant helper.
 AIAST_SECURITY = aiast_security()
@@ -67,7 +66,7 @@ def _codeable_concept(code_dict: dict | None, text: str | None = None) -> dict:
     return {"text": "Unknown"}
 
 
-@mlflow.trace(name="fhir.build_bundle")
+@trace_safe(name="fhir.build_bundle", ids=('model_id', 'careplan_id'))
 def build_fhir_bundle(
     brief: PlanningBrief,
     patient_demographics: dict[str, Any] | None = None,

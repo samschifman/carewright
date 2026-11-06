@@ -8,11 +8,8 @@ import json
 import logging
 import time
 
-import mlflow
-from cpg_contracts import content_to_text
-
-from acp_writer.llm_json import loads_json
 from acp_writer.llm import get_llm
+from acp_writer.llm_json import loads_json
 from acp_writer.output import write_artifact
 from acp_writer.planning_brief import PlanningBrief, ReviewStatus
 from acp_writer.prompts.brief_reviewer import (
@@ -21,6 +18,8 @@ from acp_writer.prompts.brief_reviewer import (
     BRIEF_REVIEWER_USER,
 )
 from acp_writer.state import CarePlanComposerState
+from cpg_contracts import content_to_text
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ def _schema_validate(brief_dict: dict) -> list[str]:
     return errors
 
 
-@mlflow.trace(name="brief_reviewer")
+@trace_safe(name="brief_reviewer")
 def brief_reviewer(state: CarePlanComposerState) -> dict:
     """Review the Planning Brief for clinical correctness."""
     brief_dict = state.get("planning_brief", {})
@@ -64,7 +63,7 @@ def brief_reviewer(state: CarePlanComposerState) -> dict:
     schema_errors = _schema_validate(brief_dict)
     if schema_errors:
         feedback = "Schema validation errors:\n" + "\n".join(f"- {e}" for e in schema_errors)
-        logger.warning("Brief failed schema validation: %s", schema_errors)
+        logger.warning('Brief failed schema validation (details redacted)')
         return {
             "brief_review_feedback": feedback,
             "brief_review_count": review_count + 1,
@@ -116,7 +115,7 @@ def brief_reviewer(state: CarePlanComposerState) -> dict:
     try:
         review = loads_json(content_to_text(response.content))
     except (json.JSONDecodeError, Exception) as e:
-        logger.warning("Could not parse review response, treating as APPROVE: %s", e)
+        logger.warning('Could not parse review response, treating as APPROVE exception_type=%s (details redacted)', type(e).__name__)
         review = {"verdict": "APPROVE", "issues": []}
 
     verdict = review.get("verdict", "APPROVE").upper()

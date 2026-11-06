@@ -11,14 +11,12 @@ returned planning brief carries analyst-detected conflicts.
 
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
 import pytest
-
 from acp_writer.services import fhir_generation, llm_reasoning
+from fastapi.testclient import TestClient
 
 from ._conflict_fixtures import OVERLAP_JSON as _OVERLAP_JSON
 from ._conflict_fixtures import mock_llm as _mock_llm
-
 
 client = TestClient(llm_reasoning.app)
 
@@ -125,9 +123,10 @@ def test_compose_offloads_blocking_pipeline_to_thread():
     assert llm_reasoning._compose_pipeline in offloaded
 
 
-def test_compose_async_runs_conflict_analyst():
+def test_compose_async_runs_conflict_analyst(monkeypatch):
     """The async /compose-async background task must also run the analyst; the
     conflicts ride the brief in the callback payload."""
+    monkeypatch.setenv("WORKFLOW_CALLBACK_ORIGIN", "http://cb")
     captured = {}
 
     def _capture(callback_url, process_instance_id, event, result):

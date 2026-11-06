@@ -7,14 +7,14 @@ import { carePlanView } from "@app/mocks/fixtures";
 describe("ReviewPanel", () => {
   it("submits an approve decision", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    render(<ReviewPanel carePlan={carePlanView} onSubmit={onSubmit} />);
+    render(<ReviewPanel reviewIteration={0} artifactRevision={"a".repeat(64)} carePlan={carePlanView} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole("button", { name: /approve/i }));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ decision: "approve" }));
   });
 
   it("submits request_changes with a comment", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    render(<ReviewPanel carePlan={carePlanView} onSubmit={onSubmit} />);
+    render(<ReviewPanel reviewIteration={0} artifactRevision={"a".repeat(64)} carePlan={carePlanView} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole("button", { name: /request changes/i }));
     await userEvent.type(screen.getByLabelText(/overall comment/i), "Tighten the HbA1c target");
     await userEvent.click(screen.getByRole("button", { name: /submit changes/i }));
@@ -25,7 +25,7 @@ describe("ReviewPanel", () => {
 
   it("shows a persistent acknowledgment and hides the buttons after submit", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    render(<ReviewPanel carePlan={carePlanView} onSubmit={onSubmit} />);
+    render(<ReviewPanel reviewIteration={0} artifactRevision={"a".repeat(64)} carePlan={carePlanView} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole("button", { name: /approve/i }));
     expect(await screen.findByText(/review submitted/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
@@ -36,7 +36,7 @@ describe("ReviewPanel", () => {
     const onSubmit = vi
       .fn()
       .mockRejectedValue(new Error("Workflow engine temporarily unavailable — please try again."));
-    render(<ReviewPanel carePlan={carePlanView} onSubmit={onSubmit} />);
+    render(<ReviewPanel reviewIteration={0} artifactRevision={"a".repeat(64)} carePlan={carePlanView} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole("button", { name: /approve/i }));
     expect(await screen.findByText(/temporarily unavailable/i)).toBeInTheDocument();
     const approve = screen.getByRole("button", { name: /approve/i });
@@ -46,7 +46,7 @@ describe("ReviewPanel", () => {
   it("disables the button while a submit is in flight", async () => {
     let resolve: () => void = () => {};
     const onSubmit = vi.fn(() => new Promise<void>((r) => { resolve = r; }));
-    render(<ReviewPanel carePlan={carePlanView} onSubmit={onSubmit} />);
+    render(<ReviewPanel reviewIteration={0} artifactRevision={"a".repeat(64)} carePlan={carePlanView} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole("button", { name: /approve/i }));
     expect(screen.getByRole("button", { name: /approve/i })).toBeDisabled();
     resolve();
@@ -56,7 +56,7 @@ describe("ReviewPanel", () => {
 
   it("binds the submission to the review round on screen", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    render(<ReviewPanel carePlan={carePlanView} reviewIteration={2} onSubmit={onSubmit} />);
+    render(<ReviewPanel artifactRevision={"a".repeat(64)} carePlan={carePlanView} reviewIteration={2} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole("button", { name: /approve/i }));
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ decision: "approve", reviewRound: 2 }),
@@ -69,7 +69,7 @@ describe("ReviewPanel", () => {
     vi.useFakeTimers();
     try {
       const onSubmit = vi.fn().mockResolvedValue(undefined);
-      render(<ReviewPanel carePlan={carePlanView} reviewIteration={1} onSubmit={onSubmit} />);
+      render(<ReviewPanel artifactRevision={"a".repeat(64)} carePlan={carePlanView} reviewIteration={1} onSubmit={onSubmit} />);
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: /approve/i }));
       });
@@ -99,7 +99,7 @@ describe("ReviewPanel", () => {
     vi.useFakeTimers();
     try {
       const onSubmit = vi.fn().mockResolvedValue(undefined);
-      render(<ReviewPanel carePlan={carePlanView} reviewIteration={0} onSubmit={onSubmit} />);
+      render(<ReviewPanel artifactRevision={"a".repeat(64)} carePlan={carePlanView} reviewIteration={0} onSubmit={onSubmit} />);
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: /approve/i }));
       });
@@ -131,7 +131,7 @@ describe("ReviewPanel", () => {
     try {
       const onSubmit = vi.fn().mockResolvedValue(undefined);
       const { unmount } = render(
-        <ReviewPanel carePlan={carePlanView} reviewIteration={0} onSubmit={onSubmit} />,
+        <ReviewPanel artifactRevision={"a".repeat(64)} carePlan={carePlanView} reviewIteration={0} onSubmit={onSubmit} />,
       );
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: /approve/i }));
@@ -155,7 +155,7 @@ describe("ReviewPanel", () => {
         .mockRejectedValueOnce(
           new Error("Workflow engine temporarily unavailable — please try again."),
         ); // 10s auto-retry fails
-      render(<ReviewPanel carePlan={carePlanView} reviewIteration={0} onSubmit={onSubmit} />);
+      render(<ReviewPanel artifactRevision={"a".repeat(64)} carePlan={carePlanView} reviewIteration={0} onSubmit={onSubmit} />);
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: /approve/i }));
       });
@@ -177,7 +177,7 @@ describe("ReviewPanel", () => {
   it("remounts fresh when the round advances (no state bleed across gates)", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const { rerender } = render(
-      <ReviewPanel key={0} carePlan={carePlanView} reviewIteration={0} onSubmit={onSubmit} />,
+      <ReviewPanel artifactRevision={"a".repeat(64)} key={0} carePlan={carePlanView} reviewIteration={0} onSubmit={onSubmit} />,
     );
     await userEvent.click(screen.getByRole("button", { name: /approve/i }));
     expect(await screen.findByText(/review submitted/i)).toBeInTheDocument();
@@ -185,9 +185,23 @@ describe("ReviewPanel", () => {
     // Round N+1 gate arms: RunDetailPage keys the panel by reviewIteration, so a
     // new key remounts a fresh idle panel — round N's submitted state is gone.
     rerender(
-      <ReviewPanel key={1} carePlan={carePlanView} reviewIteration={1} onSubmit={onSubmit} />,
+      <ReviewPanel artifactRevision={"b".repeat(64)} key={1} carePlan={carePlanView} reviewIteration={1} onSubmit={onSubmit} />,
     );
     expect(screen.getByRole("button", { name: /approve/i })).toBeInTheDocument();
     expect(screen.queryByText(/review submitted/i)).not.toBeInTheDocument();
   });
+});
+
+it("binds the review to the displayed revision without accepting a clinician identity", async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  render(<ReviewPanel carePlan={carePlanView} reviewIteration={2} artifactRevision="synthetic-revision" onSubmit={onSubmit} />);
+  await userEvent.click(screen.getByRole("button", { name: /approve/i }));
+  expect(onSubmit).toHaveBeenCalledWith({ decision: "approve", reviewRound: 2, artifactRevision: "synthetic-revision" });
+  expect(screen.queryByLabelText(/clinician name/i)).not.toBeInTheDocument();
+});
+
+
+it("disables approval until the current artifact binding is available", () => {
+  render(<ReviewPanel carePlan={carePlanView} onSubmit={vi.fn()} />);
+  expect(screen.getByRole("button", { name: /^approve$/i })).toBeDisabled();
 });

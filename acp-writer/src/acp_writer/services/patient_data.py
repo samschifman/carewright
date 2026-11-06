@@ -7,12 +7,16 @@ Produces: ips_bundle_ref (stores original bundle for downstream use by ExecuteDM
 import logging
 from uuid import uuid4
 
-from fastapi import BackgroundTasks, FastAPI, Request
-
-from cpg_contracts import get_phi_store, post_callback, resolve_ref, store_artifact
 from acp_writer.nodes.condition_scanner import condition_scanner
+from cpg_contracts import get_phi_store, post_callback, resolve_ref, store_artifact
+from cpg_contracts.cloud_events import require_callback_url
+from cpg_contracts.service_auth import require_service_token
+from cpg_contracts.tracing import install_phi_span_processor
+from fastapi import BackgroundTasks, Depends, FastAPI, Request
 
 logger = logging.getLogger(__name__)
+
+install_phi_span_processor()
 
 app = FastAPI(title="acp-writer-patient-data", version="0.1.0")
 _phi_store = get_phi_store()
@@ -23,7 +27,7 @@ def health():
     return {"status": "UP", "service": "patient-data"}
 
 
-@app.post("/api/v1/scan")
+@app.post("/api/v1/scan", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_PATIENT_DATA', workflow_route=True))])
 async def scan(request: Request):
     """Extract patient conditions, medications, demographics from IPS Bundle."""
     data = await request.json()
@@ -39,11 +43,11 @@ async def scan(request: Request):
     return result
 
 
-@app.post("/api/v1/scan-async")
+@app.post("/api/v1/scan-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_PATIENT_DATA', workflow_route=True))])
 async def scan_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept immediately, run scan in background, POST callback."""
     data = await request.json()
-    callback_url = data.pop("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.pop("process_instance_id", "")
     background_tasks.add_task(_run_scan_background, data, callback_url, process_instance_id)
     return {"status": "accepted"}
@@ -60,7 +64,7 @@ def _run_scan_background(data: dict, callback_url: str, process_instance_id: str
         if ref:
             result["ips_bundle_ref"] = ref
     except Exception as e:
-        logger.error("Scan background task failed: %s", e)
-        result = {"error": str(e)}
+        logger.error('Scan background task failed exception_type=%s (details redacted)', type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}"}
 
     post_callback(callback_url, process_instance_id, "scan-done", result)

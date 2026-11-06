@@ -2,28 +2,28 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from datetime import date
-import os
 from typing import Any
 
-import mlflow
-
+from acp_writer.automation_policy import validate_automation_policy
+from acp_writer.tools.concept_resolver import resolve as resolve_concept
+from acp_writer.tools.terminology_lookup import LOINC_SYSTEM
+from acp_writer.tools.terminology_lookup import find as find_terminology_concept
 from cpg_contracts.automation.compiler.kogito_profile import normalize_duration
 from cpg_contracts.automation.instances import Evidence, ParameterBinding
 from cpg_contracts.automation.ir import (
     BusinessRuleTask,
     ConceptRef,
-    ParamRef,
     Parameter,
+    ParamRef,
     Process,
     ProcessIR,
     Task,
 )
 from cpg_contracts.automation.validators.results import Finding
-from acp_writer.automation_policy import validate_automation_policy
-from acp_writer.tools.concept_resolver import resolve as resolve_concept
-from acp_writer.tools.terminology_lookup import LOINC_SYSTEM, find as find_terminology_concept
+from cpg_contracts.tracing import trace_safe
 
 
 def _field(value: Any, name: str, default: Any = None) -> Any:
@@ -227,7 +227,7 @@ def _concept_binding(
     )
 
 
-@mlflow.trace(name="automation.bind_instance")
+@trace_safe(name="automation.bind_instance")
 def bind_instance(
     instance_ir: ProcessIR,
     templates: Sequence[Any],

@@ -7,9 +7,8 @@ medications, and allergies for downstream guideline matching.
 import logging
 from typing import Any
 
-import mlflow
-
 from acp_writer.state import CarePlanComposerState
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +80,7 @@ def _extract_patient_demographics(patient: dict, entry: dict | None = None) -> d
     return demographics
 
 
-@mlflow.trace(name="condition_scanner")
+@trace_safe(name="condition_scanner")
 def condition_scanner(state: CarePlanComposerState) -> dict:
     """Extract condition codes, medication codes, and demographics from IPS."""
     logger.info("── Condition Scanner ──")
@@ -101,7 +100,7 @@ def condition_scanner(state: CarePlanComposerState) -> dict:
     patient, patient_entry = patient_entries[0]
     demographics = _extract_patient_demographics(patient, patient_entry)
     patient_ref = demographics["reference"]
-    logger.info("Patient: %s (%s)", demographics.get("name", "unknown"), patient_ref)
+    logger.info('Patient (details redacted)')
 
     condition_codes = []
     for condition in _get_resources(bundle, "Condition"):

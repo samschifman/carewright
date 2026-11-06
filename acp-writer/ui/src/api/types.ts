@@ -16,7 +16,7 @@ export interface paths {
         put?: never;
         /**
          * PatientEntryPage — start a run from an IPS bundle
-         * @description Single entry point for both PatientEntryPage tabs. The IPS bundle is supplied by the client — either from a file upload, or fetched by the browser via a client-side SMART launch (the UI completes the SMART token exchange and the `Patient/$summary` read itself; the BFF never touches the SMART token or the FHIR server for patient data).
+         * @description Synthetic development only (ACP_ALLOW_DIRECT_IPS=true); disabled by default. Stores the supplied IPS and creates the same patient session as SMART.
          */
         post: operations["createRun"];
         delete?: never;
@@ -124,6 +124,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Patient scope and CSRF token; 401 when unauthenticated. */
+        get: operations["getSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/session/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Invalidate the server session. */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/launch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Allowlisted SMART issuer launch; redirects to authorization. */
+        get: operations["smartLaunch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/launch/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Single-use state, browser nonce and PKCE callback; server-side exchange and IPS fetch. */
+        get: operations["smartCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -179,6 +247,8 @@ export interface components {
         };
         /** @description The full RunDetailPage state. */
         RunDetail: {
+            artifactRevision?: string;
+            artifactRef?: string;
             runId: string;
             status: components["schemas"]["RunStatus"];
             patient?: components["schemas"]["PatientSummary"];
@@ -354,17 +424,16 @@ export interface components {
         };
         ReviewAction: {
             decision: components["schemas"]["ReviewDecision"];
-            /** @description Legacy display-name shortcut; prefer `reviewer`. */
-            clinician?: string;
-            reviewer?: components["schemas"]["ReviewerRef"];
             /** @description Overall free-text note. */
             comment?: string;
-            /** @description The review round this submission refers to (== RunDetail.reviewIteration of the plan the clinician had on screen). The engine discards a submission whose round no longer matches the armed gate, preventing approval of a superseded plan version. Optional for backward compatibility; omitted/null is treated as valid. */
-            reviewRound?: number;
+            /** @description Current RunDetail.reviewIteration; stale or missing rounds fail closed. */
+            reviewRound: number;
             /** @description Per-item feedback (CarePlanReviewPanel/FeedbackInput). Required-ish when decision=request_changes. */
             feedback?: components["schemas"]["FeedbackItem"][];
+            /** @description SHA-256 of the reviewed artifact from RunDetail. */
+            artifactRevision: string;
         };
-        /** @description Identity of the human verifier. A SMART-on-FHIR launch would populate this from the token's fhirUser claim; today it is an optional request override (falls back to the ACP_REVIEWER_* config defaults). */
+        /** @description Configuration-default human verifier recorded by the server. Browser payloads cannot override this identity. */
         ReviewerRef: {
             /** @description Human-readable verifier name recorded on the AI-Provenance. */
             display: string;
@@ -630,6 +699,84 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SystemStatus"];
                 };
+            };
+        };
+    };
+    getSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    smartLaunch: {
+        parameters: {
+            query: {
+                iss: string;
+                launch: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    smartCallback: {
+        parameters: {
+            query: {
+                code: string;
+                state: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

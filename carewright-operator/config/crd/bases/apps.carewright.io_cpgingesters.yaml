@@ -637,6 +637,10 @@ spec:
                     description: MLflowTrackingURI is translated to MLFLOW_TRACKING_URI.
                     type: string
                 type: object
+              publicOrigin:
+                description: PublicOrigin is the exact browser UI origin used for
+                  CSRF checks.
+                type: string
               sandbox:
                 description: Sandbox configures OpenShell settings shared by all ingester
                   components.
@@ -674,6 +678,64 @@ spec:
                 x-kubernetes-validations:
                 - message: gateway.name and gateway.endpoint are mutually exclusive
                   rule: '!has(self.gateway) || !(has(self.gateway.name) && has(self.gateway.endpoint))'
+              serviceTokens:
+                description: ServiceTokens supplies per-receiver X-Service-Token credentials.
+                properties:
+                  config:
+                    additionalProperties:
+                      type: string
+                    description: Config holds non-secret OpenShell provider settings.
+                    type: object
+                  secretRef:
+                    description: SecretRef names the Secret containing provider credentials.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  type:
+                    description: Type is an OpenShell provider profile ID.
+                    minLength: 1
+                    type: string
+                required:
+                - secretRef
+                - type
+                type: object
+                x-kubernetes-validations:
+                - message: secretRef.name is required
+                  rule: self.secretRef.name.size() > 0
+              signing:
+                description: Signing supplies the ingester browser/review HMAC key.
+                properties:
+                  secretRef:
+                    description: |-
+                      LocalObjectReference contains enough information to let you locate the
+                      referenced object inside the same namespace.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - secretRef
+                type: object
+                x-kubernetes-validations:
+                - message: secretRef.name is required
+                  rule: has(self.secretRef.name) && size(self.secretRef.name) > 0
               ui:
                 description: UI serves the CPG Ingester web application.
                 properties:

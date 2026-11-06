@@ -12,7 +12,7 @@
 # backend↔SonataFlow/cpg-ingester plumbing and are out of scope here.
 #
 # Screen → endpoint map:
-#   PatientEntryPage   POST /runs                            → start a run (upload or client-side SMART), get runId
+#   PatientEntryPage   POST /runs                            → start a development run (direct IPS opt-in), get runId
 #   RunListPage        GET  /runs                            → dashboard rows
 #   RunDetailPage      GET  /runs/{id} (polled)              → stepper + care-plan review gate
 #   CarePlanReview     POST /runs/{id}/review/careplan       → approve / request_changes (in-run gate)
@@ -34,6 +34,8 @@ servers:
   - url: /api/v1
     description: Served behind nginx, which proxies /api/ to the BFF (${BFF_HOST}).
 
+security: [{cookieAuth: []}]
+
 paths:
   /runs:
     get:
@@ -51,14 +53,12 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/RunSummary' }
     post:
+      security: []  # Development-only direct IPS entry.
       operationId: createRun
       summary: PatientEntryPage — start a run from an IPS bundle
       description: >
-        Single entry point for both PatientEntryPage tabs. The IPS bundle is
-        supplied by the client — either from a file upload, or fetched by the
-        browser via a client-side SMART launch (the UI completes the SMART token
-        exchange and the `Patient/$summary` read itself; the BFF never touches the
-        SMART token or the FHIR server for patient data).
+        Synthetic development only (ACP_ALLOW_DIRECT_IPS=true); disabled by default.
+        Stores the supplied IPS and creates the same patient session as SMART.
       requestBody:
         required: true
         content:
@@ -98,6 +98,7 @@ paths:
               schema: { $ref: '#/components/schemas/RunDetail' }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
+      security: [{cookieAuth: [], csrf: []}]
       operationId: cancelRun
       summary: Cancel a run (RunDetailPage / RunListPage)
       responses:
@@ -106,6 +107,7 @@ paths:
 
   /runs/{runId}/review/careplan:
     post:
+      security: [{cookieAuth: [], csrf: []}]
       operationId: submitReview
       summary: CarePlanReview — approve / request_changes at the care-plan gate
       description: >
@@ -174,7 +176,73 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SystemStatus' }
 
+  /session:
+    get:
+      operationId: getSession
+      description: Patient scope and CSRF token; 401 when unauthenticated.
+      responses:
+        '200':
+          description: Success
+      security: []
+  /session/logout:
+    post:
+      operationId: logout
+      description: Invalidate the server session.
+      responses:
+        '204':
+          description: Success
+      security:
+      - cookieAuth: []
+        csrf: []
+  /launch:
+    get:
+      operationId: smartLaunch
+      description: Allowlisted SMART issuer launch; redirects to authorization.
+      responses:
+        '302':
+          description: Success
+      security: []
+      parameters:
+      - name: iss
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: launch
+        in: query
+        required: true
+        schema:
+          type: string
+  /launch/callback:
+    get:
+      operationId: smartCallback
+      description: Single-use state, browser nonce and PKCE callback; server-side exchange and IPS fetch.
+      responses:
+        '302':
+          description: Success
+      security: []
+      parameters:
+      - name: code
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: true
+        schema:
+          type: string
+
 components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: acp_session
+    csrf:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
   responses:
     BadRequest:
       description: Invalid request
@@ -273,6 +341,10 @@ components:
       description: The full RunDetailPage state.
       required: [runId, status, steps]
       properties:
+        artifactRevision:
+          type: string
+        artifactRef:
+          type: string
         runId: { type: string }
         status: { $ref: '#/components/schemas/RunStatus' }
         patient: { $ref: '#/components/schemas/PatientSummary' }
@@ -524,32 +596,35 @@ components:
     # ---- Review submission ----
     ReviewAction:
       type: object
-      required: [decision]
+      required:
+      - decision
+      - reviewRound
+      - artifactRevision
       properties:
-        decision: { $ref: '#/components/schemas/ReviewDecision' }
-        clinician: { type: string, description: Legacy display-name shortcut; prefer `reviewer`. }
-        reviewer:
-          $ref: '#/components/schemas/ReviewerRef'
-        comment: { type: string, description: Overall free-text note. }
+        decision:
+          $ref: '#/components/schemas/ReviewDecision'
+        comment:
+          type: string
+          description: Overall free-text note.
         reviewRound:
           type: integer
-          description: >
-            The review round this submission refers to (== RunDetail.reviewIteration
-            of the plan the clinician had on screen). The engine discards a
-            submission whose round no longer matches the armed gate, preventing
-            approval of a superseded plan version. Optional for backward
-            compatibility; omitted/null is treated as valid.
+          minimum: 0
+          description: Current RunDetail.reviewIteration; stale or missing rounds fail closed.
         feedback:
           type: array
           description: Per-item feedback (CarePlanReviewPanel/FeedbackInput). Required-ish when decision=request_changes.
-          items: { $ref: '#/components/schemas/FeedbackItem' }
+          items:
+            $ref: '#/components/schemas/FeedbackItem'
+        artifactRevision:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: SHA-256 of the reviewed artifact from RunDetail.
 
     ReviewerRef:
       type: object
       description: >
-        Identity of the human verifier. A SMART-on-FHIR launch would populate this
-        from the token's fhirUser claim; today it is an optional request override
-        (falls back to the ACP_REVIEWER_* config defaults).
+        Configuration-default human verifier recorded by the server.
+        Browser payloads cannot override this identity.
       required: [display]
       properties:
         display: { type: string, description: Human-readable verifier name recorded on the AI-Provenance. }

@@ -118,6 +118,19 @@ type DecisionServiceComponentSpec struct {
 
 // CarePlanWriterSpec defines the desired state of CarePlanWriter.
 type CarePlanWriterSpec struct {
+	// ServiceTokens supplies per-receiver X-Service-Token credentials.
+	// +optional
+	ServiceTokens *ProviderSourceSpec `json:"serviceTokens,omitempty"`
+	// ApprovalSigning supplies the writer approval HMAC key.
+	// +optional
+	ApprovalSigning *ProviderSourceSpec `json:"approvalSigning,omitempty"`
+	// SessionSigning supplies the browser-session and run-metadata HMAC key.
+	// +optional
+	SessionSigning *SecretSourceSpec `json:"sessionSigning,omitempty"`
+	// Smart configures server-side SMART launch.
+	// +optional
+	Smart *SmartClientSpec `json:"smart,omitempty"`
+
 	// Sandbox configures OpenShell settings shared by all writer components.
 	// +optional
 	Sandbox PipelineSandboxSpec `json:"sandbox,omitempty"`

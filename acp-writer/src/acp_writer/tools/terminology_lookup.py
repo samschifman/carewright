@@ -12,8 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-import mlflow
 import requests
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ def _safe_get(url: str, params: dict | None = None, timeout: int = 10) -> reques
         r.raise_for_status()
         return r
     except requests.RequestException as e:
-        logger.warning("Terminology API error: %s — %s", url, e)
+        logger.warning('Terminology API error exception_type=%s (details redacted)', type(e).__name__)
         return None
 
 
@@ -331,7 +331,7 @@ _VERIFY_DISPATCH = {
 }
 
 
-@mlflow.trace(name="terminology_find")
+@trace_safe(name="terminology_find")
 def find(system: str, text: str) -> LookupResult:
     """Find the best code for a clinical concept in a terminology system."""
     fn = _FIND_DISPATCH.get(system)
@@ -340,7 +340,7 @@ def find(system: str, text: str) -> LookupResult:
     return fn(text)
 
 
-@mlflow.trace(name="terminology_verify")
+@trace_safe(name="terminology_verify")
 def verify(system: str, code: str) -> LookupResult:
     """Verify a code exists in a terminology system and return its display."""
     fn = _VERIFY_DISPATCH.get(system)
@@ -349,7 +349,7 @@ def verify(system: str, code: str) -> LookupResult:
     return fn(code)
 
 
-@mlflow.trace(name="terminology_find_candidates")
+@trace_safe(name="terminology_find_candidates")
 def find_candidates(system: str, text: str, n: int = 5) -> list[LookupResult]:
     """Find top-N candidate codes for a clinical term in a terminology system.
 
@@ -368,7 +368,7 @@ def find_candidates(system: str, text: str, n: int = 5) -> list[LookupResult]:
     try:
         return fn(text, n)
     except Exception as exc:
-        logger.warning("Terminology find_candidates failed for %s: %s", system, exc)
+        logger.warning('Terminology candidate lookup failed exception_type=%s (details redacted)', type(exc).__name__)
         return []
 
 

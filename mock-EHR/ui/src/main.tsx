@@ -31,7 +31,7 @@ async function init(): Promise<void> {
     cacheTime: 60000,
     autoBatchTime: 100,
     onUnauthenticated: () => {
-      if (window.location.pathname !== '/signin') {
+      if (!['/signin', '/oauth'].includes(window.location.pathname)) {
         window.location.href = '/signin';
       }
     },

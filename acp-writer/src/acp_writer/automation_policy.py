@@ -6,12 +6,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-import mlflow
 import yaml
-
 from cpg_contracts.automation.compiler.kogito_profile import normalize_duration
 from cpg_contracts.automation.ir import Process, ProcessIR
-
+from cpg_contracts.tracing import trace_safe
 
 _DEFAULT_POLICY = Path(__file__).with_name("automation_policy.yaml")
 
@@ -98,7 +96,7 @@ def _validate_value(name: str, entry: Mapping[str, Any], parameter: Any) -> None
         raise ValueError(f"automation policy value for {name!r} is outside its enum")
 
 
-@mlflow.trace(name="automation.validate_policy")
+@trace_safe(name="automation.validate_policy")
 def validate_automation_policy(
     templates: Sequence[Any],
     policy: Mapping[str, Any] | None,
@@ -125,7 +123,7 @@ def validate_automation_policy(
     return normalized
 
 
-@mlflow.trace(name="automation.load_policy")
+@trace_safe(name="automation.load_policy")
 def load_automation_policy(
     templates: Sequence[Any],
     *,

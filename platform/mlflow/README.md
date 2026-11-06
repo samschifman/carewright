@@ -22,7 +22,11 @@ Set `MLFLOW_TRACKING_URI` to point your services at the MLflow server:
 ## What's traced
 
 ### acp-writer (FastAPI service)
-- All API endpoints via FastAPI auto-instrumentation
+- Writer functions use `cpg_contracts.tracing.trace_safe` for timing, structural input/output summaries and explicitly selected run/model/job IDs. FastAPI and LangChain autologging are prohibited on patient-data paths.
+- Sync and async exceptions record their type and a fixed redacted message; raw exception messages and stack traces are excluded.
+- Every writer FastAPI app installs the PHI span processor to remove known patient/credential fields and cap string lengths as a second layer. This backstop does not make arbitrary raw instrumentation safe.
+- Shared automation compilation and validation use the same shape-only decorator, because instances can carry patient data.
+- Architecture and real-pipeline sentinel tests enforce the convention, including DEBUG logs. Log counts and approved IDs; never log patient names, DMN values, response bodies, or raw exceptions.
 - `extract_patient_data` — FHIR Bundle parsing
 - `invoke_decisions` / `invoke_decisions_dynamic` — DMN decision evaluation
 - `evaluate_jit_dmn` — individual JIT decision engine calls

@@ -192,3 +192,8 @@ export const systemHealth: SystemHealth = {
     ],
   },
 };
+
+export const browserSession = {
+  kind: "patient" as const, subject: "example", runIds: ["run-review", "run-123"],
+  csrfToken: "mock-csrf-token", expiresAt: 2000000000, directIpsEnabled: false,
+};

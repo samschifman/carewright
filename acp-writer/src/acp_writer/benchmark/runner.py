@@ -5,16 +5,15 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import mlflow
-
 from acp_writer.benchmark.models import (
-    CategoryResult,
-    CaseScore,
-    SuiteResult,
     BenchmarkCase,
+    CaseScore,
+    CategoryResult,
+    SuiteResult,
 )
 from acp_writer.benchmark.protocol import QABackend
 from acp_writer.benchmark.scoring import score_case
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +50,7 @@ def available_suites() -> list[str]:
     return sorted(p.stem for p in suites_dir.glob("*.json"))
 
 
-@mlflow.trace(name="benchmark_run_case")
+@trace_safe(name="benchmark_run_case")
 def run_case(
     test_case: BenchmarkCase,
     backend: QABackend,
@@ -79,7 +78,7 @@ def run_case(
     return score_case(test_case, answer, numeric_tolerance)
 
 
-@mlflow.trace(name="benchmark_run_suite")
+@trace_safe(name="benchmark_run_suite")
 def run_suite(
     suite_name: str,
     backend: QABackend,

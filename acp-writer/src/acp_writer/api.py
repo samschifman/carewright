@@ -9,30 +9,8 @@ from datetime import datetime, timezone
 
 import mlflow
 import requests
-from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
-
-from cpg_contracts import (
-    CPGMetadata,
-    DecisionModelSummary,
-    DecisionVariable,
-    decision_model_id,
-    Recommendation,
-    RecommendationBundle,
-    RecommendationSearchRequest,
-)
-from cpg_contracts.decisions import normalize_decision_model_summary
-from cpg_contracts.automation.catalog import load_catalog
-from cpg_contracts.automation.ir import ProcessIR
-from cpg_contracts.automation.instances import Evidence, ParameterBinding
-from cpg_contracts.automation.validators.grounding import InstanceContext
-from cpg_contracts.automation.validators.ladder import run_static_ladder
-from cpg_contracts.automation.compiler import (
-    ParseError,
-    compile as compile_bpmn,
-    parse as parse_bpmn,
-)
-
+from acp_writer.services.automation_registry import AutomationRegistry
+from acp_writer.services.automation_registry import router as automation_registry_router
 from acp_writer.store.embedding import (
     EmbeddingProvider,
     make_embedding_provider,
@@ -40,12 +18,30 @@ from acp_writer.store.embedding import (
 from acp_writer.store.guidelines_store import GuidelinesStore
 from acp_writer.store.vector_store import InMemoryVectorStore, VectorStore
 from acp_writer.tools.dmn_evaluation import DmnEngineError
-from acp_writer.services.automation_registry import AutomationRegistry, router as automation_registry_router
-
-try:
-    mlflow.fastapi.autolog()
-except AttributeError:
-    pass
+from cpg_contracts import (
+    CPGMetadata,
+    DecisionModelSummary,
+    DecisionVariable,
+    Recommendation,
+    RecommendationBundle,
+    RecommendationSearchRequest,
+    decision_model_id,
+)
+from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.compiler import (
+    ParseError,
+)
+from cpg_contracts.automation.compiler import compile as compile_bpmn
+from cpg_contracts.automation.compiler import parse as parse_bpmn
+from cpg_contracts.automation.instances import Evidence, ParameterBinding
+from cpg_contracts.automation.ir import ProcessIR
+from cpg_contracts.automation.validators.grounding import InstanceContext
+from cpg_contracts.automation.validators.ladder import run_static_ladder
+from cpg_contracts.decisions import normalize_decision_model_summary
+from cpg_contracts.service_auth import require_service_token
+from cpg_contracts.tracing import install_phi_span_processor, trace_safe
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +72,8 @@ def init_stores(embedding_provider: EmbeddingProvider | None = None) -> None:
     _vector_store = InMemoryVectorStore(_embedding_provider)
     _guidelines_store = GuidelinesStore(_vector_store)
 
+
+install_phi_span_processor()
 
 app = FastAPI(
     title="ACP Writer API",
@@ -228,7 +226,7 @@ def _parse_dmn_metadata(dmn_xml: str) -> DecisionModelSummary:
     )
 
 
-@mlflow.trace(span_type="TOOL", name="evaluate_jit_dmn")
+@trace_safe(span_type="TOOL", name="evaluate_jit_dmn")
 def _evaluate_jit(dmn_xml: str, inputs: dict) -> dict:
     """Evaluate DMN via the JIT endpoint on the decision-service."""
     dmn_b64 = base64.b64encode(dmn_xml.encode()).decode()
@@ -243,7 +241,7 @@ def _evaluate_jit(dmn_xml: str, inputs: dict) -> dict:
     return r.json()
 
 
-@mlflow.trace(span_type="TOOL", name="validate_dmn_with_engine")
+@trace_safe(span_type="TOOL", name="validate_dmn_with_engine")
 def _validate_dmn_with_engine(dmn_xml: str) -> dict | None:
     """Validate DMN with KIE, returning ``None`` when the engine is unavailable.
 
@@ -259,14 +257,22 @@ def _validate_dmn_with_engine(dmn_xml: str) -> dict | None:
             timeout=30,
         )
     except (requests.ConnectionError, requests.Timeout) as exc:
-        logger.warning("DMN engine validation unavailable; accepting model provisionally: %s", exc)
+        logger.warning('DMN engine validation unavailable; accepting model provisionally exception_type=%s (details redacted)', type(exc).__name__)
         return None
     except requests.RequestException as exc:
-        logger.error("DMN engine validation request failed: %s", exc)
+        logger.error('DMN engine validation request failed exception_type=%s (details redacted)', type(exc).__name__)
         return {"valid": False, "messages": [{
             "severity": "ERROR",
             "text": f"decision engine validation request failed: {exc}",
         }]}
+    if response.status_code == 400:
+        try:
+            rejection = response.json()
+        except ValueError:
+            rejection = None
+        if isinstance(rejection, dict) and rejection.get("error") == "unsupported-dmn-feature":
+            return {"valid": False, "error": "unsupported-dmn-feature",
+                    "messages": rejection.get("messages", [])}
     if response.status_code >= 400:
         body = getattr(response, "text", "")[:500]
         logger.error("DMN engine validation returned HTTP %s: %s", response.status_code, body)
@@ -288,7 +294,7 @@ def _validate_dmn_with_engine(dmn_xml: str) -> dict | None:
     return result
 
 
-@mlflow.trace(span_type="TOOL", name="validate_bpmn_with_engine")
+@trace_safe(span_type="TOOL", name="validate_bpmn_with_engine")
 def validate_bpmn(bpmn_xml: str) -> dict | None:
     """Validate BPMN with Kogito, returning None when the engine is unavailable."""
     bpmn_b64 = base64.b64encode(bpmn_xml.encode()).decode()
@@ -299,10 +305,10 @@ def validate_bpmn(bpmn_xml: str) -> dict | None:
             timeout=30,
         )
     except (requests.ConnectionError, requests.Timeout) as exc:
-        logger.warning("BPMN engine validation unavailable: %s", exc)
+        logger.warning('BPMN engine validation unavailable exception_type=%s (details redacted)', type(exc).__name__)
         return None
     except requests.RequestException as exc:
-        logger.error("BPMN engine validation request failed: %s", exc)
+        logger.error('BPMN engine validation request failed exception_type=%s (details redacted)', type(exc).__name__)
         return {"valid": False, "messages": [{
             "severity": "ERROR",
             "text": f"decision engine validation request failed: {exc}",
@@ -342,7 +348,7 @@ def _automation_dmn_summaries() -> dict[str, DecisionModelSummary]:
     }
 
 
-@mlflow.trace(name="automation.validate")
+@trace_safe(name="automation.validate")
 def _automation_validation_result(payload: dict) -> dict:
     """Run local ladder checks and Kogito for an IR or BPMN request."""
     if ("ir" in payload) == ("bpmn_xml" in payload):
@@ -468,9 +474,9 @@ def _automation_validation_result(payload: dict) -> dict:
 def _validation_failure_response(validation: dict) -> JSONResponse:
     messages = validation.get("messages", [])
     return JSONResponse(
-        status_code=422,
+        status_code=400 if validation.get("error") == "unsupported-dmn-feature" else 422,
         content={
-            "error": "DMN engine validation failed",
+            "error": validation.get("error", "DMN engine validation failed"),
             "messages": messages,
         },
     )
@@ -512,7 +518,7 @@ def status():
 # --- Care Plans ---
 
 
-@app.post("/api/v1/careplans", status_code=201)
+@app.post("/api/v1/careplans", status_code=201, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER'))])
 async def generate_careplan(request: Request):
     bundle = await request.json()
 
@@ -580,13 +586,13 @@ async def generate_careplan(request: Request):
     )
 
 
-@app.get("/api/v1/careplans")
+@app.get("/api/v1/careplans", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER'))])
 def list_careplans(patient: str | None = None, status: str | None = None):
     from acp_writer.nodes.fhir_server_writer import list_care_plans
     return list_care_plans(patient=patient, status=status)
 
 
-@app.get("/api/v1/careplans/{careplan_id}")
+@app.get("/api/v1/careplans/{careplan_id}", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER'))])
 def get_careplan(careplan_id: str):
     from acp_writer.nodes.fhir_server_writer import get_care_plan
     cp = get_care_plan(careplan_id)
@@ -595,18 +601,16 @@ def get_careplan(careplan_id: str):
     return cp
 
 
-@app.put("/api/v1/careplans/{careplan_id}/status")
+@app.put("/api/v1/careplans/{careplan_id}/status", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER'))])
 async def update_careplan_status(careplan_id: str, request: Request):
     from acp_writer.nodes.fhir_server_writer import approve_care_plan, reject_care_plan
-    from acp_writer.services.reviewer import reviewer_from_payload
     data = await request.json()
     new_status = data.get("status")
     if new_status == "active":
-        reviewer = reviewer_from_payload(data.get("reviewer"), clinician=data.get("clinician"))
-        result = approve_care_plan(careplan_id, reviewer=reviewer)
-        if not result:
-            raise HTTPException(status_code=404, detail=f"Care plan '{careplan_id}' not found")
-        return result
+        from acp_writer.nodes.fhir_server_writer import fhir_server_writer
+        from acp_writer.services.approval_binding import write_approved_bundle
+        from cpg_contracts import get_phi_store
+        return write_approved_bundle({**data, 'careplan_id': careplan_id}, get_phi_store(), fhir_server_writer)
     elif new_status == "entered-in-error":
         reason = data.get("reason", "No reason provided")
         result = reject_care_plan(careplan_id, reason=reason)
@@ -617,7 +621,7 @@ async def update_careplan_status(careplan_id: str, request: Request):
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}. Use 'active' or 'entered-in-error'.")
 
 
-@app.post("/api/v1/careplans/{careplan_id}/automations/publish")
+@app.post("/api/v1/careplans/{careplan_id}/automations/publish", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER'))])
 def retry_automation_publication(careplan_id: str):
     from acp_writer.services.automation_publisher import (
         get_publisher,
@@ -643,7 +647,7 @@ app.include_router(automation_registry_router)
 # --- Decision Models ---
 
 
-@app.post("/api/v1/decisions/models", status_code=201)
+@app.post("/api/v1/decisions/models", status_code=201, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_DECISION_ENGINE'))])
 async def deploy_decision_model(
     request: Request,
     source_cpg: str | None = None,
@@ -706,7 +710,7 @@ def get_decision_model(model_id: str):
     return result
 
 
-@app.delete("/api/v1/decisions/models/{model_id}", status_code=204)
+@app.delete("/api/v1/decisions/models/{model_id}", status_code=204, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_DECISION_ENGINE'))])
 def remove_decision_model(model_id: str):
     if model_id not in _dynamic_models:
         raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
@@ -714,7 +718,7 @@ def remove_decision_model(model_id: str):
     logger.info("Removed decision model: %s", model_id)
 
 
-@app.post("/api/v1/decisions/evaluate/{model_id}")
+@app.post("/api/v1/decisions/evaluate/{model_id}", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_DECISION_ENGINE'))])
 async def evaluate_decision(model_id: str, request: Request):
     model = _dynamic_models.get(model_id)
     if not model:
@@ -725,7 +729,7 @@ async def evaluate_decision(model_id: str, request: Request):
         result = _evaluate_jit(model["dmn_xml"], inputs)
         return result
     except DmnEngineError as exc:
-        logger.warning("DMN engine rejected evaluation for %s: %s", model_id, exc.error)
+        logger.warning('DMN engine rejected model_id=%s status=%s', model_id, exc.status_code)
         return JSONResponse(status_code=exc.status_code, content={
             "error": exc.error, "messages": exc.messages,
         })
@@ -736,7 +740,7 @@ async def evaluate_decision(model_id: str, request: Request):
 # --- Guidelines ---
 
 
-@app.post("/api/v1/guidelines", status_code=201)
+@app.post("/api/v1/guidelines", status_code=201, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def register_guideline(request: Request):
     data = await request.json()
     try:
@@ -760,7 +764,7 @@ def get_guideline(cpg_id: str):
     return g.model_dump(mode="json")
 
 
-@app.delete("/api/v1/guidelines/{cpg_id}", status_code=204)
+@app.delete("/api/v1/guidelines/{cpg_id}", status_code=204, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 def delete_guideline(cpg_id: str):
     if not _guidelines_store.delete(cpg_id):
         raise HTTPException(status_code=404, detail=f"Guideline '{cpg_id}' not found")
@@ -769,7 +773,7 @@ def delete_guideline(cpg_id: str):
 # --- Knowledge / Recommendations ---
 
 
-@app.post("/api/v1/knowledge/recommendations", status_code=201)
+@app.post("/api/v1/knowledge/recommendations", status_code=201, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def ingest_recommendation(request: Request):
     data = await request.json()
     try:
@@ -780,7 +784,7 @@ async def ingest_recommendation(request: Request):
     return {"id": rec.id, "status": "ingested"}
 
 
-@app.post("/api/v1/knowledge/recommendations/batch", status_code=201)
+@app.post("/api/v1/knowledge/recommendations/batch", status_code=201, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def ingest_recommendation_batch(request: Request):
     data = await request.json()
     try:
@@ -809,7 +813,7 @@ def get_recommendation(recommendation_id: str):
     return rec.model_dump(mode="json")
 
 
-@app.post("/api/v1/knowledge/search")
+@app.post("/api/v1/knowledge/search", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def search_knowledge(request: Request):
     data = await request.json()
     try:
@@ -818,3 +822,11 @@ async def search_knowledge(request: Request):
         raise HTTPException(status_code=400, detail=f"Invalid search request: {e}")
     result = _vector_store.search(search_req)
     return result.model_dump(mode="json")
+
+
+@app.post('/api/v1/write', dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER', workflow_route=True))])
+async def write_approved_careplan(request: Request):
+    from acp_writer.nodes.fhir_server_writer import fhir_server_writer
+    from acp_writer.services.approval_binding import write_approved_bundle
+    from cpg_contracts import get_phi_store
+    return write_approved_bundle(await request.json(), get_phi_store(), fhir_server_writer)

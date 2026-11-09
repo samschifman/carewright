@@ -18,9 +18,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-import mlflow
 import requests
-
 from acp_writer.output import write_artifact
 from acp_writer.services.ai_transparency import (
     ACP_CS_BASE,
@@ -29,6 +27,7 @@ from acp_writer.services.ai_transparency import (
     apply_approval_transition,
 )
 from acp_writer.state import CarePlanComposerState
+from cpg_contracts.tracing import trace_safe
 
 if TYPE_CHECKING:
     from acp_writer.services.reviewer import ReviewerContext
@@ -76,7 +75,7 @@ def _get_auth_headers() -> dict[str, str]:
         logger.info("Acquired FHIR server OAuth token (expires in %ds)", data.get("expires_in", 3600))
         return {"Authorization": f"Bearer {_token_cache['token']}"}
     except Exception as e:
-        logger.warning("Failed to acquire FHIR OAuth token: %s", e)
+        logger.warning('Failed to acquire FHIR OAuth token exception_type=%s (details redacted)', type(e).__name__)
         return {}
 
 
@@ -119,14 +118,14 @@ def _update_on_server(server_ref: str, resource: dict) -> bool:
             logger.info("Updated %s on FHIR server", server_ref)
             return True
         else:
-            logger.warning("FHIR server PUT %s returned %d: %s", server_ref, r.status_code, r.text[:200])
+            logger.warning('FHIR server PUT failed status=%s', r.status_code)
             return False
     except requests.RequestException as e:
-        logger.warning("FHIR server unavailable for PUT %s: %s", server_ref, e)
+        logger.warning('FHIR server unavailable for PUT exception_type=%s (details redacted)', type(e).__name__)
         return False
 
 
-@mlflow.trace(name="fhir_server_writer")
+@trace_safe(name="fhir_server_writer")
 def fhir_server_writer(state: CarePlanComposerState) -> dict:
     """Store a draft locally or publish an already-approved FHIR Bundle."""
     logger.info("── FHIR Server Writer ──")
@@ -192,7 +191,7 @@ def fhir_server_writer(state: CarePlanComposerState) -> dict:
     }
 
 
-@mlflow.trace(name="fhir_server_writer.post_bundle")
+@trace_safe(name="fhir_server_writer.post_bundle")
 def _post_bundle(bundle: dict) -> dict:
     """Post one transaction Bundle and return delivery metadata."""
     try:
@@ -229,12 +228,9 @@ def _post_bundle(bundle: dict) -> dict:
                     )
             elif response_data.get("issue"):
                 for iss in response_data["issue"][:5]:
-                    logger.warning(
-                        "  OperationOutcome: %s — %s",
-                        iss.get("severity", "?"), iss.get("diagnostics", "?")[:120],
-                    )
+                    logger.warning('  OperationOutcome (details redacted)')
             else:
-                logger.info("  Response body: %s", json.dumps(response_data)[:500])
+                logger.info('  Response body (details redacted)')
             server_ids = _parse_server_ids(bundle, response_data)
             return {
                 "fhir_server_response": response_data,
@@ -255,7 +251,7 @@ def _post_bundle(bundle: dict) -> dict:
                 "server_ids": {},
             }
         else:
-            logger.warning("FHIR server returned %d: %s", r.status_code, r.text[:200])
+            logger.warning('FHIR server transaction failed status=%s', r.status_code)
             return {
                 "fhir_server_response": response_data,
                 "delivery_status": "error",
@@ -265,7 +261,7 @@ def _post_bundle(bundle: dict) -> dict:
             }
 
     except requests.RequestException as e:
-        logger.warning("FHIR server unavailable: %s — CarePlan saved locally only", e)
+        logger.warning('FHIR server unavailable exception_type=%s (details redacted)', type(e).__name__)
         return {
             "fhir_server_response": {},
             "delivery_status": "stored_locally",
@@ -273,7 +269,7 @@ def _post_bundle(bundle: dict) -> dict:
         }
 
 
-@mlflow.trace(name="fhir_server_writer.automation_revisions")
+@trace_safe(name="fhir_server_writer.automation_revisions")
 def _automation_revisions(bundle: dict) -> list[dict[str, str]]:
     revisions = []
     for entry in bundle.get("entry", []):
@@ -295,7 +291,7 @@ def _automation_revisions(bundle: dict) -> list[dict[str, str]]:
     return sorted(revisions, key=lambda item: item["automation_id"])
 
 
-@mlflow.trace(name="fhir_server_writer.start_approval_job")
+@trace_safe(name="fhir_server_writer.start_approval_job", ids=('careplan_id',))
 def _start_approval_job(careplan_id: str, bundle: dict, reviewer: "ReviewerContext") -> tuple[dict, bool]:
     """Persist the approved bundle before any FHIR transaction is sent."""
     from acp_writer.services.automation_publisher import get_publisher
@@ -309,7 +305,7 @@ def _start_approval_job(careplan_id: str, bundle: dict, reviewer: "ReviewerConte
     )
 
 
-@mlflow.trace(name="fhir_server_writer.resume_existing_approval")
+@trace_safe(name="fhir_server_writer.resume_existing_approval")
 def _resume_existing_approval(job: dict) -> tuple[dict, dict] | None:
     """Recover an approving job before re-sending its transaction bundle."""
     from acp_writer.services.automation_publisher import (
@@ -367,7 +363,7 @@ def _resume_existing_approval(job: dict) -> tuple[dict, dict] | None:
     return None
 
 
-@mlflow.trace(name="fhir_server_writer.record_and_publish")
+@trace_safe(name="fhir_server_writer.record_and_publish")
 def _record_and_publish(job: dict, delivery: dict) -> dict:
     """Record a successful transaction and attempt automation publication."""
     from acp_writer.services.automation_publisher import get_publisher
@@ -377,10 +373,7 @@ def _record_and_publish(job: dict, delivery: dict) -> dict:
     try:
         pending = publisher.record_write(job, response)
     except ValueError as exc:
-        logger.warning(
-            "Approval job %s awaits recovery after incomplete FHIR response: %s",
-            job["job_id"], exc,
-        )
+        logger.warning('Approval job failed job_id=%s exception_type=%s', job.get('job_id'), type(exc).__name__)
         return {
             "status": "approving",
             "attempts": job.get("publish_attempts", 0),
@@ -389,7 +382,7 @@ def _record_and_publish(job: dict, delivery: dict) -> dict:
     return _publish_pending(pending)
 
 
-@mlflow.trace(name="fhir_server_writer.publish_pending")
+@trace_safe(name="fhir_server_writer.publish_pending")
 def _publish_pending(pending: dict) -> dict:
     from acp_writer.services.automation_publisher import get_publisher
 
@@ -482,7 +475,8 @@ def rehydrate_care_plans_from_jobs() -> int:
 def list_care_plans(patient: str | None = None, status: str | None = None) -> list[dict]:
     results = list(_care_plans.values())
     if patient:
-        results = [cp for cp in results if cp.get("patient_reference") == patient]
+        expected = patient if patient.startswith("Patient/") else f"Patient/{patient}"
+        results = [cp for cp in results if cp.get("patient_reference") == expected]
     if status:
         results = [cp for cp in results if cp.get("status") == status]
     return [{
@@ -519,7 +513,7 @@ def _find_careplan_resource(bundle: dict) -> dict | None:
     return None
 
 
-@mlflow.trace(name="fhir_server_writer.set_careplan_identifier")
+@trace_safe(name="fhir_server_writer.set_careplan_identifier", ids=('careplan_id',))
 def _set_careplan_identifier(bundle: dict, careplan_id: str) -> None:
     """Set the stable business identifier and transaction upsert condition."""
     careplan_entry = next(

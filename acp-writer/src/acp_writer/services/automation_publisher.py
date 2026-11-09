@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from datetime import datetime, timezone
 import hashlib
 import logging
 import os
 import threading
 import time
+from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any
 
-import mlflow
 import requests
-
-from cpg_contracts.automation.instances import PublicationPayload, PublishedAutomation, TemplateRef
 from acp_writer.services.ai_transparency import (
     ACP_CS_BASE,
     AUTOMATION_ID_SYSTEM,
@@ -22,6 +19,12 @@ from acp_writer.services.ai_transparency import (
     AUTOMATION_TEMPLATE_EXT,
 )
 from acp_writer.services.job_store import JobStore
+from cpg_contracts.automation.instances import (
+    PublicationPayload,
+    PublishedAutomation,
+    TemplateRef,
+)
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +66,7 @@ def publication_status_view(job: dict) -> dict:
     return view
 
 
-@mlflow.trace(name="automation.publication.entry_index")
+@trace_safe(name="automation.publication.entry_index")
 def _entry_index(bundle: dict) -> dict[str, dict]:
     return {
         entry.get("fullUrl", ""): entry.get("resource", {})
@@ -72,7 +75,7 @@ def _entry_index(bundle: dict) -> dict[str, dict]:
     }
 
 
-@mlflow.trace(name="automation.publication.resource_ids")
+@trace_safe(name="automation.publication.resource_ids")
 def _resource_ids(bundle: dict, transaction_response: dict) -> dict[str, str]:
     result = {}
     for source, response in zip(bundle.get("entry", []), transaction_response.get("entry", [])):
@@ -101,7 +104,7 @@ def _identifier(resource: dict, system: str) -> str | None:
     )
 
 
-@mlflow.trace(name="automation.publication.template_refs")
+@trace_safe(name="automation.publication.template_refs")
 def _template_refs(task: dict) -> list[TemplateRef]:
     refs = []
     for block in task.get("extension", []):
@@ -120,7 +123,7 @@ def _template_refs(task: dict) -> list[TemplateRef]:
     return refs
 
 
-@mlflow.trace(name="automation.publication.build_payload")
+@trace_safe(name="automation.publication.build_payload")
 def _build_payload(job: dict, references: dict[str, str]) -> dict:
     bundle = job["bundle"]
     entries = _entry_index(bundle)
@@ -260,7 +263,7 @@ class AutomationPublisher:
         self.store.put(updated)
         return updated
 
-    @mlflow.trace(name="automation.publication.start_approval")
+    @trace_safe(name="automation.publication.start_approval", ids=('careplan_id',))
     def start_approval(
         self,
         careplan_id: str,
@@ -313,7 +316,7 @@ class AutomationPublisher:
         self.store.put(job)
         return job, False
 
-    @mlflow.trace(name="automation.publication.record_write")
+    @trace_safe(name="automation.publication.record_write")
     def record_write(self, job: dict, transaction_response: dict) -> dict:
         """Persist server-id mappings and a reference-rewritten publication."""
         references = _resource_ids(job["bundle"], transaction_response)
@@ -328,7 +331,7 @@ class AutomationPublisher:
         }
         return self._mark_post_write_state(updated)
 
-    @mlflow.trace(name="automation.publication.record_recovered_write")
+    @trace_safe(name="automation.publication.record_recovered_write")
     def record_recovered_write(self, job: dict, careplan_resource: dict) -> dict:
         """Rebuild transaction references from an existing CarePlan search hit."""
         bundle = job["bundle"]
@@ -403,7 +406,7 @@ class AutomationPublisher:
             response.raise_for_status()
             entries = response.json().get("entry", [])
         except (requests.RequestException, ValueError) as exc:
-            logger.warning("Could not search for approval job %s: %s", job["job_id"], exc)
+            logger.warning('Could not search for approval job exception_type=%s (details redacted)', type(exc).__name__)
             return None, False
         if not entries:
             return None, True
@@ -414,10 +417,10 @@ class AutomationPublisher:
         try:
             return self.record_recovered_write(job, careplan), True
         except (KeyError, StopIteration, ValueError) as exc:
-            logger.warning("Could not reconcile approval job %s: %s", job["job_id"], exc)
+            logger.warning('Could not reconcile approval job exception_type=%s (details redacted)', type(exc).__name__)
             return None, False
 
-    @mlflow.trace(name="automation.publication.publish")
+    @trace_safe(name="automation.publication.publish")
     def publish(self, job: dict, client: Any = requests) -> dict:
         """Make one idempotent publication attempt, honoring withdrawal tombstones."""
         if self.store.get_withdrawal(job["careplan_id"]) is not None:
@@ -482,7 +485,7 @@ class AutomationPublisher:
         self.store.put(current)
         return current
 
-    @mlflow.trace(name="automation.publication.schedule_retries")
+    @trace_safe(name="automation.publication.schedule_retries")
     def schedule_retries(self, job: dict, client: Any = requests) -> None:
         """Schedule up to three delayed attempts after the inline publication."""
         if self.store.get_withdrawal(job["careplan_id"]) is not None:
@@ -501,7 +504,7 @@ class AutomationPublisher:
         )
         thread.start()
 
-    @mlflow.trace(name="automation.publication.retry_worker")
+    @trace_safe(name="automation.publication.retry_worker", ids=('careplan_id', 'job_id'))
     def _retry_worker(self, careplan_id: str, job_id: str, client: Any) -> None:
         for delay in (2, 8, 30):
             time.sleep(delay)
@@ -520,7 +523,7 @@ class AutomationPublisher:
         if job and job.get("state") in {"pending", "failed"} and not is_terminal_publication(job):
             self.store.put({**job, "state": "failed", "updated_at": _now()})
 
-    @mlflow.trace(name="automation.publication.withdraw")
+    @trace_safe(name="automation.publication.withdraw", ids=('careplan_id',))
     def withdraw(self, careplan_id: str, client: Any = requests) -> dict:
         """Write a durable tombstone before asking the receiver to withdraw."""
         marker = self.store.get_withdrawal(careplan_id)
@@ -544,7 +547,7 @@ class AutomationPublisher:
             marker = {**marker, "receiver_error": str(exc)[:500]}
         return marker
 
-    @mlflow.trace(name="automation.publication.retry")
+    @trace_safe(name="automation.publication.retry", ids=('careplan_id',))
     def retry(self, careplan_id: str, client: Any = requests) -> dict | None:
         jobs = self.store.list(careplan_id)
         if not jobs:
@@ -563,7 +566,7 @@ class AutomationPublisher:
             self.schedule_retries(result, client)
         return result
 
-    @mlflow.trace(name="automation.publication.reconcile")
+    @trace_safe(name="automation.publication.reconcile")
     def reconcile_on_start(self, fhir_client: Any = requests, automation_client: Any = requests) -> None:
         """Resume interrupted FHIR writes and queued automation publication jobs."""
         for job in self.store.list():
@@ -592,7 +595,7 @@ class AutomationPublisher:
                             continue
                         job = self.record_write(job, write_response.json())
                     except (requests.RequestException, ValueError) as exc:
-                        logger.warning("Could not resume approval job %s: %s", job["job_id"], exc)
+                        logger.warning('Could not resume approval job exception_type=%s (details redacted)', type(exc).__name__)
                         continue
             if (
                 job.get("state") in {"pending", "failed"}

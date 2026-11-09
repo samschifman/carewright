@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export interface UseAdaptivePollingOptions<T> {
   fetcher: () => Promise<T>;
   isComplete?: (data: T) => boolean;
+  shouldRetry?: (error: Error) => boolean;
   initialInterval?: number;
   slowInterval?: number;
   slowAfterMs?: number;
@@ -21,6 +22,7 @@ export interface UseAdaptivePollingResult<T> {
 export function useAdaptivePolling<T>({
   fetcher,
   isComplete,
+  shouldRetry,
   initialInterval = 2000,
   slowInterval = 10000,
   slowAfterMs = 30000,
@@ -44,6 +46,8 @@ export function useAdaptivePolling<T>({
   // a dependency: changing it (new id, refresh) intentionally restarts polling.
   const isCompleteRef = useRef(isComplete);
   isCompleteRef.current = isComplete;
+  const shouldRetryRef = useRef(shouldRetry);
+  shouldRetryRef.current = shouldRetry;
 
   const poll = useCallback(async () => {
     if (completedRef.current) return;
@@ -65,7 +69,9 @@ export function useAdaptivePolling<T>({
         completedRef.current = true;
       }
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      const error = e instanceof Error ? e : new Error(String(e));
+      setError(error);
+      if (shouldRetryRef.current?.(error) === false) completedRef.current = true;
     } finally {
       setIsLoading(false);
     }
@@ -75,6 +81,8 @@ export function useAdaptivePolling<T>({
     if (!enabled) return;
 
     completedRef.current = false;
+    setData(null);
+    setError(null);
     startTimeRef.current = Date.now();
     lastDataRef.current = "";
     poll();

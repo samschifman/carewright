@@ -131,6 +131,8 @@ celerybeat.pid
 
 # Environments
 .env
+# Generated SMART client credentials, regardless of SMART_CONFIG_DIR
+smart-client.env
 .venv
 env/
 venv/
@@ -189,7 +191,7 @@ uv.lock
 /build/schema/
 
 # MLflow local artifacts (created when MLFLOW_TRACKING_URI is not set)
-mlflow.db
+mlflow.db*
 mlruns/
 
 # macOS

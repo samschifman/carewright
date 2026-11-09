@@ -26,7 +26,7 @@ def test_validates_parameter_edits_against_types_and_constraints():
     error = validate_review_payload(_run(), "pre-delivery", {
         "parameterEdits": [{"templateId": "template-1", "parameter": "review_window", "value": 5}],
     })
-    assert error == "Parameter 'review_window' exceeds its maximum constraint."
+    assert error == "parameter-maximum"
 
 
 def test_acknowledgement_requires_l7_escalation_and_a_note():
@@ -34,11 +34,11 @@ def test_acknowledgement_requires_l7_escalation_and_a_note():
     assert validate_review_payload(_run("semantic-budget-exhausted"), "pre-delivery", {
         "acknowledgements": [acknowledgement],
     }) is None
-    assert "requires a note" in validate_review_payload(
+    assert "acknowledgement-note-required" == validate_review_payload(
         _run("semantic-budget-exhausted"), "pre-delivery",
         {"acknowledgements": [{"templateId": "template-1", "note": " "}]},
     )
-    assert "not escalated at the semantic review rung" in validate_review_payload(
+    assert "acknowledgement-not-escalated" == validate_review_payload(
         _run("static-budget-exhausted"), "pre-delivery",
         {"acknowledgements": [acknowledgement]},
     )
@@ -47,7 +47,7 @@ def test_acknowledgement_requires_l7_escalation_and_a_note():
 def test_structured_template_edits_are_rejected_at_manifest_gate():
     assert validate_review_payload(_run(), "manifest", {
         "parameterEdits": [{"templateId": "template-1", "parameter": "review_window", "value": 2}],
-    }) == "Parameter edits and acknowledgements are only accepted at pre-delivery review."
+    }) == "review-gate"
 
 
 def test_review_transport_preserves_parameter_edits_and_acknowledgements(monkeypatch):
@@ -76,3 +76,14 @@ def test_review_transport_preserves_parameter_edits_and_acknowledgements(monkeyp
     assert event["data"]["parameterEdits"] == edits
     assert event["data"]["acknowledgements"] == acknowledgements
     assert event["type"] == "artifacts-reviewed"
+
+
+def test_unknown_identifiers_never_echo_review_payload():
+    sentinel = 'SYNTHETIC-SENSITIVE-REQUEST-CONTENT'
+    for field in ('parameterEdits', 'acknowledgements'):
+        assert validate_review_payload(_run(), 'pre-delivery', {
+            field:[{'templateId':sentinel, 'parameter':sentinel}],
+        }) == 'unknown-template'
+    assert validate_review_payload(_run(), 'pre-delivery', {
+        'parameterEdits':[{'templateId':'template-1','parameter':sentinel,'value':1}],
+    }) == 'unknown-parameter'

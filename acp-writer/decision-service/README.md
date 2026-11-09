@@ -29,6 +29,16 @@ Both the DMN and BPMN `/jit` endpoints parse caller-supplied XML. They are
 intended for internal-network use only. External-entity handling in the KIE
 readers has not been audited.
 
+### Unsupported DMN features
+
+Both DMN endpoints reject Java and PMML function definitions, PMML imports,
+and FEEL external functions with `400` and `error: "unsupported-dmn-feature"`.
+The safety check parses and inspects the model before KIE compiles it, so these
+features cannot load Java classes during validation or evaluation. Nested
+expressions and decision-table cells are checked as well. A conservative text
+check also rejects `external` followed by optional whitespace and `{`, even in
+free text; the word `external` on its own is allowed.
+
 ## Build and test
 
 From the repository root, run the tests with the project’s Java 17 Maven image

@@ -10,10 +10,10 @@ import tempfile
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
-
 from cpg_contracts import get_artifact_store, resolve_ref, store_artifact
+from cpg_contracts.service_auth import require_service_token
 from cpg_ingester.nodes.assembly import assembly
+from fastapi import Depends, FastAPI, Request
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ def health():
     return {"status": "UP", "service": "assembly"}
 
 
-@app.post("/api/v1/assemble")
+@app.post("/api/v1/assemble", dependencies=[Depends(require_service_token('SERVICE_TOKEN_CPG_ASSEMBLY', workflow_route=True))])
 async def assemble(request: Request):
     """Assemble validated DMN, recommendation, and BPMN generation results."""
     data = await request.json()

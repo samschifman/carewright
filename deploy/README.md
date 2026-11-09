@@ -217,7 +217,7 @@ LLM credentials are read from the environment by the LLM client factory in prior
 | `minio-credentials` | `MINIO_ROOT_USER/PASSWORD`, `ARTIFACT_STORE_ACCESS/SECRET_KEY` | `setup-secrets.sh` | MinIO, all service pods |
 | `fhir-client-credentials` | `FHIR_CLIENT_ID`, `FHIR_CLIENT_SECRET` | `setup-secrets.sh` (optional) | fhir-server pod |
 | `medplum-user-credentials` | `MEDPLUM_SUPERADMIN_PASSWORD`, `MEDPLUM_ADMIN_EMAIL/PASSWORD`, `MEDPLUM_PRACTITIONER_PASSWORD` | `setup-secrets.sh` (optional) | mock-EHR loader job |
-| `smart-client-credentials` | `smart-config.json` (JSON with clientId/clientSecret) | mock-EHR loader job | IPS Viewer (mounted as file) |
+| `smart-client-credentials` | `SMART_CLIENT_ID`, `SMART_CLIENT_SECRET` | mock-EHR loader job | Writer BFF environment only |
 
 **Security notes:**
 - `secrets.env` is gitignored and NOT allowlisted in gitleaks
@@ -482,3 +482,15 @@ The following paths are **documented but have not been exercised** — expect ro
 | `setup-secrets.sh --interactive` | Only `--from-env` has been used |
 | Single-component update | Changing one component and verifying the others are untouched |
 | Non-admin deploy | All testing ran with cluster-admin; a least-privilege role has not been derived |
+
+### Track B application credentials
+
+| Secret | Keys | Consumer |
+| --- | --- | --- |
+| `carewright-service-tokens` | Per-receiver `SERVICE_TOKEN_*` | BFFs, workflows and sandbox service callers |
+| `carewright-approval-signing-key` | `APPROVAL_SIGNING_KEY` | Writer BFF and writer FHIR publication sandbox only |
+| `carewright-session-signing-key` | `SESSION_SIGNING_KEY` | Writer BFF only |
+| `carewright-ingester-signing-key` | `CPG_SIGNING_KEY` | Ingester BFF only |
+| `smart-client-credentials` | `SMART_CLIENT_ID`, `SMART_CLIENT_SECRET` | Writer BFF only; never mount into UI docroot |
+
+The operator bootstrap generates missing service/signing credentials without printing values. Both pipelines select `spec.serviceTokens`; writer alone selects `spec.approvalSigning` and `spec.sessionSigning`, while ingester selects `spec.signing`. The browser signing fields are plain `secretRef` entries. Writer `spec.smart.credentials` selects the SMART Secret, also with a plain `secretRef`. Register the writer UI origin's `/api/v1/launch` and `/api/v1/launch/callback` paths in Medplum. Existing environments need re-registration and BFF restart. See [security](../docs/security.md) for the required origins, one-worker constraint, rotation and environment probes. The retired chart no longer mounts browser SMART secrets; deployment artifacts outside the operator path need equivalent backend credential wiring before use.

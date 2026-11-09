@@ -8,14 +8,18 @@ import logging
 import os
 from uuid import uuid4
 
-from fastapi import BackgroundTasks, FastAPI, Request
-
-from cpg_contracts import get_phi_store, post_callback, resolve_ref, store_artifact
 from acp_writer.nodes.fhir_bundle_generator import fhir_bundle_generator
-from acp_writer.nodes.terminology_validator import terminology_validator
 from acp_writer.nodes.fhir_syntax_validator import fhir_syntax_validator
+from acp_writer.nodes.terminology_validator import terminology_validator
+from cpg_contracts import get_phi_store, post_callback, resolve_ref, store_artifact
+from cpg_contracts.cloud_events import require_callback_url
+from cpg_contracts.service_auth import require_service_token
+from cpg_contracts.tracing import install_phi_span_processor
+from fastapi import BackgroundTasks, Depends, FastAPI, Request
 
 logger = logging.getLogger(__name__)
+
+install_phi_span_processor()
 
 app = FastAPI(title="acp-writer-fhir-generation", version="0.1.0")
 _phi_store = get_phi_store()
@@ -47,7 +51,7 @@ def _resolve_prompts(data: dict) -> dict:
     }
 
 
-@app.post("/api/v1/generate-bundle")
+@app.post("/api/v1/generate-bundle", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_GENERATION'))])
 async def generate_bundle(request: Request):
     """Generate FHIR Bundle from Planning Brief, then validate."""
     data = await request.json()
@@ -85,11 +89,11 @@ async def generate_bundle(request: Request):
     return response
 
 
-@app.post("/api/v1/generate-bundle-async")
+@app.post("/api/v1/generate-bundle-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_GENERATION', workflow_route=True))])
 async def generate_bundle_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept immediately, run generation in background, POST callback."""
     data = await request.json()
-    callback_url = data.pop("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.pop("process_instance_id", "")
     background_tasks.add_task(_run_generate_background, data, callback_url, process_instance_id)
     return {"status": "accepted"}
@@ -129,7 +133,7 @@ def _run_generate_background(data: dict, callback_url: str, process_instance_id:
         else:
             result["fhir_bundle"] = fhir_bundle
     except Exception as e:
-        logger.error("Generate-bundle background task failed: %s", e)
-        result = {"error": str(e), "terminology_issues": [], "syntax_errors": []}
+        logger.error('Generate-bundle background task failed exception_type=%s (details redacted)', type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}", "terminology_issues": [], "syntax_errors": []}
 
     post_callback(callback_url, process_instance_id, "generate-done", result)

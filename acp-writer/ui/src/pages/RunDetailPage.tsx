@@ -22,7 +22,7 @@ import {
 } from "@patternfly/react-core";
 import { PipelineStepper, useAdaptivePolling } from "@cpg-to-acp/ui-shared";
 import type { CodedItem, RunDetail, ReviewAction } from "@app/api/models";
-import { getRunDetail, submitReview } from "@app/services/api";
+import { ApiError, getRunDetail, submitReview } from "@app/services/api";
 import { toPipelineSteps } from "@app/pipeline/steps";
 import { ReviewPanel } from "@app/components/ReviewPanel";
 
@@ -42,9 +42,10 @@ export function RunDetailPage() {
     (r: RunDetail) => r.status === "completed" || r.status === "failed" || r.status === "cancelled",
     [],
   );
-  const { data: run } = useAdaptivePolling<RunDetail>({
+  const { data: run, error } = useAdaptivePolling<RunDetail>({
     fetcher,
     isComplete,
+    shouldRetry: (error) => !(error instanceof ApiError && [401, 403, 404].includes(error.status)),
     enabled: !!runId,
   });
 
@@ -64,6 +65,12 @@ export function RunDetailPage() {
   };
 
   const patient = run?.patient;
+
+  if (error) {
+    return <PageSection><p role="alert">{error instanceof ApiError && [403, 404].includes(error.status)
+      ? "This run is not part of your current patient session."
+      : error.message}</p></PageSection>;
+  }
 
   if (!run) {
     return (
@@ -106,6 +113,7 @@ export function RunDetailPage() {
               key={run.reviewIteration}
               carePlan={run.carePlan}
               reviewIteration={run.reviewIteration}
+              artifactRevision={run.artifactRevision}
               previousFeedback={run.previousFeedback}
               onSubmit={handleReview}
             />

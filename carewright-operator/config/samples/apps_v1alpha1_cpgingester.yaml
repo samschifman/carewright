@@ -6,6 +6,11 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: cpgingester-sample
 spec:
+  serviceTokens:
+    type: carewright-service-tokens
+    secretRef: {name: carewright-service-tokens}
+  signing:
+    secretRef: {name: carewright-ingester-signing-key}
   sandbox:
     gateway:
       endpoint: http://openshell.openshell.svc.cluster.local:8080

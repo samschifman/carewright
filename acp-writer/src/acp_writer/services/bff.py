@@ -8,22 +8,19 @@ degrades gracefully when SonataFlow or MinIO is not configured.
 import asyncio
 import base64
 import binascii
+import hashlib
 import json
 import logging
 import os
+import re
+import secrets
+import time
 from datetime import datetime, timezone
+from urllib.parse import urlencode, urlsplit
 from uuid import uuid4
 
 import httpx
-import mlflow
 import requests as http_requests
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
-
-from cpg_contracts.artifact_paths import validated_run_artifact_key
-from cpg_contracts.artifact_store import ArtifactStore
-
 from acp_writer.services.ai_transparency import (
     ACTIVITY_AUTOMATION_EXT,
     AUTOMATION_ID_SYSTEM,
@@ -38,6 +35,29 @@ from acp_writer.services.sonataflow_client import (
     map_to_run_detail,
     map_to_run_summary,
 )
+from cpg_contracts.approvals import (
+    artifact_revision,
+    normalize_ref,
+    sign_record,
+    verify_record,
+)
+from cpg_contracts.artifact_paths import validated_run_artifact_key
+from cpg_contracts.artifact_store import ArtifactStore
+from cpg_contracts.service_auth import require_service_token, service_token_headers
+from cpg_contracts.tracing import install_phi_span_processor, trace_safe
+from cpg_contracts.web_session import (
+    MemorySessionStore,
+    ObjectStoreSessionStore,
+    OneTimeStore,
+    SessionManager,
+    new_pkce,
+    sign_browser_record,
+    token_hash,
+    verify_browser_record,
+)
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +87,170 @@ if SONATAFLOW_URL:
 
 _http = httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0))
 
+# Browser sessions are kept separate from service credentials.
+SMART_CLIENT_ID = os.getenv('SMART_CLIENT_ID', '')
+SMART_CLIENT_SECRET = os.getenv('SMART_CLIENT_SECRET', '')
+SMART_ISS_ALLOWLIST = os.getenv('SMART_ISS_ALLOWLIST', '')
+SMART_SCOPES = os.getenv('SMART_SCOPES', 'launch openid fhirUser patient/*.read user/Practitioner.read')
+SMART_FHIR_INTERNAL_BASE = os.getenv('SMART_FHIR_INTERNAL_BASE', '')
+ACP_PUBLIC_ORIGIN = os.getenv('ACP_PUBLIC_ORIGIN', '').rstrip('/')
+SMART_REDIRECT_URI = os.getenv('SMART_REDIRECT_URI') or (ACP_PUBLIC_ORIGIN + '/api/v1/launch/callback' if ACP_PUBLIC_ORIGIN else '')
+ACP_ALLOW_DIRECT_IPS = os.getenv('ACP_ALLOW_DIRECT_IPS', '').lower() == 'true'
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'true').lower() != 'false'
+SESSION_TTL_HOURS = float(os.getenv('SESSION_TTL_HOURS', '8'))
+APPROVAL_SIGNING_KEY = os.getenv('APPROVAL_SIGNING_KEY', '')
+SESSION_SIGNING_KEY = os.getenv('SESSION_SIGNING_KEY', '')
+if _phi_store and not SESSION_SIGNING_KEY:
+    logger.error('SESSION_SIGNING_KEY is required for persisted browser records')
+_sessions = SessionManager(
+    ObjectStoreSessionStore(_phi_store, signing_key=SESSION_SIGNING_KEY) if _phi_store else MemorySessionStore(),
+    cookie_name='acp_session', ttl_hours=SESSION_TTL_HOURS, secure=SESSION_COOKIE_SECURE,
+    public_origin=ACP_PUBLIC_ORIGIN,
+)
+_launch_states = OneTimeStore(_phi_store, prefix='pending/smart/', signing_key=SESSION_SIGNING_KEY)
+_run_metadata_cache: dict[str, dict] = {}
+_discovery_cache: dict[str, tuple[float, dict]] = {}
+from cpg_contracts.web_session import AsyncKeyedLocks
+
+_review_locks = AsyncKeyedLocks()
+
+
+def _patient_id(bundle: dict) -> str | None:
+    patients = [entry.get('resource', {}) for entry in bundle.get('entry', [])
+                if entry.get('resource', {}).get('resourceType') == 'Patient']
+    # Medplum may repeat the same Patient as the composition subject and an
+    # included resource. Scope is one unique patient identity, not one entry.
+    identifiers = {patient.get('id') for patient in patients if isinstance(patient.get('id'), str)}
+    if not patients or len(identifiers) != 1 or any(patient.get('id') not in identifiers for patient in patients):
+        return None
+    identifier = next(iter(identifiers))
+    return identifier if re.fullmatch(r'[A-Za-z0-9.-]{1,64}', identifier) else None
+
+
+
+def _require_session_signing():
+    if _phi_store and not SESSION_SIGNING_KEY:
+        raise HTTPException(503, detail={'error': 'signing-key-unconfigured'})
+
+
+@trace_safe(ids=('run_id',))
+def run_metadata(run_id: str) -> dict | None:
+    try:
+        validated_run_artifact_key(run_id, 'run.json')
+    except ValueError:
+        return None
+    if run_id in _run_metadata_cache:
+        return _run_metadata_cache[run_id]
+    if not _phi_store:
+        return None
+    try:
+        record = _phi_store.get(f'{run_id}/run.json')
+    except Exception as exc:
+        if not _missing_object(exc):
+            raise
+        return None
+    record = verify_browser_record(record, SESSION_SIGNING_KEY)
+    if not record or record.get('runId') != run_id:
+        return None
+    _run_metadata_cache[run_id] = record
+    return record
+
+
+@trace_safe
+def _persist_run_metadata(record: dict):
+    if _phi_store:
+        _phi_store.put(f"{record['runId']}/run.json", sign_browser_record(record, SESSION_SIGNING_KEY))
+    _run_metadata_cache[record['runId']] = dict(record)
+
+
+def _missing_object(exc):
+    return isinstance(exc, KeyError) or getattr(exc, 'response', {}).get('Error', {}).get('Code') in {'NoSuchKey', 'NotFound', '404'}
+
+
+@trace_safe
+async def _patient_session(request: Request):
+    session = await _sessions.require(mutating=request.method not in {'GET', 'HEAD', 'OPTIONS'})(request)
+    if session.kind != 'patient':
+        raise HTTPException(403, detail={'error': 'out-of-scope'})
+    run_id = request.path_params.get('run_id')
+    if run_id:
+        # Validate artifact paths before any object-store lookup.
+        try:
+            validated_run_artifact_key(run_id, request.path_params.get('path', 'run.json'))
+        except ValueError:
+            raise HTTPException(400, detail={'error': 'artifact-path'}) from None
+        if run_id not in session.run_ids:
+            try:
+                record = run_metadata(run_id)
+            except Exception:
+                raise _sessions.unavailable() from None
+            if record is None:
+                raise HTTPException(404, detail={'error': 'run-not-found'})
+            if (record.get('patientId') != session.subject
+                    or (record.get('iss') or '') != (session.meta.get('iss') or '')):
+                raise HTTPException(403, detail={'error': 'out-of-scope'})
+    return session
+
+
+@trace_safe
+async def _create_patient_run(ips_bundle: dict, patient: str, iss: str = '') -> dict:
+    run_id = uuid4().hex[:12]
+    now = datetime.now(timezone.utc).isoformat()
+    ips_ref = _phi_store.put(f'{run_id}/ips_bundle.json', ips_bundle) if _phi_store else ''
+    _persist_run_metadata({'runId': run_id, 'patientId': patient, 'iss': iss, 'createdAt': now})
+    patient_name = _extract_patient_name(ips_bundle)
+    _pending_runs[run_id] = {
+        'run_id': run_id, 'status': 'starting', 'sonataflow_id': None,
+        'patient_name': patient_name, 'ips_ref': ips_ref, 'created_at': now, 'error': None,
+    }
+    if _sonataflow:
+        asyncio.create_task(_start_workflow_background(run_id, ips_ref or json.dumps(ips_bundle), patient_name))
+    return {'runId': run_id, 'status': 'starting'}
+
+
+def _reference_patient(reference):
+    if not isinstance(reference, str):
+        return None
+    url = urlsplit(reference)
+    if url.scheme and url.scheme not in {'http', 'https'}:
+        return None
+    if url.query or url.fragment:
+        return None
+    parts = url.path.rstrip('/').split('/')
+    if len(parts) < 2 or parts[-2] != 'Patient' or not re.fullmatch(r'[A-Za-z0-9.-]{1,64}', parts[-1]):
+        return None
+    return parts[-1]
+
+
+def _careplan_patient(raw):
+    if not isinstance(raw, dict):
+        return None
+    if raw.get('resourceType') == 'CarePlan':
+        return _reference_patient(raw.get('subject', {}).get('reference'))
+    bundle = raw.get('bundle', {})
+    plans = [entry.get('resource', {}) for entry in bundle.get('entry', []) if entry.get('resource', {}).get('resourceType') == 'CarePlan']
+    if len(plans) != 1:
+        return None
+    return _reference_patient(plans[0].get('subject', {}).get('reference'))
+
+
+install_phi_span_processor()
+
 app = FastAPI(title="acp-writer-bff", version="0.1.0")
+
+@app.middleware('http')
+async def browser_response_policy(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith('/api/'):
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[ACP_PUBLIC_ORIGIN] if ACP_PUBLIC_ORIGIN else [],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -95,8 +274,8 @@ def health():
 # Notifications from cpg-ingester SonataFlow
 # ---------------------------------------------------------------------------
 
-@app.post("/api/v1/notifications/artifacts-available")
-@mlflow.trace(name="bff.artifacts_available")
+@app.post("/api/v1/notifications/artifacts-available", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_BFF', workflow_route=True))])
+@trace_safe(name="bff.artifacts_available")
 async def artifacts_available(request: Request):
     """Receive CPG artifact delivery notification from cpg-ingester.
 
@@ -157,7 +336,7 @@ def _register_metadata(ref: str) -> None:
     metadata = _artifacts_store.get(ref)
     resp = http_requests.post(
         f"{LLM_REASONING_URL}/api/v1/guidelines",
-        json=metadata,
+        headers=service_token_headers('SERVICE_TOKEN_ACP_LLM_REASONING'), json=metadata,
         timeout=10,
     )
     resp.raise_for_status()
@@ -175,7 +354,7 @@ def _register_dmn_model(ref: str, name: str, cpg_id: str | None = None) -> None:
     resp = http_requests.post(
         url,
         data=dmn_xml,
-        headers={"Content-Type": "application/xml"},
+        headers={**{"Content-Type": "application/xml"}, **service_token_headers('SERVICE_TOKEN_ACP_DECISION_ENGINE')},
         timeout=10,
     )
     resp.raise_for_status()
@@ -189,7 +368,7 @@ def _register_recommendations(ref: str, cpg_id: str) -> int:
     bundle = _artifacts_store.get(ref)
     resp = http_requests.post(
         f"{LLM_REASONING_URL}/api/v1/knowledge/recommendations/batch",
-        json=bundle,
+        headers=service_token_headers('SERVICE_TOKEN_ACP_LLM_REASONING'), json=bundle,
         timeout=30,
     )
     resp.raise_for_status()
@@ -198,7 +377,7 @@ def _register_recommendations(ref: str, cpg_id: str) -> int:
     return count
 
 
-@mlflow.trace(name="bff.register_automation_template")
+@trace_safe(name="bff.register_automation_template", ids=('cpg_id',))
 def _register_automation_template(ref: str, cpg_id: str) -> None:
     """Pull a published template from MinIO and register it with decision-engine."""
     if not _artifacts_store:
@@ -206,7 +385,7 @@ def _register_automation_template(ref: str, cpg_id: str) -> None:
     template = _artifacts_store.get(ref)
     response = http_requests.post(
         f"{DECISION_ENGINE_URL}/api/v1/automation/templates",
-        params={"source_cpg": cpg_id},
+        headers=service_token_headers('SERVICE_TOKEN_ACP_DECISION_ENGINE'), params={"source_cpg": cpg_id},
         json=template,
         timeout=30,
     )
@@ -219,7 +398,7 @@ def _register_automation_template(ref: str, cpg_id: str) -> None:
     )
 
 
-@mlflow.trace(name="bff.reload_cpg_artifacts")
+@trace_safe(name="bff.reload_cpg_artifacts")
 def _reload_cpg_artifacts() -> None:
     """Scan MinIO published/ prefix and re-register all CPG artifacts.
 
@@ -235,7 +414,7 @@ def _reload_cpg_artifacts() -> None:
         )
         prefixes = [p["Prefix"] for p in response.get("CommonPrefixes", [])]
     except Exception as exc:
-        logger.warning("Could not scan MinIO for published CPGs: %s", exc)
+        logger.warning('Could not scan MinIO for published CPGs exception_type=%s (details redacted)', type(exc).__name__)
         return
 
     for prefix in prefixes:
@@ -245,7 +424,7 @@ def _reload_cpg_artifacts() -> None:
         try:
             _register_metadata(metadata_ref)
         except Exception as exc:
-            logger.warning("Failed to reload metadata for %s: %s", cpg_id, exc)
+            logger.warning('Failed to reload metadata cpg_id=%s exception_type=%s', cpg_id, type(exc).__name__)
 
         try:
             dmn_resp = client.list_objects_v2(
@@ -256,13 +435,13 @@ def _reload_cpg_artifacts() -> None:
                 name = key.rsplit("/", 1)[-1].removesuffix(".dmn")
                 _register_dmn_model(f"cpg-artifacts:{key}", name)
         except Exception as exc:
-            logger.warning("Failed to reload DMN models for %s: %s", cpg_id, exc)
+            logger.warning('Failed to reload DMN models cpg_id=%s exception_type=%s', cpg_id, type(exc).__name__)
 
         rec_ref = f"cpg-artifacts:{prefix}recommendations.json"
         try:
             _register_recommendations(rec_ref, cpg_id)
         except Exception as exc:
-            logger.warning("Failed to reload recommendations for %s: %s", cpg_id, exc)
+            logger.warning('Failed to reload recommendations cpg_id=%s exception_type=%s', cpg_id, type(exc).__name__)
 
         try:
             bpmn_resp = client.list_objects_v2(
@@ -278,7 +457,7 @@ def _reload_cpg_artifacts() -> None:
                     pointer = _artifacts_store.get(f"cpg-artifacts:{key}")
                     latest_versions[key.rsplit("/", 2)[-2]] = pointer.get("version")
                 except Exception as exc:
-                    logger.warning("Could not read latest template pointer %s: %s", key, exc)
+                    logger.warning('Could not read latest template pointer exception_type=%s (details redacted)', type(exc).__name__)
             templates = [
                 obj["Key"] for obj in objects
                 if obj["Key"].endswith(".template.json")
@@ -292,17 +471,17 @@ def _reload_cpg_artifacts() -> None:
             for key in templates:
                 _register_automation_template(f"cpg-artifacts:{key}", cpg_id)
         except Exception as exc:
-            logger.warning("Failed to reload automation templates for %s: %s", cpg_id, exc)
+            logger.warning('Failed to reload automation templates cpg_id=%s exception_type=%s', cpg_id, type(exc).__name__)
 
 
 # ---------------------------------------------------------------------------
 # SonataFlow review notification (no-op acknowledgment)
 # ---------------------------------------------------------------------------
 
-@app.post("/api/v1/notify-review")
+@app.post("/api/v1/notify-review", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_BFF', workflow_route=True))])
 def notify_review(payload: dict | None = None):
     """Called by SonataFlow when a review callback state is entered."""
-    logger.info("Review notification: %s", payload)
+    logger.info('Review notification (details redacted)')
     return {"status": "acknowledged"}
 
 
@@ -322,11 +501,14 @@ async def _start_workflow_background(run_id: str, ips_ref: str, patient_name: st
         instance = await _sonataflow.start_workflow(ips_ref, patient_name, business_key=run_id)
         _pending_runs[run_id]["sonataflow_id"] = instance["id"]
         _pending_runs[run_id]["status"] = "running"
+        metadata = run_metadata(run_id)
+        if metadata:
+            _persist_run_metadata({**metadata, "workflowInstanceId": instance["id"]})
         logger.info("Run %s → SonataFlow instance %s", run_id, instance["id"])
     except Exception as exc:
         _pending_runs[run_id]["status"] = "error"
         _pending_runs[run_id]["error"] = str(exc)
-        logger.error("Failed to start workflow for run %s: %s", run_id, exc)
+        logger.error('Failed to start workflow run_id=%s', run_id)
 
 
 def _pending_run_summary(pr: dict) -> dict:
@@ -361,40 +543,29 @@ def _pending_run_detail(pr: dict) -> dict:
 
 
 @app.post("/api/v1/runs", status_code=202)
-@mlflow.trace(name="bff.create_run")
+@trace_safe(name="bff.create_run")
 async def create_run(request: Request):
     """Accept an IPS bundle, store in MinIO, and start a SonataFlow workflow.
 
     Returns immediately with a run ID. The SonataFlow workflow is started
     in the background — the UI polls GET /runs/{id} for progress.
     """
+    _require_session_signing()
+    if not ACP_ALLOW_DIRECT_IPS:
+        raise HTTPException(404, detail={'error': 'direct-ips-disabled'})
     body = await request.json()
-    ips_bundle = body.get("ipsBundle")
-    if not ips_bundle:
-        return JSONResponse(status_code=400, content={"message": "ipsBundle is required"})
-
-    patient_name = _extract_patient_name(ips_bundle)
-    run_id = uuid4().hex[:12]
-    now = datetime.now(timezone.utc).isoformat()
-
-    ips_ref = ""
-    if _phi_store:
-        ips_ref = _phi_store.put(f"{run_id}/ips_bundle.json", ips_bundle)
-
-    _pending_runs[run_id] = {
-        "run_id": run_id,
-        "status": "starting",
-        "sonataflow_id": None,
-        "patient_name": patient_name,
-        "ips_ref": ips_ref,
-        "created_at": now,
-        "error": None,
-    }
-
-    if _sonataflow:
-        asyncio.create_task(_start_workflow_background(run_id, ips_ref or json.dumps(ips_bundle), patient_name))
-
-    return {"runId": run_id, "status": "starting"}
+    bundle = body.get('ipsBundle')
+    patient = _patient_id(bundle) if isinstance(bundle, dict) else None
+    if not patient:
+        raise HTTPException(400, detail={'error': 'patient-context'})
+    try:
+        result = await _create_patient_run(bundle, patient)
+        session, raw_id = _sessions.create('patient', patient, [result['runId']])
+    except Exception:
+        raise _sessions.unavailable() from None
+    response = JSONResponse(status_code=202, content=result)
+    _sessions.set_cookie(response, raw_id)
+    return response
 
 
 def _resolve_sonataflow_id(run_id: str) -> str | None:
@@ -426,8 +597,8 @@ async def _resolve_sf_id(run_id: str) -> str | None:
     return None
 
 
-@app.get("/api/v1/runs")
-async def list_runs(status: str | None = None, limit: int = 50):
+@app.get("/api/v1/runs", dependencies=[Depends(_patient_session)])
+async def list_runs(request: Request, status: str | None = None, limit: int = 50):
     summaries: list[dict] = []
     sf_ids_in_list: set[str] = set()
 
@@ -436,11 +607,7 @@ async def list_runs(status: str | None = None, limit: int = 50):
         sf_ids_in_list = {inst["id"] for inst in instances}
         for inst in instances:
             summary = map_to_run_summary(inst)
-            # If this instance was started with a business key matching a pending run, use that ID
-            for pr in _pending_runs.values():
-                if pr.get("sonataflow_id") == inst["id"]:
-                    summary["runId"] = pr["run_id"]
-                    break
+            summary['runId'] = inst.get('businessKey') or summary['runId']
             summaries.append(summary)
 
     # Include pending runs not yet visible in SonataFlow
@@ -448,13 +615,24 @@ async def list_runs(status: str | None = None, limit: int = 50):
         if not pr.get("sonataflow_id") or (pr.get("sonataflow_id") and _sonataflow and pr["sonataflow_id"] not in sf_ids_in_list):
             summaries.append(_pending_run_summary(pr))
 
+    subject = request.state.session.subject
+    visible = []
+    try:
+        for summary in summaries:
+            metadata = run_metadata(summary['runId'])
+            if (metadata and metadata.get('patientId') == subject
+                    and (metadata.get('iss') or '') == (request.state.session.meta.get('iss') or '')):
+                visible.append(summary)
+    except Exception:
+        raise _sessions.unavailable() from None
+    summaries = visible
     if status:
         summaries = [s for s in summaries if s["status"] == status]
     summaries.sort(key=lambda s: s.get("createdAt", ""), reverse=True)
     return summaries[:limit]
 
 
-@app.get("/api/v1/runs/{run_id}")
+@app.get("/api/v1/runs/{run_id}", dependencies=[Depends(_patient_session)])
 async def get_run(run_id: str):
     # Check pending runs first
     pr = _pending_runs.get(run_id)
@@ -500,58 +678,98 @@ async def get_run(run_id: str):
     if not instance:
         return JSONResponse(status_code=404, content={"message": f"Run {run_id} not found"})
     detail = map_to_run_detail(instance)
+    detail["runId"] = run_id
     return enrich_run_detail(detail, _phi_store, _artifacts_store)
 
 
-@app.post("/api/v1/runs/{run_id}/review/{gate}")
-@mlflow.trace(name="bff.submit_review")
+@app.post("/api/v1/runs/{run_id}/review/{gate}", dependencies=[Depends(_patient_session)])
+@trace_safe(name="bff.submit_review", ids=('run_id',))
 async def submit_review(run_id: str, gate: str, request: Request):
-    if gate != "careplan":
-        return JSONResponse(status_code=400, content={"message": f"Unknown gate: {gate}"})
+    if gate != 'careplan':
+        raise HTTPException(400, detail={'error': 'review-gate'})
     if not _sonataflow:
-        return JSONResponse(status_code=503, content={"message": "SonataFlow not configured"})
-
-    sf_id = await _resolve_sf_id(run_id)
-    if not sf_id:
-        return JSONResponse(status_code=404, content={"message": f"Run {run_id} not found"})
+        raise HTTPException(503, detail={'error': 'workflow-unavailable'})
     try:
-        instance = await _sonataflow.get_instance(sf_id)
-    except Exception:
-        return JSONResponse(status_code=404, content={"message": f"Run {run_id} not found"})
+        review = await request.json()
+    except ValueError:
+        raise HTTPException(400, detail={'error':'approval-binding'}) from None
+    if not isinstance(review, dict):
+        raise HTTPException(400, detail={'error':'approval-binding'})
+    round_number = review.get('reviewRound')
+    revision = review.get('artifactRevision')
+    decision = review.get('decision')
+    if (type(round_number) is not int or round_number < 0 or round_number > 1000000
+            or not isinstance(revision, str) or not re.fullmatch('[0-9a-f]{64}', revision)
+            or decision not in {'approve', 'request_changes'}):
+        raise HTTPException(400, detail={'error': 'approval-binding'})
+    if not APPROVAL_SIGNING_KEY:
+        raise HTTPException(503, detail={'error': 'signing-key-unconfigured'})
+    if _phi_store is None:
+        raise HTTPException(503, detail={'error': 'approval-store-unavailable'})
+    async with _review_locks.hold(run_id):
+        sf_id = await _resolve_sf_id(run_id)
+        if not sf_id:
+            raise HTTPException(503, detail={'error': 'workflow-unavailable'})
+        record_key = f'{run_id}/approvals/{round_number}.json'
+        receipt_key = f'{run_id}/approval-deliveries/{round_number}.json'
+        approval_ref = 'cpg-phi:' + record_key
+        existing = None
+        try:
+            existing = await asyncio.to_thread(_phi_store.get, record_key)
+        except Exception as exc:
+            if not _missing_object(exc):
+                raise HTTPException(503, detail={'error': 'approval-store-unavailable'}) from None
+        if existing:
+            if (not verify_record(existing, APPROVAL_SIGNING_KEY, os.getenv('APPROVAL_SIGNING_KEY_ID', 'v1'))
+                    or existing.get('runId') != run_id or existing.get('workflowInstanceId') != sf_id
+                    or existing.get('decision') != decision or existing.get('artifactRevision') != revision):
+                raise HTTPException(409, detail={'error': 'approval-stale'})
+            try:
+                receipt = await asyncio.to_thread(_phi_store.get, receipt_key)
+            except Exception as exc:
+                if not _missing_object(exc):
+                    raise HTTPException(503, detail={'error': 'approval-store-unavailable'}) from None
+                receipt = None
+            if receipt and verify_record(receipt, APPROVAL_SIGNING_KEY, os.getenv('APPROVAL_SIGNING_KEY_ID', 'v1')) and receipt.get('approvalRef') == approval_ref and receipt.get('artifactRevision') == revision:
+                return {**existing, 'duplicate': True}
+            record = existing
+        else:
+            try:
+                instance = await _sonataflow.get_instance(sf_id)
+                current = await asyncio.to_thread(enrich_run_detail, map_to_run_detail(instance), _phi_store, _artifacts_store)
+            except Exception:
+                raise HTTPException(503, detail={'error': 'workflow-unavailable'}) from None
+            if (current.get('awaitingReview') != gate or current.get('reviewIteration') != round_number
+                    or current.get('artifactRevision') != revision or not current.get('artifactRef')):
+                raise HTTPException(409, detail={'error': 'approval-stale'})
+            from acp_writer.services.reviewer import default_reviewer
+            record = sign_record({
+                'runId': run_id, 'workflowInstanceId': sf_id, 'reviewRound': round_number,
+                'fhirBundleRef': normalize_ref(current['artifactRef']), 'artifactRevision': revision,
+                'decision': decision, 'reviewer': default_reviewer().model_dump(),
+                'sessionSubject': request.state.session.subject,
+                'reviewerHint': request.state.session.meta.get('fhirUser'),
+                'recordedAt': datetime.now(timezone.utc).isoformat(),
+                # Keep the server's sanitized event in the signed record so a
+                # transport failure can retry the identical event after restart.
+                'comment': review.get('comment'), 'feedback': review.get('feedback'),
+            }, APPROVAL_SIGNING_KEY, os.getenv('APPROVAL_SIGNING_KEY_ID', 'v1'))
+            try:
+                await asyncio.to_thread(_phi_store.put, record_key, record)
+            except Exception:
+                raise HTTPException(503, detail={'error': 'approval-store-unavailable'}) from None
+        event = {key: record[key] for key in ('decision', 'reviewRound', 'artifactRevision', 'reviewer', 'comment', 'feedback')}
+        event.update(approvalRef=approval_ref, completed_at=record['recordedAt'])
+        try:
+            await _sonataflow.send_review(sf_id, gate, event, event_id=artifact_revision({'approvalRef': approval_ref, 'revision': revision}))
+            await asyncio.to_thread(_phi_store.put, receipt_key, sign_record({'approvalRef': approval_ref, 'artifactRevision': revision}, APPROVAL_SIGNING_KEY, os.getenv('APPROVAL_SIGNING_KEY_ID', 'v1')))
+        except Exception:
+            logger.error('Review event delivery unavailable')
+            raise HTTPException(503, detail={'error': 'workflow-unavailable'}) from None
+        return JSONResponse(status_code=202, content={'runId': run_id, 'status': 'running', 'steps': [], 'reviewRound': round_number, 'artifactRevision': revision})
 
-    pre_detail = map_to_run_detail(instance)
-    # Fast-feedback courtesy only. The data-index this reads lags the engine, so
-    # this check can be wrong either way — but harmlessly: a wrongly-passed check
-    # ends in an engine-side round discard + UI retry, and a wrongly-failed one
-    # shows a clear 409. The authoritative guard is round-binding in the workflow
-    # (ValidateReviewRound), not this pre-check.
-    if pre_detail.get("awaitingReview") != gate:
-        return JSONResponse(status_code=409, content={"message": "Run is not awaiting careplan review"})
 
-    review = await request.json()
-    try:
-        # Forwarded verbatim into the CloudEvent data, so the reviewRound the UI
-        # sent reaches the workflow's round guard unchanged (single spelling,
-        # camelCase, end to end — no translation point to disagree).
-        await _sonataflow.send_review(sf_id, gate, review or {})
-    except Exception:
-        logger.exception("send_review failed for run %s gate %s", run_id, gate)
-        return JSONResponse(
-            status_code=503,
-            content={"message": "Workflow engine temporarily unavailable — please try again."},
-        )
-
-    try:
-        updated = await _sonataflow.get_instance(sf_id)
-        updated_detail = map_to_run_detail(updated)
-        updated_detail["runId"] = run_id
-        enriched = enrich_run_detail(updated_detail, _phi_store, _artifacts_store)
-        return JSONResponse(status_code=202, content=enriched)
-    except Exception:
-        return JSONResponse(status_code=202, content={"runId": run_id, "status": "running", "steps": []})
-
-
-@app.delete("/api/v1/runs/{run_id}")
+@app.delete("/api/v1/runs/{run_id}", dependencies=[Depends(_patient_session)])
 async def cancel_run(run_id: str):
     if not _sonataflow:
         return JSONResponse(status_code=503, content={"message": "SonataFlow not configured"})
@@ -572,7 +790,7 @@ async def cancel_run(run_id: str):
 # Artifact proxy (MinIO)
 # ---------------------------------------------------------------------------
 
-@app.get("/api/v1/runs/{run_id}/artifacts/{path:path}")
+@app.get("/api/v1/runs/{run_id}/artifacts/{path:path}", dependencies=[Depends(_patient_session)])
 def get_artifact(run_id: str, path: str):
     try:
         key = validated_run_artifact_key(run_id, path)
@@ -592,34 +810,35 @@ def get_artifact(run_id: str, path: str):
 # Care plan proxy (fhir-server pod)
 # ---------------------------------------------------------------------------
 
-@app.get("/api/v1/careplans")
-async def list_careplans(patient: str | None = None, status: str | None = None):
-    params = {}
-    if patient:
-        params["patient"] = patient
+@app.get("/api/v1/careplans", dependencies=[Depends(_patient_session)])
+async def list_careplans(request: Request, patient: str | None = None, status: str | None = None):
+    patient = request.state.session.subject
+    params = {"patient": patient}
     if status:
         params["status"] = status
     try:
-        resp = await _http.get(f"{FHIR_SERVER_URL}/api/v1/careplans", params=params)
+        resp = await _http.get(f"{FHIR_SERVER_URL}/api/v1/careplans", headers=service_token_headers('SERVICE_TOKEN_ACP_FHIR_SERVER'), params=params)
         resp.raise_for_status()
         raw_plans = resp.json()
     except Exception as exc:
-        logger.error("Failed to list care plans: %s", exc)
+        logger.error('Failed to list care plans exception_type=%s (details redacted)', type(exc).__name__)
         return JSONResponse(status_code=502, content={"message": "Failed to reach FHIR server"})
-    return [_to_careplan_summary(cp) for cp in (raw_plans if isinstance(raw_plans, list) else [])]
+    return [_to_careplan_summary(cp) for cp in (raw_plans if isinstance(raw_plans, list) else []) if (_careplan_patient(cp) or _reference_patient(cp.get("patient_reference"))) == patient]
 
 
-@app.get("/api/v1/careplans/{careplan_id}")
-async def get_careplan(careplan_id: str):
+@app.get("/api/v1/careplans/{careplan_id}", dependencies=[Depends(_patient_session)])
+async def get_careplan(careplan_id: str, request: Request):
     try:
-        resp = await _http.get(f"{FHIR_SERVER_URL}/api/v1/careplans/{careplan_id}")
+        resp = await _http.get(f"{FHIR_SERVER_URL}/api/v1/careplans/{careplan_id}", headers=service_token_headers('SERVICE_TOKEN_ACP_FHIR_SERVER'))
         resp.raise_for_status()
         raw = resp.json()
     except Exception as exc:
-        logger.error("Failed to get care plan %s: %s", careplan_id, exc)
+        logger.error('Failed to get care plan careplan_id=%s', careplan_id)
         return JSONResponse(status_code=502, content={"message": "Failed to reach FHIR server"})
     if not raw:
         return JSONResponse(status_code=404, content={"message": f"Care plan {careplan_id} not found"})
+    if _careplan_patient(raw) != request.state.session.subject:
+        raise HTTPException(403, detail={"error": "out-of-scope"})
     detail = _to_careplan_detail(raw)
     await _merge_brief_automations(detail, careplan_id)
     return detail
@@ -638,7 +857,7 @@ async def _merge_brief_automations(detail: dict, careplan_id: str) -> None:
     try:
         instances = await _sonataflow.list_instances()
     except Exception as exc:
-        logger.warning("Could not list runs to enrich care plan %s: %s", careplan_id, exc)
+        logger.warning('Could not list runs to enrich care plan exception_type=%s (details redacted)', type(exc).__name__)
         return
     for inst in instances:
         summary = map_to_run_summary(inst)
@@ -647,7 +866,7 @@ async def _merge_brief_automations(detail: dict, careplan_id: str) -> None:
         try:
             full = await _sonataflow.get_instance(inst["id"])
         except Exception as exc:
-            logger.warning("Could not load run %s for care plan %s: %s", inst.get("id"), careplan_id, exc)
+            logger.warning('Could not load run run_id=%s', run_id)
             return
         run_detail = enrich_run_detail(map_to_run_detail(full), _phi_store, _artifacts_store)
         if not detail.get("runId"):
@@ -683,7 +902,7 @@ async def _merge_brief_automations(detail: dict, careplan_id: str) -> None:
 # System status
 # ---------------------------------------------------------------------------
 
-@app.get("/api/v1/status")
+@app.get("/api/v1/status", dependencies=[Depends(_patient_session)])
 async def system_status():
     result: dict = {
         "version": "0.1.0",
@@ -841,7 +1060,7 @@ def _extract_patient_from_bundle(bundle: dict) -> dict | None:
     return None
 
 
-@mlflow.trace(name="bff.extract_careplan_view")
+@trace_safe(name="bff.extract_careplan_view")
 def _extract_view_from_bundle(bundle: dict) -> tuple[list, list, list]:
     """Extract goals, activities, and conflicts from a FHIR CarePlan bundle."""
     entries = bundle.get("entry", [])
@@ -965,7 +1184,7 @@ def _extract_view_from_bundle(bundle: dict) -> tuple[list, list, list]:
     return goals, activities, conflicts
 
 
-@mlflow.trace(name="bff.read_activity_automation")
+@trace_safe(name="bff.read_activity_automation")
 def _automation_view_from_fhir_extension(
     extension: dict, resources: dict, task_activity_ids: dict[str, list[str]]
 ) -> dict | None:
@@ -1112,3 +1331,194 @@ async def _on_shutdown():
     await _http.aclose()
     if _sonataflow:
         await _sonataflow.close()
+
+
+# SMART authorization stays server-side; the SPA receives only its session.
+def _issuer(value: str) -> str:
+    return value.rstrip('/') + '/'
+
+
+def _server_url(url: str, iss: str) -> str:
+    if SMART_FHIR_INTERNAL_BASE:
+        public = urlsplit(iss)
+        target = urlsplit(url)
+        internal = urlsplit(SMART_FHIR_INTERNAL_BASE)
+        if (target.scheme, target.netloc) == (public.scheme, public.netloc):
+            return target._replace(scheme=internal.scheme, netloc=internal.netloc).geturl()
+    return url
+
+
+@trace_safe
+async def _smart_configuration(iss: str) -> dict:
+    cached = _discovery_cache.get(iss)
+    if cached and cached[0] > time.time():
+        return cached[1]
+    try:
+        response = await _http.get(_server_url(iss + '.well-known/smart-configuration', iss), timeout=15)
+        response.raise_for_status()
+        config = response.json()
+        for key in ('authorization_endpoint', 'token_endpoint'):
+            endpoint = urlsplit(config[key])
+            if endpoint.scheme not in {'http', 'https'} or not endpoint.hostname or endpoint.username or endpoint.password:
+                raise ValueError('Invalid discovery endpoint')
+    except Exception:
+        logger.warning('SMART discovery unavailable')
+        raise HTTPException(503, detail={'error': 'smart-unconfigured'}) from None
+    _discovery_cache[iss] = (time.time() + 3600, config)
+    return config
+
+
+@app.get('/api/v1/launch')
+@trace_safe
+async def smart_launch(iss: str = '', launch: str = ''):
+    _require_session_signing()
+    normalized = _issuer(iss)
+    allowed = {_issuer(value.strip()) for value in SMART_ISS_ALLOWLIST.split(',') if value.strip()}
+    if normalized not in allowed:
+        raise HTTPException(400, detail={'error': 'iss-not-allowed'})
+    if not launch or not SMART_CLIENT_ID or not SMART_CLIENT_SECRET or not SMART_REDIRECT_URI or not ACP_PUBLIC_ORIGIN:
+        raise HTTPException(503, detail={'error': 'smart-unconfigured'})
+    verifier, challenge = new_pkce()
+    nonce = secrets.token_urlsafe(32)
+    try:
+        state = _launch_states.issue({'iss': normalized, 'launch': launch, 'verifier': verifier,
+                                      'nonce_hash': token_hash(nonce), 'created': time.time()}, ttl_seconds=600)
+    except Exception:
+        raise _sessions.unavailable() from None
+    config = await _smart_configuration(normalized)
+    query = urlencode({
+        'response_type': 'code', 'client_id': SMART_CLIENT_ID, 'redirect_uri': SMART_REDIRECT_URI,
+        'scope': SMART_SCOPES, 'state': state, 'aud': normalized, 'launch': launch,
+        'code_challenge': challenge, 'code_challenge_method': 'S256',
+    })
+    response = RedirectResponse(config['authorization_endpoint'] + '?' + query, status_code=302)
+    response.set_cookie('acp_launch', nonce, max_age=600, httponly=True, secure=SESSION_COOKIE_SECURE, samesite='lax', path='/')
+    return response
+
+
+def _launch_error(status, error):
+    response = JSONResponse(status_code=status, content={'detail': {'error': error}})
+    response.delete_cookie('acp_launch', httponly=True, secure=SESSION_COOKIE_SECURE, samesite='lax', path='/')
+    return response
+
+
+@app.get('/api/v1/launch/callback')
+@trace_safe
+async def smart_callback(request: Request, code: str = '', state: str = '', error: str = ''):
+    _require_session_signing()
+    try:
+        pending = _launch_states.consume(state)
+    except Exception:
+        return _launch_error(503, 'session-store-unavailable')
+    nonce = request.cookies.get('acp_launch', '')
+    if not pending or not nonce or not secrets.compare_digest(token_hash(nonce), pending.get('nonce_hash', '')):
+        return _launch_error(400, 'launch-state')
+    if error or not code:
+        return _launch_error(403, 'launch-failed')
+    iss = pending['iss']
+    config = await _smart_configuration(iss)
+    try:
+        token_response = await _http.post(
+            _server_url(config['token_endpoint'], iss),
+            data={'grant_type': 'authorization_code', 'code': code, 'redirect_uri': SMART_REDIRECT_URI,
+                  'client_id': SMART_CLIENT_ID, 'code_verifier': pending['verifier']},
+            auth=httpx.BasicAuth(SMART_CLIENT_ID, SMART_CLIENT_SECRET), timeout=15,
+        )
+        if token_response.status_code != 200:
+            logger.warning('SMART code exchange refused (HTTP %d)', token_response.status_code)
+            return _launch_error(403, 'launch-failed')
+        tokens = token_response.json()
+        patient = tokens.get('patient')
+        access_token = tokens.get('access_token')
+        if not isinstance(patient, str) or not re.fullmatch(r'[A-Za-z0-9.-]{1,64}', patient) or not isinstance(access_token, str) or not access_token:
+            return _launch_error(403, 'launch-failed')
+    except Exception:
+        return _launch_error(403, 'launch-failed')
+    try:
+        summary = await _http.get(
+            (SMART_FHIR_INTERNAL_BASE.rstrip('/') + '/' if SMART_FHIR_INTERNAL_BASE else iss) + f'Patient/{patient}/$summary',
+            headers={'Authorization': 'Bearer ' + access_token}, timeout=15,
+        )
+        summary.raise_for_status()
+        bundle = summary.json()
+        if bundle.get('resourceType') != 'Bundle' or _patient_id(bundle) != patient:
+            return _launch_error(502, 'ips-unavailable')
+    except Exception:
+        return _launch_error(502, 'ips-unavailable')
+    # An ID-token hint is display/audit context only; never an authorization or
+    # named-clinician Provenance claim. Patient scope comes from the token response.
+    hint = None
+    try:
+        encoded = tokens.get('id_token', '').split('.')[1]
+        claims = json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+        hint = claims.get('fhirUser') if isinstance(claims.get('fhirUser'), str) else None
+    except Exception:
+        pass
+    del access_token, tokens
+    try:
+        run = await _create_patient_run(bundle, patient, iss)
+        session, raw_id = _sessions.create('patient', patient, [run['runId']], meta={'iss': iss, 'fhirUser': hint})
+    except Exception:
+        return _launch_error(503, 'session-store-unavailable')
+    response = RedirectResponse(ACP_PUBLIC_ORIGIN + '/runs/' + run['runId'], status_code=302)
+    _sessions.set_cookie(response, raw_id)
+    response.delete_cookie('acp_launch', httponly=True, secure=SESSION_COOKIE_SECURE, samesite='lax', path='/')
+    return response
+
+
+@app.get('/api/v1/session')
+@trace_safe
+async def browser_session(request: Request):
+    try:
+        session = _sessions.load(request)
+    except Exception:
+        raise _sessions.unavailable() from None
+    if session is None:
+        return JSONResponse(status_code=401, content={'detail': {'error': 'session-required'}, 'directIpsEnabled': ACP_ALLOW_DIRECT_IPS})
+    return {'kind': session.kind, 'subject': session.subject, 'runIds': session.run_ids,
+            'csrfToken': session.csrf_token, 'expiresAt': session.expires_at, 'directIpsEnabled': ACP_ALLOW_DIRECT_IPS}
+
+
+@app.post('/api/v1/session/logout', dependencies=[Depends(_patient_session)])
+@trace_safe
+async def browser_logout(request: Request):
+    try:
+        _sessions.store.delete(request.state.session.id_hash)
+    except Exception:
+        raise _sessions.unavailable() from None
+    response = Response(status_code=204)
+    _sessions.clear_cookie(response)
+    return response
+
+
+@trace_safe
+async def _sweep_browser_records():
+    try:
+        _sessions.store.sweep()
+        _launch_states.sweep()
+    except Exception:
+        _sessions.unavailable()
+
+
+async def _browser_record_maintenance():
+    while True:
+        await _sweep_browser_records()
+        await asyncio.sleep(3600)
+
+
+@app.on_event('startup')
+async def start_browser_maintenance():
+    if ACP_ALLOW_DIRECT_IPS:
+        logger.warning('Dev-only direct IPS submission is enabled')
+    app.state.browser_maintenance = asyncio.create_task(_browser_record_maintenance())
+
+
+@app.on_event('shutdown')
+async def stop_browser_maintenance():
+    task = getattr(app.state, 'browser_maintenance', None)
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass

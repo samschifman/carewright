@@ -1,3 +1,5 @@
+import { http, HttpResponse } from "msw";
+import { server } from "@app/mocks/server";
 import { describe, it, expect } from "vitest";
 import {
   createRun,
@@ -29,7 +31,7 @@ describe("api service", () => {
   });
 
   it("submitReview approve returns a completed run", async () => {
-    const run = await submitReview("run-review", { decision: "approve" });
+    const run = await submitReview("run-review", { decision: "approve", reviewRound: 0, artifactRevision: "a".repeat(64) });
     expect(run.status).toBe("completed");
   });
 
@@ -41,4 +43,14 @@ describe("api service", () => {
   it("getSystemStatus returns health", async () => {
     expect((await getSystemStatus()).decisionEngine?.available).toBe(true);
   });
+  it.each([
+    ["out-of-scope", "This run is not part of your current patient session."],
+    ["csrf", "Your session could not validate this request. Reload the page and try again."],
+    ["approval-stale", "This review has changed. Reload it before submitting again."],
+    ["session-required", "Launch the application from your EHR to start a session."],
+  ])("renders %s errors readably", async (code, message) => {
+    server.use(http.get("/api/v1/runs/forbidden", () => HttpResponse.json({detail:{error:code}}, {status:403})));
+    await expect(getRunDetail("forbidden")).rejects.toThrow(message);
+  });
+
 });

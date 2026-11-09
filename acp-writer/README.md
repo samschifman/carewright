@@ -93,6 +93,21 @@ For an operator-managed BFF, `SONATAFLOW_URL` is the workflow API base URL and
 `SONATAFLOW_WORKFLOW_NAME` is the generated SonataFlow workflow name. The latter
 defaults to `acpwriter` for standalone deployments.
 
+### Async service callbacks
+
+When running async services by hand, set `WORKFLOW_CALLBACK_ORIGIN` to the
+SonataFlow origin reachable **from those services**, for example
+`WORKFLOW_CALLBACK_ORIGIN=http://localhost:8097`. A comma-separated list of
+origins is supported. Each entry must be `http://host[:port]` or
+`https://host[:port]`; paths and credentials are not allowed. A callback must
+match a configured scheme, host, and effective port. Missing configuration or
+a disallowed callback returns HTTP 400 before background work starts; callback
+delivery rechecks the origin and never follows redirects.
+
+`compose.orchestrated.yml` sets `http://sonataflow-devmode:8080` on each async
+service. Operator-managed deployments also need their workflow Service origin
+in this variable; the operator wiring is delivered separately in Track B6.
+
 ## API Contract
 
 REST API defined in [`api/openapi.yaml`](api/openapi.yaml). MCP tools in [`api/mcp-tools.json`](api/mcp-tools.json).
@@ -214,7 +229,7 @@ sequenceDiagram
 | `ACP_REVIEWER_ID_SYSTEM` | Identifier system for the default reviewer |
 | `ACP_REVIEWER_ID_VALUE` | Identifier value for the default reviewer |
 
-The reviewer identity is a SMART-on-FHIR-ready seam: a request may override the configured default per-approval. See `services/reviewer.py`.
+Reviewer identity comes from the configured default in `services/reviewer.py`. Browser review requests cannot override it; a SMART identity hint does not establish clinical attribution.
 
 ## Clinical Data Extraction
 
@@ -294,3 +309,13 @@ The **Conflict Analyst** is not a separate SonataFlow state — it runs inside t
 ## Decision Service (Internal)
 
 The decision service bundles no DMN models. It compiles and validates DMN sent by acp-writer at request time; use the acp-writer API rather than calling the internal service directly.
+
+## Browser sessions and publication security
+
+Launch from the EHR at `/api/v1/launch?iss=...&launch=...`; register `/api/v1/launch/callback` as the redirect. Configure `SMART_CLIENT_ID`, `SMART_CLIENT_SECRET`, comma-separated `SMART_ISS_ALLOWLIST`, `SMART_REDIRECT_URI` and exact `ACP_PUBLIC_ORIGIN` on the BFF. Credentials stay server-side. `SMART_FHIR_INTERNAL_BASE` optionally supplies the internal FHIR base for backend requests; the browser continues using the declared EHR origin. Use a single EHR patient-identifier authority per writer deployment.
+
+The callback creates an eight-hour patient session. Browser requests include its cookie and use the CSRF token from `/api/v1/session` for mutations; logout revokes it. Runs and CarePlans are patient scoped. Direct IPS submission is disabled unless `ACP_ALLOW_DIRECT_IPS=true` for synthetic development/evaluation. `SESSION_COOKIE_SECURE=false` is accepted only with a localhost HTTP public origin. Use one BFF replica/worker with Recreate updates.
+
+Internal callers send the receiver's `X-Service-Token`. Reviews require the displayed `reviewRound` and `artifactRevision`. `/api/v1/write` and status activation require `approval_ref`, `fhir_bundle_ref` and the workflow instance `careplan_id`; a service token, inline bundle or `approved=true` alone cannot publish. Provision `APPROVAL_SIGNING_KEY` only to the BFF and FHIR publication service in this pipeline. MCP generation produces drafts. See [security](../docs/security.md) for deployment wiring, accepted gaps and rotation.
+
+The BFF separately requires `SESSION_SIGNING_KEY` for sessions, launch states and signed run metadata. It must differ from `APPROVAL_SIGNING_KEY`. Local BFF/browser development uses `compose.yml` with `compose.orchestrated.yml`; its default tokens and keys are localhost-only synthetic development values. Run the Medplum loader before recreating the BFF to read `.medplum/smart-client.env`.

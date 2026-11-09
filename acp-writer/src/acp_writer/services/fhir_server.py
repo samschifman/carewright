@@ -6,22 +6,31 @@ Security profile: FHIR server access only.
 
 import logging
 
+from cpg_contracts.service_auth import require_service_token
+from cpg_contracts.tracing import install_phi_span_processor
+from fastapi import Depends
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(name)s: %(message)s")
 
-from fastapi import FastAPI, Request
-
-from cpg_contracts import get_phi_store, resolve_ref
 from acp_writer.nodes.fhir_server_writer import (
     approve_care_plan,
     fhir_server_writer,
     get_care_plan,
     list_care_plans,
-    reject_care_plan,
     rehydrate_care_plans_from_jobs,
+    reject_care_plan,
 )
-from acp_writer.services.automation_publisher import get_publisher, publication_status_view
+from acp_writer.services.approval_binding import write_approved_bundle
+from acp_writer.services.automation_publisher import (
+    get_publisher,
+    publication_status_view,
+)
+from cpg_contracts import get_phi_store, resolve_ref
+from fastapi import FastAPI, Request
 
 logger = logging.getLogger(__name__)
+
+install_phi_span_processor()
 
 app = FastAPI(title="acp-writer-fhir-server", version="0.1.0")
 _phi_store = get_phi_store()
@@ -41,45 +50,19 @@ def health():
     return {"status": "UP", "service": "fhir-server"}
 
 
-@app.post("/api/v1/write")
+@app.post("/api/v1/write", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER', workflow_route=True))])
 async def write(request: Request):
-    """Write FHIR Bundle to HAPI FHIR server.
-
-    In the in-run gate model, WriteFHIR only executes after the care-plan
-    review gate approves, so the bundle is written as active by default.
-    """
-    from acp_writer.services.reviewer import reviewer_from_payload
-
+    """Publish only the signed approval's exact artifact revision."""
     data = await request.json()
-    fhir_bundle = resolve_ref(data, "fhir_bundle", _phi_store)
-    approved = data.get("approved", True)
-    state = {
-        "fhir_bundle": fhir_bundle,
-        "careplan_id": (
-            data.get("careplan_id")
-            or data.get("business_key")
-            or data.get("workflow_business_key")
-            or data.get("process_instance_id")
-            or data.get("run_id")
-        ),
-        "patient_reference": data.get("patient_reference", ""),
-        "approved": approved,
-        # The approving clinician from the care-plan review gate. Threaded so the
-        # deployed path records the verifier + acknowledges conflicts (#169 F1).
-        "reviewer": reviewer_from_payload(
-            data.get("reviewer"), clinician=data.get("clinician")
-        ).model_dump(),
-    }
-    result = fhir_server_writer(state)
-    return result
+    return write_approved_bundle(data, _phi_store, fhir_server_writer)
 
 
-@app.get("/api/v1/careplans")
+@app.get("/api/v1/careplans", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER'))])
 def careplans(patient: str | None = None, status: str | None = None):
     return list_care_plans(patient=patient, status=status)
 
 
-@app.get("/api/v1/careplans/{careplan_id}")
+@app.get("/api/v1/careplans/{careplan_id}", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER'))])
 def get_careplan(careplan_id: str):
     cp = get_care_plan(careplan_id)
     if not cp:
@@ -88,14 +71,12 @@ def get_careplan(careplan_id: str):
     return cp
 
 
-@app.put("/api/v1/careplans/{careplan_id}/status")
+@app.put("/api/v1/careplans/{careplan_id}/status", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER'))])
 async def update_status(careplan_id: str, request: Request):
     data = await request.json()
     new_status = data.get("status")
     if new_status == "active":
-        from acp_writer.services.reviewer import reviewer_from_payload
-        reviewer = reviewer_from_payload(data.get("reviewer"), clinician=data.get("clinician"))
-        result = approve_care_plan(careplan_id, reviewer=reviewer)
+        return write_approved_bundle({**data, "careplan_id": careplan_id}, _phi_store, fhir_server_writer)
     elif new_status == "entered-in-error":
         result = reject_care_plan(careplan_id, reason=data.get("reason", "No reason provided"))
     else:
@@ -107,7 +88,7 @@ async def update_status(careplan_id: str, request: Request):
     return result
 
 
-@app.post("/api/v1/careplans/{careplan_id}/automations/publish")
+@app.post("/api/v1/careplans/{careplan_id}/automations/publish", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_FHIR_SERVER'))])
 def retry_automation_publication(careplan_id: str):
     result = get_publisher().retry(careplan_id)
     if result is None:

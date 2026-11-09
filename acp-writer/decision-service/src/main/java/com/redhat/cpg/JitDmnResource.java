@@ -65,6 +65,18 @@ public class JitDmnResource {
                 .build();
         }
 
+        List<String> unsupported = DmnSafetyGuard.findUnsupported(dmnXml);
+        if (unsupported.equals(List.of("unparseable DMN"))) {
+            return Response.status(422)
+                .entity(engineError("DMN compilation errors", "unparseable DMN"))
+                .build();
+        }
+        if (!unsupported.isEmpty()) {
+            return Response.status(400)
+                .entity(Map.of("error", "unsupported-dmn-feature", "messages", unsupported))
+                .build();
+        }
+
         try {
             DMNValidator validator = DMNValidatorFactory.newValidator();
             List<DMNMessage> messages = validator.validate(
@@ -123,6 +135,19 @@ public class JitDmnResource {
         } catch (IllegalArgumentException e) {
             return Response.status(400)
                 .entity(Map.of("error", "dmn_xml_base64 is not valid Base64"))
+                .build();
+        }
+
+        List<String> unsupported = DmnSafetyGuard.findUnsupported(
+            new String(dmnBytes, StandardCharsets.UTF_8));
+        if (unsupported.equals(List.of("unparseable DMN"))) {
+            return Response.status(422)
+                .entity(engineError("DMN compilation errors", "unparseable DMN"))
+                .build();
+        }
+        if (!unsupported.isEmpty()) {
+            return Response.status(400)
+                .entity(Map.of("error", "unsupported-dmn-feature", "messages", unsupported))
                 .build();
         }
 

@@ -152,11 +152,7 @@ pods:
     env:
       bffHost: acp-bff:8080
     route: true
-    volumes:
-      - name: smart-credentials
-        secretName: smart-client-credentials
-        mountPath: /opt/app-root/src/smart-config.json
-        subPath: smart-config.json
+    volumes: []
     resources:
       requests:
         cpu: 50m

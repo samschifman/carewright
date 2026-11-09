@@ -33,9 +33,9 @@ spec:
             - name: DATA_DIR
               value: /data
             - name: ACP_WRITER_LAUNCH_URI
-              value: {{ $acpWriterUiRoute }}/launch
+              value: {{ $acpWriterUiRoute }}/api/v1/launch
             - name: ACP_WRITER_REDIRECT_URI
-              value: {{ $acpWriterUiRoute }}/
+              value: {{ $acpWriterUiRoute }}/api/v1/launch/callback
             - name: MEDPLUM_SUPERADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:

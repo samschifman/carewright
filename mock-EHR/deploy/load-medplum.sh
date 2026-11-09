@@ -16,8 +16,8 @@ set -euo pipefail
 
 MEDPLUM_BASE_URL="${MEDPLUM_BASE_URL:-http://localhost:8103}"
 DATA_DIR="${DATA_DIR:-/data}"
-ACP_WRITER_LAUNCH_URI="${ACP_WRITER_LAUNCH_URI:-http://localhost:3001/launch}"
-ACP_WRITER_REDIRECT_URI="${ACP_WRITER_REDIRECT_URI:-http://localhost:3001/}"
+ACP_WRITER_LAUNCH_URI="${ACP_WRITER_LAUNCH_URI:-http://localhost:3001/api/v1/launch}"
+ACP_WRITER_REDIRECT_URI="${ACP_WRITER_REDIRECT_URI:-http://localhost:3001/api/v1/launch/callback}"
 
 CODE_CHALLENGE="mock_ehr_setup_challenge"
 
@@ -315,6 +315,9 @@ print(json.dumps({
     },
     "type": "Opaque",
     "stringData": {
+        "SMART_CLIENT_ID": os.environ["CLIENT_ID"],
+        "SMART_CLIENT_SECRET": os.environ["CLIENT_SECRET"],
+        # Deprecated compatibility key; never mount this into a UI docroot.
         "smart-config.json": json.dumps({
             "clientId": os.environ["CLIENT_ID"],
             "clientSecret": os.environ["CLIENT_SECRET"],
@@ -353,8 +356,9 @@ log "Registered acp-writer SMART app"
 # Legacy file-based config (kept for local dev / compose.yml)
 SMART_CONFIG_DIR="${SMART_CONFIG_DIR:-}"
 if [ -n "$SMART_CONFIG_DIR" ] && [ -n "$CLIENT_ID" ]; then
-  echo "{\"clientId\":\"$CLIENT_ID\",\"clientSecret\":\"$CLIENT_SECRET\"}" > "$SMART_CONFIG_DIR/smart-config.json"
-  log "  Wrote SMART config to $SMART_CONFIG_DIR/smart-config.json"
+  (umask 077; printf 'SMART_CLIENT_ID=%s\nSMART_CLIENT_SECRET=%s\n' "$CLIENT_ID" "$CLIENT_SECRET" > "$SMART_CONFIG_DIR/smart-client.env")
+  log "  Wrote server-side SMART environment configuration"
+
 fi
 
 FHIR_ENV_DIR="${FHIR_ENV_DIR:-}"

@@ -1,6 +1,7 @@
 import { http, HttpResponse } from "msw";
 import type { ReviewAction } from "@app/api/models";
 import {
+  browserSession,
   carePlanDetail,
   carePlanSummaries,
   runAwaitingReview,
@@ -15,6 +16,9 @@ const B = "/api/v1";
 const isSliceScenario = import.meta.env.VITE_MOCK_SCENARIO === "slice";
 
 export const handlers = [
+  http.get(`${B}/session`, () => HttpResponse.json(browserSession)),
+  http.post(`${B}/session/logout`, ({ request }) => request.headers.get("X-CSRF-Token") === browserSession.csrfToken
+    ? new HttpResponse(null, { status: 204 }) : HttpResponse.json({ error: "csrf" }, { status: 403 })),
   http.get(`${B}/runs`, () => HttpResponse.json(
     isSliceScenario
       ? [{
@@ -29,8 +33,8 @@ export const handlers = [
       : runSummaries,
   )),
 
-  http.post(`${B}/runs`, async () =>
-    HttpResponse.json({ runId: "run-123", status: "running" }, { status: 202 }),
+  http.post(`${B}/runs`, async ({ request }) =>
+    request.headers.get("X-CSRF-Token") !== browserSession.csrfToken ? HttpResponse.json({ error: "csrf" }, { status: 403 }) : HttpResponse.json({ runId: "run-123", status: "running" }, { status: 202 }),
   ),
 
   http.get(`${B}/runs/:runId`, ({ params }) => {
@@ -47,9 +51,10 @@ export const handlers = [
     return HttpResponse.json(runRunning);
   }),
 
-  http.delete(`${B}/runs/:runId`, () => new HttpResponse(null, { status: 204 })),
+  http.delete(`${B}/runs/:runId`, ({ request }) => request.headers.get("X-CSRF-Token") === browserSession.csrfToken ? new HttpResponse(null, { status: 204 }) : HttpResponse.json({ error: "csrf" }, { status: 403 })),
 
   http.post(`${B}/runs/:runId/review/careplan`, async ({ request }) => {
+    if (request.headers.get("X-CSRF-Token") !== browserSession.csrfToken) return HttpResponse.json({ error: "csrf" }, { status: 403 });
     const body = (await request.json()) as ReviewAction;
     // approve -> completed; request_changes -> back to running
     return HttpResponse.json(

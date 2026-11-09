@@ -1,135 +1,113 @@
-"""Endpoint tests for POST /api/v1/runs/{id}/review/{gate} and run lookup.
-
-Covers the review-gate v2 behavior (#169):
-
-  - engine send_review raises -> 503 with a friendly message (kept from bcf487f)
-  - the submission's `reviewRound` reaches the CloudEvent data verbatim, under
-    that exact camelCase key (the round guard fails OPEN, so this passthrough is
-    load-bearing — a rename would silently disable engine-side validation)
-  - submit at a gate that isn't armed -> 409 (fast-feedback courtesy)
-  - runs resolve by business key when the in-memory map is empty (BFF restart),
-    for both get_run and submit_review; an unknown run -> 404
-
-The duplicate-tracker (_pending_reviews) from bcf487f is gone: duplicates are
-now handled semantically by the engine's round guard, so there are no
-409-duplicate tests here.
-"""
-
+"""Session-authenticated reviews bind one immutable artifact and current round."""
+import copy
+import json
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
+from acp_writer.services import bff
+from cpg_contracts.approvals import artifact_revision, verify_record
 from fastapi.testclient import TestClient
 
-from acp_writer.services import bff
+BUNDLE = {'resourceType': 'Bundle', 'entry': [{'resource': {'resourceType': 'CarePlan', 'subject': {'reference': 'Patient/p1'}}}]}
 
 
-def _instance(workflowdata: dict) -> dict:
-    return {
-        "id": "sf-1",
-        "status": "ACTIVE",
-        "startDate": "2026-01-01T00:00:00Z",
-        "workflowdata": workflowdata,
-    }
-
-
-# careplanReviewCount is injected immediately before the ReviewCarePlan gate.
-AT_GATE = _instance({
-    "fhirReviewData": {"completed_at": "2026-01-01T01:00:00Z"},
-    "careplanReviewCount": 0,
-})
-# approve consumed -> WriteFHIR, run no longer awaiting the careplan gate.
-PAST_GATE = _instance(
-    {
-        "fhirReviewData": {"completed_at": "2026-01-01T01:00:00Z"},
-        "careplanReview": {"decision": "approve", "completed_at": "2026-01-01T02:00:00Z"},
-    }
-)
+class Store:
+    def __init__(self): self.records = {'run-1/fhir_bundle.json': BUNDLE}
+    def get(self, ref): return copy.deepcopy(self.records[ref.removeprefix('cpg-phi:')])
+    def put(self, key, value): self.records[key] = copy.deepcopy(value); return 'cpg-phi:' + key
 
 
 class FakeSonataFlow:
-    """Stand-in for SonataFlowClient.
-
-    Models the real id/business-key split: `run_id` is a business key, never a
-    valid instance id, so get_instance(run_id) raises and only get_instance for
-    the actual instance id (`instance["id"]`) or a business-key lookup succeeds.
-    """
-
-    def __init__(self, instance: dict):
-        self.instance = instance
+    def __init__(self):
+        self.instance = {'id': 'sf-1', 'status': 'ACTIVE', 'workflowdata': {
+            'fhirGenData': {'fhir_bundle_ref': 'cpg-phi:run-1/fhir_bundle.json'},
+            'fhirReviewData': {'completed_at': '2026-01-01T01:00:00Z'}, 'careplanReviewCount': 0,
+        }}
         self.send_review = AsyncMock()
-
-    async def get_instance(self, sf_id: str) -> dict:
-        if sf_id == self.instance["id"]:
-            return self.instance
-        raise httpx.HTTPStatusError(
-            "not found",
-            request=httpx.Request("POST", "http://sf/graphql"),
-            response=httpx.Response(404),
-        )
-
-    async def get_instance_by_business_key(self, key: str) -> dict | None:
-        return self.instance
+    async def get_instance(self, sf_id): return copy.deepcopy(self.instance)
+    async def get_instance_by_business_key(self, run_id): return copy.deepcopy(self.instance)
 
 
 @pytest.fixture
 def client(monkeypatch):
-    fake = FakeSonataFlow(AT_GATE)
-    monkeypatch.setattr(bff, "_sonataflow", fake)
-    monkeypatch.setattr(bff, "_pending_runs", {})
+    fake, store = FakeSonataFlow(), Store()
+    monkeypatch.setattr(bff, '_sonataflow', fake)
+    monkeypatch.setattr(bff, '_phi_store', store)
+    monkeypatch.setattr(bff, '_pending_runs', {})
+    monkeypatch.setattr(bff, '_review_locks', bff.AsyncKeyedLocks())
+    monkeypatch.setattr(bff, 'APPROVAL_SIGNING_KEY', 'test-signing-key')
     tc = TestClient(bff.app)
-    tc.fake = fake  # let tests reach the mock
+    tc.fake, tc.store = fake, store
     return tc
 
 
-def test_engine_unavailable_returns_503(client):
-    client.fake.send_review.side_effect = RuntimeError("Error Occurred After Shutdown")
-    res = client.post("/api/v1/runs/run-1/review/careplan", json={"decision": "approve", "reviewRound": 0})
-    assert res.status_code == 503
-    assert "temporarily unavailable" in res.json()["message"]
+def review(client, **overrides):
+    return client.post('/api/v1/runs/run-1/review/careplan', json={
+        'decision': 'approve', 'reviewRound': 0, 'artifactRevision': artifact_revision(BUNDLE), **overrides,
+    })
 
 
-def test_review_round_reaches_cloudevent_verbatim(client):
-    res = client.post(
-        "/api/v1/runs/run-1/review/careplan",
-        json={"decision": "approve", "clinician": "Dr. Smith", "reviewRound": 2},
-    )
-    assert res.status_code == 202
-    # send_review(sf_id, gate, review_dict) — the review dict is what becomes the
-    # CloudEvent `data`. Assert the EXACT camelCase key survives.
-    _sf_id, _gate, review = client.fake.send_review.await_args.args
-    assert "reviewRound" in review
-    assert review["reviewRound"] == 2
-
-
-def test_submit_when_not_awaiting_gate_returns_409(client):
-    client.fake.instance = PAST_GATE
-    res = client.post("/api/v1/runs/run-1/review/careplan", json={"decision": "approve", "reviewRound": 0})
-    assert res.status_code == 409
-    assert "not awaiting" in res.json()["message"]
-    client.fake.send_review.assert_not_awaited()
-
-
-def test_submit_resolves_run_by_business_key(client):
-    # Empty _pending_runs (as after a BFF restart): the run must still be found
-    # via the business-key fallback and reach the gate check + send_review.
-    res = client.post("/api/v1/runs/run-1/review/careplan", json={"decision": "approve", "reviewRound": 0})
-    assert res.status_code == 202
+def test_matching_review_records_then_sends_one_event(client):
+    assert review(client, clinician='forged', reviewer={'display': 'forged'}, completed_at='forged').status_code == 202
+    record = client.store.records['run-1/approvals/0.json']
+    assert verify_record(record, 'test-signing-key')
+    assert record['workflowInstanceId'] == 'sf-1'
+    assert record['fhirBundleRef'] == 'cpg-phi:run-1/fhir_bundle.json'
+    assert record['sessionSubject'] == 'p1'
+    assert record['reviewer']['display'] != 'forged'
+    event = client.fake.send_review.await_args.args[2]
+    assert event['approvalRef'] == 'cpg-phi:run-1/approvals/0.json'
+    assert event['completed_at'] != 'forged'
+    assert 'clinician' not in event
+    assert review(client).status_code == 200
+    assert review(client).json()['duplicate'] is True
     assert client.fake.send_review.await_count == 1
 
 
+@pytest.mark.parametrize('overrides,status', [({'reviewRound': 1},409),({'artifactRevision': '0'*64},409),({'reviewRound': None},400),({'artifactRevision': None},400)])
+def test_stale_or_missing_binding_is_refused(client, overrides, status):
+    assert review(client, **overrides).status_code == status
+    client.fake.send_review.assert_not_awaited()
+    assert 'run-1/approvals/0.json' not in client.store.records
+
+
+def test_changed_decision_under_same_round_is_stale(client):
+    assert review(client).status_code == 202
+    assert review(client, decision='request_changes').status_code == 409
+    assert client.fake.send_review.await_count == 1
+
+
+def test_event_transport_failure_can_retry_identical_signed_event(client):
+    client.fake.send_review.side_effect = RuntimeError('sensitive upstream failure')
+    assert review(client).status_code == 503
+    saved = copy.deepcopy(client.store.records['run-1/approvals/0.json'])
+    first = client.fake.send_review.await_args
+    client.fake.send_review.side_effect = None
+    assert review(client).status_code == 202
+    assert client.store.records['run-1/approvals/0.json'] == saved
+    assert client.fake.send_review.await_args == first
+    assert review(client).json()['duplicate'] is True
+    assert client.fake.send_review.await_count == 2
+
+
+def test_unresolvable_workflow_writes_nothing(client):
+    client.fake.get_instance_by_business_key = AsyncMock(return_value=None)
+    assert review(client).status_code == 503
+    assert 'run-1/approvals/0.json' not in client.store.records
+
+
+def test_other_run_cannot_be_reviewed(client, monkeypatch):
+    monkeypatch.setattr(bff, '_run_metadata_cache', {'other-run': {'patientId': 'another-patient'}})
+    assert client.post('/api/v1/runs/other-run/review/careplan', json={'decision':'approve'}).status_code == 403
+    client.fake.send_review.assert_not_awaited()
+
+
 def test_get_run_resolves_by_business_key(client):
-    # get_instance(run_id) raises (business key is not an instance id); the
-    # business-key fallback must recover the live run instead of 404ing.
-    res = client.get("/api/v1/runs/run-1")
-    assert res.status_code == 200
-    assert res.json()["awaitingReview"] == "careplan"
+    response = client.get('/api/v1/runs/run-1')
+    assert response.status_code == 200
+    assert response.json()['artifactRevision'] == artifact_revision(BUNDLE)
+    assert response.json()['artifactRef'] == 'cpg-phi:run-1/fhir_bundle.json'
 
 
-def test_get_run_unknown_returns_404(client):
-    async def none_by_key(key):
-        return None
-
-    client.fake.get_instance_by_business_key = none_by_key
-    res = client.get("/api/v1/runs/does-not-exist")
-    assert res.status_code == 404
+def test_get_unknown_run_returns_404(client):
+    assert client.get('/api/v1/runs/does-not-exist').status_code == 404

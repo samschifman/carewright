@@ -516,6 +516,37 @@ EOF
   fi
 }
 
+ensure_security_secrets() {
+  local secret key file
+  local -a arguments
+  for secret in carewright-service-tokens carewright-approval-signing-key carewright-session-signing-key carewright-ingester-signing-key; do
+    local -a keys
+    if [[ "$secret" == carewright-service-tokens ]]; then
+      keys=(SERVICE_TOKEN_ACP_BFF SERVICE_TOKEN_ACP_DECISION_ENGINE SERVICE_TOKEN_ACP_LLM_REASONING SERVICE_TOKEN_ACP_PATIENT_DATA SERVICE_TOKEN_ACP_FHIR_GENERATION SERVICE_TOKEN_ACP_FHIR_SERVER SERVICE_TOKEN_CPG_BFF SERVICE_TOKEN_CPG_INGESTION SERVICE_TOKEN_CPG_LLM_ANALYSIS SERVICE_TOKEN_CPG_ASSEMBLY SERVICE_TOKEN_CPG_DELIVERY)
+    else
+      case "$secret" in
+        carewright-approval-signing-key) keys=(APPROVAL_SIGNING_KEY) ;;
+        carewright-session-signing-key) keys=(SESSION_SIGNING_KEY) ;;
+        carewright-ingester-signing-key) keys=(CPG_SIGNING_KEY) ;;
+      esac
+    fi
+    if exists secret "$secret"; then
+      for key in "${keys[@]}"; do
+        oc get secret "$secret" -n "$namespace" -o json | jq -e --arg key "$key" '.data[$key] | strings | length > 0' >/dev/null || die "Existing $secret lacks $key"
+      done
+      log "Reusing $secret Secret"
+      continue
+    fi
+    arguments=()
+    for key in "${keys[@]}"; do
+      file="$temporary_dir/$key"
+      (umask 077; openssl rand -hex 32 | tr -d '\n' >"$file")
+      arguments+=("--from-file=$key=$file")
+    done
+    oc create secret generic "$secret" -n "$namespace" "${arguments[@]}" >/dev/null
+  done
+}
+
 ensure_openshell() {
   local uid_range group_range run_uid run_gid current_chart
   uid_range="$(oc get namespace "$namespace" -o jsonpath='{.metadata.annotations.openshift\.io/sa\.scc\.uid-range}')"
@@ -594,6 +625,8 @@ ensure_profiles() {
 
   sed "s/__NAMESPACE__/$namespace/g" "$repo_dir/config/bootstrap/profiles/carewright-minio.yaml.tmpl" >"$temporary_dir/carewright-minio.yaml"
   sed -e "s/__LLM_HOST__/$llm_host/g" -e "s/__LLM_PORT__/$llm_port/g" "$repo_dir/config/bootstrap/profiles/carewright-openai.yaml.tmpl" >"$temporary_dir/carewright-openai.yaml"
+  cp "$repo_dir/config/bootstrap/profiles/carewright-service-tokens.yaml.tmpl" "$temporary_dir/carewright-service-tokens.yaml"
+  cp "$repo_dir/config/bootstrap/profiles/carewright-approval-signing.yaml.tmpl" "$temporary_dir/carewright-approval-signing.yaml"
   catalog="$temporary_dir/profiles.json"
   profile_list_ok=0
   for _ in {1..10}; do
@@ -604,6 +637,18 @@ ensure_profiles() {
     sleep 1
   done
   ((profile_list_ok)) || die "OpenShell profile API unavailable: $(tail -n 3 "$temporary_dir/profile-list.err")"
+  for id in carewright-service-tokens carewright-approval-signing; do
+    profile="$temporary_dir/$id.yaml"
+    if jq -e --arg id "$id" 'any(.[]; .id == $id)' "$catalog" >/dev/null; then
+      # Match credential names before reusing a profile; no credentials are printed.
+      while read -r key; do
+        jq -e --arg id "$id" --arg key "$key" 'any(.[]; .id == $id and any(.credentials[]; (.env_vars // []) | index($key) != null))' "$catalog" >/dev/null || die "Existing $id lacks $key"
+      done < <(sed -n 's/.*env_vars: \[\(.*\)\]/\1/p' "$profile")
+    else
+      "$openshell_cli" provider profile lint --file "$profile" --gateway-endpoint "$endpoint" --workspace "$workspace"
+      "$openshell_cli" provider profile import --file "$profile" --gateway-endpoint "$endpoint" --workspace "$workspace"
+    fi
+  done
   for id in carewright-minio carewright-openai; do
     profile="$temporary_dir/$id.yaml"
     if [[ "$id" == carewright-minio ]]; then host="minio.$namespace.svc.cluster.local"; port=9000; else host="$llm_host"; port="$llm_port"; fi
@@ -686,6 +731,7 @@ ensure_network_policy_cni
 ensure_agent_sandbox
 ensure_sonataflow_operator
 ensure_minio
+ensure_security_secrets
 ensure_openshell
 ensure_service_proxy
 ensure_profiles
@@ -709,3 +755,9 @@ if [[ "$expose_minio_console" == 1 ]]; then
   console_host="$(oc get route minio-console -n "$namespace" -o jsonpath='{.spec.host}')"
   printf '  MinIO console: https://%s\n' "$console_host"
 fi
+
+printf '  spec.serviceTokens: {type: carewright-service-tokens, secretRef: {name: carewright-service-tokens}}\n'
+printf '  writer spec.approvalSigning: {type: carewright-approval-signing, secretRef: {name: carewright-approval-signing-key}}\n'
+
+printf '  writer spec.sessionSigning: {secretRef: {name: carewright-session-signing-key}}\n'
+printf '  ingester spec.signing: {secretRef: {name: carewright-ingester-signing-key}}\n'

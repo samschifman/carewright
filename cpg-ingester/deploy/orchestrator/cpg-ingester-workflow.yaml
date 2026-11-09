@@ -22,6 +22,13 @@ spec:
           value: "http://cpg-ingester-bff:8080"
   flow:
     specVersion: "0.8"
+    secrets:
+      - SERVICE_TOKEN_ACP_BFF
+      - SERVICE_TOKEN_CPG_ASSEMBLY
+      - SERVICE_TOKEN_CPG_BFF
+      - SERVICE_TOKEN_CPG_DELIVERY
+      - SERVICE_TOKEN_CPG_INGESTION
+      - SERVICE_TOKEN_CPG_LLM_ANALYSIS
     start: Parse
     errors:
       - name: notificationError
@@ -88,6 +95,7 @@ spec:
           functionRef:
             refName: parsepdfasync
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_CPG_INGESTION }"
               callback_url: "http://cpgingester:80/wait-parse"
               process_instance_id: "$WORKFLOW.instanceId"
               pdf_ref: "${ .pdf_ref }"
@@ -117,6 +125,7 @@ spec:
           functionRef:
             refName: analyzeasync
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_CPG_LLM_ANALYSIS }"
               callback_url: "http://cpgingester:80/wait-analyze"
               process_instance_id: "$WORKFLOW.instanceId"
               parse_result_ref: "${ .parseResult.parse_result_ref }"
@@ -149,6 +158,7 @@ spec:
           functionRef:
             refName: notifymanifetreview
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_CPG_BFF }"
               process_instance_id: "$WORKFLOW.instanceId"
               review_type: "drain"
         eventRef: analyzeDone
@@ -166,6 +176,7 @@ spec:
           functionRef:
             refName: notifymanifetreview
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_CPG_BFF }"
               process_instance_id: "$WORKFLOW.instanceId"
               review_type: "manifest"
               analysis_result_ref: "${ .analysisResult.analysis_result_ref }"
@@ -174,7 +185,16 @@ spec:
         eventRef: manifestReviewed
         eventDataFilter:
           toStateData: "${ .manifestReview }"
-        transition: IncrementManifestReview
+        transition: ValidateManifestReviewRound
+
+      - name: ValidateManifestReviewRound
+        type: switch
+        dataConditions:
+          - name: currentRound
+            condition: "${ .manifestReview.reviewRound != null and .manifestReview.reviewRound == (.manifestReviewCount // 0) }"
+            transition: IncrementManifestReview
+        defaultCondition:
+          transition: ReviewManifest
 
       - name: IncrementManifestReview
         type: inject
@@ -196,7 +216,7 @@ spec:
             condition: "${ .manifestReview.action == \"request_changes\" }"
             transition: Analyze
         defaultCondition:
-          transition: Generate
+          transition: ReviewManifest
 
       # --- Phase 4: Generation (async callback — DMN + recs, 5-30 min) ---
 
@@ -208,6 +228,7 @@ spec:
           functionRef:
             refName: generateasync
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_CPG_LLM_ANALYSIS }"
               callback_url: "http://cpgingester:80/wait-generate"
               process_instance_id: "$WORKFLOW.instanceId"
               analysis_result_ref: "${ .analysisResult.analysis_result_ref }"
@@ -240,6 +261,7 @@ spec:
           functionRef:
             refName: notifyartifactreview
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_CPG_BFF }"
               process_instance_id: "$WORKFLOW.instanceId"
               review_type: "drain"
         eventRef: generateDone
@@ -257,6 +279,7 @@ spec:
           functionRef:
             refName: notifyartifactreview
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_CPG_BFF }"
               process_instance_id: "$WORKFLOW.instanceId"
               review_type: "pre-delivery"
               generate_result_ref: "${ .generateResult.generate_result_ref }"
@@ -266,7 +289,16 @@ spec:
         eventRef: artifactsReviewed
         eventDataFilter:
           toStateData: "${ .artifactsReview }"
-        transition: IncrementArtifactReview
+        transition: ValidateArtifactReviewRound
+
+      - name: ValidateArtifactReviewRound
+        type: switch
+        dataConditions:
+          - name: currentRound
+            condition: "${ .artifactsReview.reviewRound != null and .artifactsReview.reviewRound == (.artifactReviewCount // 0) }"
+            transition: IncrementArtifactReview
+        defaultCondition:
+          transition: ReviewArtifacts
 
       - name: IncrementArtifactReview
         type: inject
@@ -288,7 +320,7 @@ spec:
             condition: "${ .artifactsReview.action == \"request_changes\" }"
             transition: Generate
         defaultCondition:
-          transition: Assemble
+          transition: ReviewArtifacts
 
       # --- Phase 6: Assembly (sync — deterministic, <1s) ---
 
@@ -299,6 +331,7 @@ spec:
             functionRef:
               refName: assemble
               arguments:
+                HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_CPG_ASSEMBLY }"
                 generate_result_ref: "${ .generateResult.generate_result_ref }"
                 artifact_review: "${ .artifactsReview }"
             actionDataFilter:
@@ -315,6 +348,7 @@ spec:
             functionRef:
               refName: publish
               arguments:
+                HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_CPG_DELIVERY }"
                 assembly_result_ref: "${ .assemblyResult.assembly_result_ref }"
             actionDataFilter:
               results: "${ . }"
@@ -339,6 +373,7 @@ spec:
             functionRef:
               refName: notifyacpwriter
               arguments:
+                HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_BFF }"
                 cpg_id: "${ .deliveryResult.delivery_status.cpg_id }"
                 cpg_title: "${ .cpg_name }"
                 artifact_location: "${ .deliveryResult.delivery_status.artifact_location }"

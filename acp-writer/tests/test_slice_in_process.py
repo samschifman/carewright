@@ -2,21 +2,14 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import json
-from pathlib import Path
 import sys
+from copy import deepcopy
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.testclient import TestClient
-from lxml import etree
 import pytest
-
-from cpg_contracts.automation.catalog import load_catalog
-from cpg_contracts.automation.compiler import compile
-from cpg_contracts.automation.ir import ProcessIR, SourceRef, ir_version
 from acp_writer import api
 from acp_writer.nodes import fhir_server_writer
 from acp_writer.nodes.automation_synthesizer import synthesize_for_activity
@@ -25,6 +18,13 @@ from acp_writer.planning_brief import PlanActivity, PlanningBrief
 from acp_writer.services import automation_publisher, bff, decision_engine, fhir_server
 from acp_writer.services.automation_publisher import AutomationPublisher
 from acp_writer.services.job_store import JobStore
+from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.compiler import compile
+from cpg_contracts.automation.ir import ProcessIR, SourceRef, ir_version
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.testclient import TestClient
+from lxml import etree
+
 ROOT = Path(__file__).resolve().parents[2]
 AUTOMATION_SRC = str(ROOT / "automation" / "src")
 if AUTOMATION_SRC not in sys.path:
@@ -35,8 +35,10 @@ if SCRIPTS_SRC not in sys.path:
 
 import automation_service.app as automation_service_module
 from automation_service.store import AutomationStore
-from slice_automation_guard import write_automation_guard, write_automation_guard_or_raise
-
+from slice_automation_guard import (
+    write_automation_guard,
+    write_automation_guard_or_raise,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY = FIXTURES / "replay"
@@ -46,6 +48,29 @@ CAREPLAN_ID = "slice-careplan-in-process"
 AUTOMATION_EXTENSION = (
     "https://github.com/samschifman/cpg-to-acp/fhir/StructureDefinition/activity-automation"
 )
+
+
+def _signed_approval(monkeypatch, bundle):
+    """Pin the reviewed fixture and sign it through the production record format."""
+    from acp_writer.services.reviewer import default_reviewer
+    from cpg_contracts.approvals import artifact_revision, sign_record
+    signing_key = "synthetic-slice-signing-key"
+    monkeypatch.setenv("APPROVAL_SIGNING_KEY", signing_key)
+    bundle_key = "slice/fhir_bundle.json"
+    record_key = "slice/approvals/0.json"
+    record = sign_record({
+        "runId": "slice", "workflowInstanceId": CAREPLAN_ID, "reviewRound": 0,
+        "fhirBundleRef": "cpg-phi:" + bundle_key,
+        "artifactRevision": artifact_revision(bundle), "decision": "approve",
+        "reviewer": default_reviewer().model_dump(),
+    }, signing_key)
+    class Store:
+        def get_raw_in_bucket(self, bucket, key):
+            assert bucket == "cpg-phi"
+            return json.dumps({bundle_key: bundle, record_key: record}[key]).encode()
+    monkeypatch.setattr(fhir_server, "_phi_store", Store())
+    return {"status": "active", "approval_ref": "cpg-phi:" + record_key,
+            "fhir_bundle_ref": "cpg-phi:" + bundle_key}
 
 
 class GoldenArtifactStore:
@@ -486,17 +511,13 @@ def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp
             for entry in generated["entry"]
         )
 
-        draft = fhir_writer_client.post("/api/v1/write", json={
-            "fhir_bundle": generated,
-            "careplan_id": CAREPLAN_ID,
-            "patient_reference": "Patient/synthetic-001",
-            "approved": False,
-        })
-        assert draft.status_code == 200
-        assert draft.json()["delivery_status"] == "draft"
+        # A token alone cannot publish even when the caller supplies a bundle.
+        assert fhir_writer_client.post("/api/v1/write", json={
+            "fhir_bundle": generated, "careplan_id": CAREPLAN_ID,
+        }).status_code in {403, 503}
         approved = fhir_writer_client.put(
             f"/api/v1/careplans/{CAREPLAN_ID}/status",
-            json={"status": "active", "reviewer": {"display": "Synthetic clinician"}},
+            json=_signed_approval(monkeypatch, generated),
         )
         assert approved.status_code == 200
         assert approved.json()["delivery_status"] == "delivered"
@@ -791,7 +812,7 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
 
         approved = fhir_writer_client.put(
             f"/api/v1/careplans/{CAREPLAN_ID}/status",
-            json={"status": "active", "reviewer": {"display": "Synthetic replay clinician"}},
+            json=_signed_approval(monkeypatch, result["fhir_bundle"]),
         )
         assert approved.status_code == 200
         assert approved.json()["delivery_status"] == "delivered"

@@ -6,15 +6,14 @@ Fixes invalid codes when possible, flags unresolvable in CarePlan.note.
 
 import logging
 
-import mlflow
-
 from acp_writer.state import CarePlanComposerState
 from acp_writer.tools.terminology_lookup import verify_bundle_codes
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
 
-@mlflow.trace(name="terminology_validator")
+@trace_safe(name="terminology_validator")
 def terminology_validator(state: CarePlanComposerState) -> dict:
     """Verify all FHIR codes in the bundle against terminology servers."""
     logger.info("── Terminology Validator ──")
@@ -32,7 +31,7 @@ def terminology_validator(state: CarePlanComposerState) -> dict:
     if invalid:
         logger.warning("Terminology validation: %d invalid codes", len(invalid))
         for issue in invalid:
-            logger.warning("  Invalid: %s %s in %s", issue["system"], issue["code"], issue["resource"])
+            logger.warning('  Invalid (details redacted)')
     if unverifiable:
         logger.info("Terminology validation: %d unverifiable codes (network issues)", len(unverifiable))
 

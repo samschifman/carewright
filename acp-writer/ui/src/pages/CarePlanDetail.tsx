@@ -17,7 +17,7 @@ import {
 } from "@patternfly/react-core";
 import { useAdaptivePolling } from "@cpg-to-acp/ui-shared";
 import type { CarePlanDetail as CarePlanDetailModel } from "@app/api/models";
-import { getCarePlan } from "@app/services/api";
+import { ApiError, getCarePlan } from "@app/services/api";
 import { GoalCard } from "@app/components/GoalCard";
 import { ActivityCard } from "@app/components/ActivityCard";
 import { ConflictAlert, conflictCountLabel, orderConflicts } from "@app/components/ConflictAlert";
@@ -40,11 +40,18 @@ export function CarePlanDetail() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
   const fetcher = useCallback(() => getCarePlan(id!), [id]);
-  const { data: plan } = useAdaptivePolling<CarePlanDetailModel>({
+  const { data: plan, error } = useAdaptivePolling<CarePlanDetailModel>({
     fetcher,
     isComplete: () => true,
+    shouldRetry: (error) => !(error instanceof ApiError && [401, 403, 404].includes(error.status)),
     enabled: !!id,
   });
+
+  if (error) {
+    return <PageSection><p role="alert">{error instanceof ApiError && [403, 404].includes(error.status)
+      ? "This care plan is not part of your current patient session."
+      : error.message}</p></PageSection>;
+  }
 
   if (!plan) {
     return (

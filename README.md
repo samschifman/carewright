@@ -122,6 +122,21 @@ curl -sf http://localhost:8082/health/ready > /dev/null && echo "ACP Writer read
 curl -sf http://localhost:5000/health > /dev/null && echo "MLflow ready"
 ```
 
+The writer's state-changing endpoints require a per-service credential in the
+`X-Service-Token` header. Compose gives the containers local defaults; the
+host-side commands in steps 4–6 need the same values in your shell:
+
+```bash
+# Local compose defaults: synthetic data, localhost only. Never use them on a
+# cluster. If you override these for compose, export the same values here.
+export SERVICE_TOKEN_ACP_DECISION_ENGINE="${SERVICE_TOKEN_ACP_DECISION_ENGINE:-carewright-local-service-token-acp-decision-engine-dev-only}"
+export SERVICE_TOKEN_ACP_LLM_REASONING="${SERVICE_TOKEN_ACP_LLM_REASONING:-carewright-local-service-token-acp-llm-reasoning-dev-only}"
+export SERVICE_TOKEN_ACP_FHIR_SERVER="${SERVICE_TOKEN_ACP_FHIR_SERVER:-carewright-local-service-token-acp-fhir-server-dev-only}"
+```
+
+Run steps 4–6 in that shell. A call without the header returns 401; see
+[docs/security.md](docs/security.md) for which credential each endpoint accepts.
+
 ### 3. Parse a CPG with Docling
 
 ```bash
@@ -138,7 +153,8 @@ cpg-parse data/synthetic-hypertension-cpg.pdf -o output
 
 The multi-agent pipeline parses the CPG, generates and reviews DMN decision
 tables, extracts recommendations, and (with `--acp-writer-url`) deploys the
-results to acp-writer in one run:
+results to acp-writer in one run. `cpg-ingest` and `cpg-deploy-dmn` read the
+`SERVICE_TOKEN_ACP_*` variables exported in step 2 and send them for you:
 
 ```bash
 cpg-ingest data/synthetic-hypertension-cpg.pdf -o output/my-run \
@@ -164,6 +180,7 @@ The guideline resolver matches patient conditions against registered CPGs. Regis
 ```bash
 curl -X POST http://localhost:8082/api/v1/guidelines \
   -H "Content-Type: application/json" \
+  -H "X-Service-Token: $SERVICE_TOKEN_ACP_LLM_REASONING" \
   -d '{
     "cpg_id": "cpg-hypertension-v1",
     "title": "Synthetic Hypertension CPG",
@@ -182,11 +199,13 @@ Post patient data (FHIR Bundle) to the acp-writer API:
 # Patient with hypertension + diabetes → medication path
 curl -X POST http://localhost:8082/api/v1/careplans \
   -H "Content-Type: application/fhir+json" \
+  -H "X-Service-Token: $SERVICE_TOKEN_ACP_FHIR_SERVER" \
   -d @mock-EHR/data/patient-bundle-medication.json | python3 -m json.tool
 
 # Patient with mild hypertension only → lifestyle path
 curl -X POST http://localhost:8082/api/v1/careplans \
   -H "Content-Type: application/fhir+json" \
+  -H "X-Service-Token: $SERVICE_TOKEN_ACP_FHIR_SERVER" \
   -d @mock-EHR/data/patient-bundle-lifestyle.json | python3 -m json.tool
 ```
 

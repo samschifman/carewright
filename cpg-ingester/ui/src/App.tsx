@@ -17,6 +17,8 @@ import { BarsIcon } from '@patternfly/react-icons';
 import { useCallback, useState } from 'react';
 import { Route, Routes, useLocation, useNavigate } from 'react-router';
 
+import { SessionGate } from './SessionGate';
+
 import { DashboardPage } from './pages/DashboardPage';
 import { UploadPage } from './pages/UploadPage';
 import { RunDetailPage } from './pages/RunDetailPage';
@@ -76,12 +78,12 @@ export function App() {
   );
 
   return (
-    <Page masthead={masthead} sidebar={sidebar} isManagedSidebar={false}>
+    <SessionGate><Page masthead={masthead} sidebar={sidebar} isManagedSidebar={false}>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/runs/:runId" element={<RunDetailPage />} />
       </Routes>
-    </Page>
+    </Page></SessionGate>
   );
 }

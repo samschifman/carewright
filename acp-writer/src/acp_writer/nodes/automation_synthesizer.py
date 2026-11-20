@@ -2,30 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 import json
 import logging
-from pathlib import Path
 import re
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-import mlflow
 import requests
-from fastapi import HTTPException
-from cpg_contracts import content_to_text
-from acp_writer.llm import get_llm
-from cpg_contracts.automation.instances import ActivityAutomation, Evidence, ParameterBinding
-from cpg_contracts.automation.ir import ProcessIR, TemplateRef, ir_version
-from cpg_contracts.automation.catalog import load_catalog
-from cpg_contracts.automation.validators.grounding import InstanceContext
-from cpg_contracts.automation.validators.ladder import run_static_ladder
-from cpg_contracts.automation.validators.results import Finding
-
-from acp_writer.llm_json import loads_json
 from acp_writer.automation_policy import load_automation_policy
+from acp_writer.llm import get_llm
+from acp_writer.llm_json import loads_json
 from acp_writer.nodes.automation_binding import bind_instance, known_phi_values
 from acp_writer.nodes.automation_selection import select_templates
+from acp_writer.planning_brief import PlanningBrief
 from acp_writer.prompts.automation_reviewer import (
     AUTOMATION_REVIEWER_SYSTEM,
     AUTOMATION_REVIEWER_USER,
@@ -34,7 +25,19 @@ from acp_writer.prompts.automation_synthesizer import (
     AUTOMATION_SYNTHESIZER_SYSTEM,
     AUTOMATION_SYNTHESIZER_USER,
 )
-from acp_writer.planning_brief import PlanningBrief
+from cpg_contracts import content_to_text
+from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.instances import (
+    ActivityAutomation,
+    Evidence,
+    ParameterBinding,
+)
+from cpg_contracts.automation.ir import ProcessIR, TemplateRef, ir_version
+from cpg_contracts.automation.validators.grounding import InstanceContext
+from cpg_contracts.automation.validators.ladder import run_static_ladder
+from cpg_contracts.automation.validators.results import Finding
+from cpg_contracts.tracing import trace_safe
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 _STATIC_REPAIR_LIMIT = 3
@@ -333,7 +336,7 @@ def _record_contract_fault(findings: list[Finding], errors: Sequence[Finding]) -
     ))
 
 
-@mlflow.trace(name="automation.llm_json_call")
+@trace_safe(name="automation.llm_json_call")
 def _invoke_json(
     llm: Any,
     system: str,
@@ -400,7 +403,7 @@ def _validation_payload(
     }
 
 
-@mlflow.trace(name="automation.semantic_review")
+@trace_safe(name="automation.semantic_review")
 def _review(
     llm: Any,
     *,
@@ -479,7 +482,7 @@ def _automation(
     )
 
 
-@mlflow.trace(name="automation.synthesize_for_activity")
+@trace_safe(name="automation.synthesize_for_activity")
 def synthesize_for_activity(
     activity: Any,
     registry: Any,
@@ -773,7 +776,7 @@ def synthesize_for_activity(
     return reused + outputs
 
 
-@mlflow.trace(name="automation.synthesize_brief")
+@trace_safe(name="automation.synthesize_brief")
 def synthesize_automations_for_brief(
     state: Mapping[str, Any],
     *,
@@ -787,7 +790,7 @@ def synthesize_automations_for_brief(
     try:
         brief = PlanningBrief.model_validate(brief_data)
     except Exception as exc:
-        logger.warning("Skipping automation synthesis for invalid planning brief: %s", exc)
+        logger.warning('Skipping automation synthesis for invalid planning brief exception_type=%s (details redacted)', type(exc).__name__)
         return {"automation_synthesis_error": str(exc)}
 
     audit_trail = list(brief.dmn_audit_trail or _field(state, "dmn_results", []) or [])
@@ -819,7 +822,7 @@ def synthesize_automations_for_brief(
                 shared=shared,
             )
         except Exception as exc:
-            logger.exception("Automation synthesis failed for activity %s", activity.id)
+            logger.error('Automation synthesis failed for activity exception_type=%s (details redacted)', type(exc).__name__)
             warnings.append(f"Automation synthesis failed for activity {activity.id}: {exc}")
 
     result = {

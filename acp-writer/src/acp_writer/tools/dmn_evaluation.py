@@ -13,8 +13,9 @@ import base64
 import logging
 from typing import Any, Protocol
 
-import mlflow
 import requests
+from cpg_contracts.service_auth import service_token_headers
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class DmnEvaluationClient(Protocol):
 class InProcessEvaluationClient:
     """Monolith mode — wraps _dynamic_models lookup + _evaluate_jit."""
 
-    @mlflow.trace(name="dmn_evaluate_inprocess")
+    @trace_safe(name="dmn_evaluate_inprocess", ids=('model_id',))
     def evaluate(self, model_id: str, inputs: dict) -> dict:
         from acp_writer.api import _dynamic_models, _evaluate_jit
 
@@ -81,17 +82,17 @@ class HttpEvaluationClient:
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
 
-    @mlflow.trace(name="dmn_evaluate_http")
+    @trace_safe(name="dmn_evaluate_http", ids=('model_id',))
     def evaluate(self, model_id: str, inputs: dict) -> dict:
         url = f"{self.base_url}/api/v1/evaluate"
         try:
             r = requests.post(
                 url,
-                json={"model_id": model_id, "inputs": inputs},
+                headers=service_token_headers('SERVICE_TOKEN_ACP_DECISION_ENGINE'), json={"model_id": model_id, "inputs": inputs},
                 timeout=30,
             )
         except requests.RequestException as exc:
-            logger.error("Decision service call failed: %s", exc)
+            logger.error('Decision service call failed exception_type=%s (details redacted)', type(exc).__name__)
             raise
 
         if r.status_code == 404:

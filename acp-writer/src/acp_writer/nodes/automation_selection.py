@@ -5,9 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Protocol
 
-import mlflow
-
 from cpg_contracts.automation.templates import AutomationTemplate
+from cpg_contracts.tracing import trace_safe
 
 
 class TemplateRegistry(Protocol):
@@ -25,7 +24,7 @@ def _field(value: Any, name: str, default: Any = None) -> Any:
     return getattr(value, name, default)
 
 
-@mlflow.trace(name="automation.select_templates")
+@trace_safe(name="automation.select_templates")
 def select_templates(
     activity: Any,
     registry: TemplateRegistry,

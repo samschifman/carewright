@@ -89,6 +89,18 @@ func reconcileComponentSandboxes(
 	}
 
 	for _, component := range components {
+		tokens, signing := pipelineSecuritySources(owner)
+		serviceProvider, registration := managedProvider(owner, "service-tokens", "", tokens)
+		if serviceProvider != "" {
+			component.Providers = append(slices.Clone(component.Providers), serviceProvider)
+			component.Registrations = append(slices.Clone(component.Registrations), providerRegistrations(registration)...)
+		}
+		if component.Name == "fhir-server" && signing != nil {
+			signingProvider, signingRegistration := managedProvider(owner, "approval-signing", "", signing)
+			component.Providers = append(component.Providers, signingProvider)
+			component.Registrations = append(component.Registrations, providerRegistrations(signingRegistration)...)
+		}
+		component.Env = mergedEnv(component.Env, map[string]string{"WORKFLOW_CALLBACK_ORIGIN": workflowOriginURL(workflowURL)})
 		requestName := componentRequestName(owner.GetName(), component.Name)
 		desired[requestName] = struct{}{}
 		policyRef := component.Spec.PolicyRef.DeepCopy()

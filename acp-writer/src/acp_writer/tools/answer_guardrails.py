@@ -14,11 +14,14 @@ Each answer class has a different evidence contract:
 import logging
 from typing import Any
 
-import mlflow
-
-from acp_writer.tools.qa_result import QAAnswer
 from acp_writer.tools.bundle_inventory import BundleInventory, InventoryEntry
-from acp_writer.tools.ips_extractor import _get_resources_with_entry, _resource_ref, _normalize_display
+from acp_writer.tools.ips_extractor import (
+    _get_resources_with_entry,
+    _normalize_display,
+    _resource_ref,
+)
+from acp_writer.tools.qa_result import QAAnswer
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +70,7 @@ def classify_answer(
     return "composite_reasoning"
 
 
-@mlflow.trace(name="guardrail_verify_answer")
+@trace_safe(name="guardrail_verify_answer")
 def verify_answer(
     answer: QAAnswer,
     question: str,
@@ -123,8 +126,7 @@ def verify_answer(
 
 def _downgrade(answer: QAAnswer, guardrail: str, reason: str) -> QAAnswer:
     """Produce a guardrail-downgraded insufficient_data answer."""
-    logger.info("Guardrail [%s]: downgrading answer. Reason: %s. Original: %s",
-                guardrail, reason, answer.value)
+    logger.info('Guardrail (details redacted)')
     return QAAnswer(
         value=None,
         kind="insufficient_data",
@@ -136,7 +138,7 @@ def _downgrade(answer: QAAnswer, guardrail: str, reason: str) -> QAAnswer:
     )
 
 
-@mlflow.trace(name="guardrail_provenance_required")
+@trace_safe(name="guardrail_provenance_required")
 def _check_provenance_required(answer: QAAnswer) -> QAAnswer:
     """Non-insufficient_data answers require provenance; else downgrade."""
     if answer.value is not None and not answer.provenance:
@@ -145,7 +147,7 @@ def _check_provenance_required(answer: QAAnswer) -> QAAnswer:
     return answer
 
 
-@mlflow.trace(name="guardrail_value_consistency")
+@trace_safe(name="guardrail_value_consistency")
 def _check_value_consistency(answer: QAAnswer, bundle: dict) -> QAAnswer:
     """Numeric answers must match a value in a cited resource. Fail closed.
 
@@ -216,7 +218,7 @@ def _value_in_resource(value: float, ref: str, bundle: dict) -> bool:
     return False
 
 
-@mlflow.trace(name="guardrail_concept_consistency")
+@trace_safe(name="guardrail_concept_consistency")
 def _check_concept_consistency(
     answer: QAAnswer,
     question_term: str,
@@ -274,10 +276,13 @@ def _check_concept_consistency(
 def _get_terminology_candidates(term: str) -> set[str] | None:
     """Get candidate code tokens for a term via terminology lookup."""
     try:
-        from acp_writer.tools.terminology_lookup import find_candidates
         from acp_writer.tools.concept_resolution import (
-            LOINC_SYSTEM, SNOMED_SYSTEM, RXNORM_SYSTEM, ICD10_SYSTEM,
+            ICD10_SYSTEM,
+            LOINC_SYSTEM,
+            RXNORM_SYSTEM,
+            SNOMED_SYSTEM,
         )
+        from acp_writer.tools.terminology_lookup import find_candidates
     except ImportError:
         return None
 
@@ -302,7 +307,7 @@ def _get_terminology_candidates(term: str) -> set[str] | None:
     return candidates
 
 
-@mlflow.trace(name="guardrail_absence_ledger")
+@trace_safe(name="guardrail_absence_ledger")
 def _check_absence_with_ledger(
     answer: QAAnswer,
     tool_ledger: list[dict] | None,
@@ -413,7 +418,7 @@ def _extract_asked_concept(question: str) -> str:
     return q
 
 
-@mlflow.trace(name="guardrail_conflict_enforcement")
+@trace_safe(name="guardrail_conflict_enforcement")
 def _check_conflict(
     answer: QAAnswer,
     bundle: dict,

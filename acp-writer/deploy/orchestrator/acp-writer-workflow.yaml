@@ -22,6 +22,12 @@ spec:
           value: "http://acp-fhir-server:8080"
   flow:
     specVersion: "0.8"
+    secrets:
+      - SERVICE_TOKEN_ACP_BFF
+      - SERVICE_TOKEN_ACP_FHIR_GENERATION
+      - SERVICE_TOKEN_ACP_FHIR_SERVER
+      - SERVICE_TOKEN_ACP_LLM_REASONING
+      - SERVICE_TOKEN_ACP_PATIENT_DATA
     start: ScanPatient
     events:
       - name: scanDone
@@ -87,6 +93,7 @@ spec:
           functionRef:
             refName: scanpatientasync
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_PATIENT_DATA }"
               callback_url: "http://acpwriter:80/wait-scan"
               process_instance_id: "$WORKFLOW.instanceId"
               ips_ref: "${ .ips_ref }"
@@ -101,6 +108,7 @@ spec:
           functionRef:
             refName: resolveguidelinesasync
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_LLM_REASONING }"
               callback_url: "http://acpwriter:80/wait-resolve"
               process_instance_id: "$WORKFLOW.instanceId"
               condition_codes: "${ .patientData.condition_codes }"
@@ -115,6 +123,7 @@ spec:
           functionRef:
             refName: executedmnasync
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_LLM_REASONING }"
               callback_url: "http://acpwriter:80/wait-execute-dmn"
               process_instance_id: "$WORKFLOW.instanceId"
               ips_bundle_ref: "${ .patientData.ips_bundle_ref }"
@@ -131,6 +140,7 @@ spec:
           functionRef:
             refName: retrieverecommendationsasync
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_LLM_REASONING }"
               callback_url: "http://acpwriter:80/wait-retrieve"
               process_instance_id: "$WORKFLOW.instanceId"
               condition_codes: "${ .patientData.condition_codes }"
@@ -149,6 +159,7 @@ spec:
           functionRef:
             refName: composeplanasynch
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_LLM_REASONING }"
               callback_url: "http://acpwriter:80/wait-compose"
               process_instance_id: "$WORKFLOW.instanceId"
               patient_reference: "${ .patientData.patient_reference }"
@@ -197,6 +208,7 @@ spec:
           functionRef:
             refName: generatebundleasync
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_FHIR_GENERATION }"
               callback_url: "http://acpwriter:80/wait-generate"
               process_instance_id: "$WORKFLOW.instanceId"
               careplan_id: "$WORKFLOW.instanceId"
@@ -218,6 +230,7 @@ spec:
           functionRef:
             refName: reviewfhirasync
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_LLM_REASONING }"
               callback_url: "http://acpwriter:80/wait-review"
               process_instance_id: "$WORKFLOW.instanceId"
               fhir_bundle_ref: "${ .fhirGenData.fhir_bundle_ref }"
@@ -269,6 +282,7 @@ spec:
           functionRef:
             refName: notifybffreview
             arguments:
+              HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_BFF }"
               process_instance_id: "$WORKFLOW.instanceId"
               review_type: "careplan"
               fhir_bundle_ref: "${ .fhirGenData.fhir_bundle_ref }"
@@ -285,14 +299,13 @@ spec:
       # a submission carries a round that no longer matches the gate's current
       # round, the user reviewed a superseded plan version -- discard it and
       # re-arm the gate so they review the real plan, rather than (e.g.) approving
-      # content they never saw. reviewRound == null is treated as valid for
-      # backward compatibility (old clients, manual curl events); that fail-open
-      # path is watched by verify-review-gate.sh.
+      # content they never saw. missing rounds are stale. Only a review
+      # bound to the displayed artifact and current round may advance the gate.
       - name: ValidateReviewRound
         type: switch
         dataConditions:
           - name: staleRound
-            condition: "${ .careplanReview.reviewRound != null and .careplanReview.reviewRound != .careplanReviewCount }"
+            condition: "${ .careplanReview.reviewRound == null or .careplanReview.reviewRound != .careplanReviewCount }"
             transition: DiscardStaleReview
         defaultCondition:
           transition: IncrementCarePlanReview
@@ -345,14 +358,11 @@ spec:
             functionRef:
               refName: writefhir
               arguments:
+                HEADER_X-Service-Token: "${ $SECRET.SERVICE_TOKEN_ACP_FHIR_SERVER }"
                 fhir_bundle_ref: "${ .fhirGenData.fhir_bundle_ref }"
                 patient_reference: "${ .patientData.patient_reference }"
                 careplan_id: "$WORKFLOW.instanceId"
-                # Approving clinician from the care-plan review gate. Null when
-                # the UI omits it; /api/v1/write then falls back to the config
-                # default reviewer. Threaded so the deployed approval records the
-                # verifier Humanagent + acknowledges conflicts (issue #169 F1).
-                reviewer: "${ .careplanReview.reviewer }"
+                approval_ref: "${ .careplanReview.approvalRef }"
             actionDataFilter:
               results: "${ . }"
               toStateData: "${ .writeResult }"

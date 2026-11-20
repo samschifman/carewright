@@ -9,13 +9,12 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-import mlflow
-
 from acp_writer.tools.ips_extractor import (
     _get_effective_date,
     _get_resources_with_entry,
     _resource_ref,
 )
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +116,7 @@ def _get_status(resource: dict) -> str | None:
     return resource.get("status")
 
 
-@mlflow.trace(name="build_bundle_inventory")
+@trace_safe(name="build_bundle_inventory")
 def build_bundle_inventory(bundle: dict) -> BundleInventory:
     """Walk a FHIR IPS bundle and produce the complete coded inventory."""
     inventory = BundleInventory()
@@ -219,8 +218,6 @@ def build_bundle_inventory(bundle: dict) -> BundleInventory:
                         system=system, code=code, display=display,
                     ))
 
-    logger.debug("Bundle inventory: %d entries across %d resource types",
-                len(inventory.entries),
-                len(set(e.resource_type for e in inventory.entries)))
+    logger.debug('Bundle inventory (details redacted)')
 
     return inventory

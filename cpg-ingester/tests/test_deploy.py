@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import requests
 from click.testing import CliRunner
-
 from cpg_ingester.deploy import deploy_template, main
 
 GOLDEN_TEMPLATE = (
@@ -41,6 +40,7 @@ def test_deploy_template_posts_json_with_source_cpg():
     post.assert_called_once_with(
         "http://localhost:8082/api/v1/automation/templates",
         json=payload,
+        headers={'X-Service-Token': 'test-only-service-credential'},
         params={"source_cpg": "SYN-HTN-2026-002"},
         timeout=30,
     )
@@ -105,3 +105,12 @@ def test_template_rejection_does_not_prevent_later_registration(tmp_path):
     assert "Deployed template: Accepted template" in result.output
     assert "Template registration failures:" in result.output
     assert str(first) in result.output
+
+
+def test_cli_selects_credential_environment(monkeypatch):
+    monkeypatch.setenv('CUSTOM_RECEIVER_CREDENTIAL', 'custom-test-value')
+    response = _response({'summary': {'name': 'Synthetic template'}})
+    with patch('cpg_ingester.deploy.requests.post', return_value=response) as post:
+        result = CliRunner().invoke(main, ['--token-env', 'CUSTOM_RECEIVER_CREDENTIAL', '--template', str(GOLDEN_TEMPLATE)])
+    assert result.exit_code == 0, result.output
+    assert post.call_args.kwargs['headers'] == {'X-Service-Token': 'custom-test-value'}

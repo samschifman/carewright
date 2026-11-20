@@ -120,6 +120,16 @@ func reconcilePipelineWorkflow(
 	if err != nil {
 		return summary, fmt.Errorf("decode SonataFlow template: %w", err)
 	}
+	if tokens, _ := pipelineSecuritySources(owner); tokens != nil {
+		keys := pipelineTokenKeys(owner)
+		entries, _, _ := unstructured.NestedSlice(desired.Object, "spec", "podTemplate", "container", "env")
+		for _, key := range keys {
+			entries = append(entries, map[string]interface{}{"name": key, "valueFrom": map[string]interface{}{"secretKeyRef": map[string]interface{}{"name": tokens.SecretRef.Name, "key": key}}})
+		}
+		if err := unstructured.SetNestedSlice(desired.Object, entries, "spec", "podTemplate", "container", "env"); err != nil {
+			return summary, err
+		}
+	}
 	desired.SetName(name)
 	desired.SetNamespace(owner.GetNamespace())
 	desired.SetGroupVersionKind(sonataFlowGVK)

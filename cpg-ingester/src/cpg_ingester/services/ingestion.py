@@ -12,10 +12,11 @@ import tempfile
 from uuid import uuid4
 
 import mlflow
-from fastapi import BackgroundTasks, FastAPI, File, Request, UploadFile
-
 from cpg_contracts import get_artifact_store, post_callback, store_artifact
+from cpg_contracts.cloud_events import require_callback_url
+from cpg_contracts.service_auth import require_service_token
 from cpg_ingester.nodes.docling_agent import docling_agent
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Request, UploadFile
 
 log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=log_level, format="%(asctime)s %(levelname)-5s %(name)s: %(message)s", force=True)
@@ -30,18 +31,18 @@ def health():
     return {"status": "UP", "service": "ingestion"}
 
 
-@app.post("/api/v1/parse")
+@app.post("/api/v1/parse", dependencies=[Depends(require_service_token('SERVICE_TOKEN_CPG_INGESTION'))])
 async def parse_pdf(file: UploadFile = File(...)):
     """Parse a CPG PDF into markdown and Docling JSON (sync)."""
     pdf_bytes = await file.read()
     return _do_parse_bytes(pdf_bytes, file.filename or "input.pdf")
 
 
-@app.post("/api/v1/parse-async")
+@app.post("/api/v1/parse-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_CPG_INGESTION', workflow_route=True))])
 async def parse_pdf_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept JSON with pdf_ref (MinIO key), parse in background."""
     data = await request.json()
-    callback_url = data.get("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.get("process_instance_id", "")
     pdf_ref = data.get("pdf_ref", "")
     background_tasks.add_task(
@@ -123,7 +124,7 @@ def _run_parse_background(
 
         result = _do_parse_bytes(pdf_bytes)
     except Exception as e:
-        logger.error("Parse background task failed: %s", e)
-        result = {"error": str(e)}
+        logger.error("Parse background task failed exception_type=%s", type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}"}
 
     post_callback(callback_url, process_instance_id, "parse-done", result)

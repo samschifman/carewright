@@ -104,7 +104,7 @@ var _ = Describe("Pipeline UI exposure", func() {
 		Expect(k8sClient.Get(context.Background(), client.ObjectKey{Name: "example-bff", Namespace: "default"}, bffDeployment)).To(Succeed())
 		bffContainer := bffDeployment.Spec.Template.Spec.Containers[0]
 		Expect(bffContainer.Image).To(Equal("example.invalid/bff:v1"))
-		Expect(bffContainer.Command).To(Equal([]string{"python", "-m", "uvicorn"}))
+		Expect(bffContainer.Command).To(Equal([]string{"python", "-m", "uvicorn", "--no-access-log"}))
 		Expect(bffContainer.Env).To(ContainElement(corev1.EnvVar{Name: "ARTIFACT_STORE_ACCESS_KEY", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "artifact-creds"}, Key: "ARTIFACT_STORE_ACCESS_KEY"}}}))
 
 		route := routeObject()

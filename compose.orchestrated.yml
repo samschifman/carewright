@@ -6,7 +6,7 @@ services:
     image: docker.io/apache/incubator-kie-sonataflow-devmode:10.2.0
     profiles: [orchestrated]
     ports:
-      - "8097:8080"
+      - "127.0.0.1:8097:8080"
     # Dev-mode keeps workflow instances in process memory, so run history does
     # not survive an engine restart. Adding the JDBC persistence add-on here was
     # tried on 2026-10-26 and withdrawn: under dev-mode its transactions roll
@@ -16,6 +16,18 @@ services:
     # with persistence and an external database, not the dev-mode image.
     volumes:
       - ./working/orchestrated-workflows:/home/kogito/serverless-workflow-project/src/main/resources:ro
+    environment:
+      SERVICE_TOKEN_ACP_BFF: ${SERVICE_TOKEN_ACP_BFF:-carewright-local-service-token-acp-bff-dev-only}
+      SERVICE_TOKEN_ACP_DECISION_ENGINE: ${SERVICE_TOKEN_ACP_DECISION_ENGINE:-carewright-local-service-token-acp-decision-engine-dev-only}
+      SERVICE_TOKEN_ACP_LLM_REASONING: ${SERVICE_TOKEN_ACP_LLM_REASONING:-carewright-local-service-token-acp-llm-reasoning-dev-only}
+      SERVICE_TOKEN_ACP_PATIENT_DATA: ${SERVICE_TOKEN_ACP_PATIENT_DATA:-carewright-local-service-token-acp-patient-data-dev-only}
+      SERVICE_TOKEN_ACP_FHIR_GENERATION: ${SERVICE_TOKEN_ACP_FHIR_GENERATION:-carewright-local-service-token-acp-fhir-generation-dev-only}
+      SERVICE_TOKEN_ACP_FHIR_SERVER: ${SERVICE_TOKEN_ACP_FHIR_SERVER:-carewright-local-service-token-acp-fhir-server-dev-only}
+      SERVICE_TOKEN_CPG_BFF: ${SERVICE_TOKEN_CPG_BFF:-carewright-local-service-token-cpg-bff-dev-only}
+      SERVICE_TOKEN_CPG_INGESTION: ${SERVICE_TOKEN_CPG_INGESTION:-carewright-local-service-token-cpg-ingestion-dev-only}
+      SERVICE_TOKEN_CPG_LLM_ANALYSIS: ${SERVICE_TOKEN_CPG_LLM_ANALYSIS:-carewright-local-service-token-cpg-llm-analysis-dev-only}
+      SERVICE_TOKEN_CPG_ASSEMBLY: ${SERVICE_TOKEN_CPG_ASSEMBLY:-carewright-local-service-token-cpg-assembly-dev-only}
+      SERVICE_TOKEN_CPG_DELIVERY: ${SERVICE_TOKEN_CPG_DELIVERY:-carewright-local-service-token-cpg-delivery-dev-only}
 
   artifact-store:
     image: docker.io/chrislusf/seaweedfs:4.22
@@ -25,8 +37,8 @@ services:
        "-s3.config=/etc/seaweedfs/s3.json",
        "-master.volumeSizeLimitMB=512", "-volume.max=0"]
     ports:
-      - "9000:9000"
-      - "9333:9333"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9333:9333"
     volumes:
       - orchestrated-artifact-store-data:/data
       - ./working/orchestrated/s3-config.json:/etc/seaweedfs/s3.json:ro
@@ -34,6 +46,7 @@ services:
   cpg-ingester-ingestion:
     profiles: [orchestrated]
     environment:
+      WORKFLOW_CALLBACK_ORIGIN: http://sonataflow-devmode:8080
       ARTIFACT_STORE_URL: http://artifact-store:9000
       ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
       ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
@@ -41,6 +54,7 @@ services:
   cpg-ingester-llm:
     profiles: [orchestrated]
     environment:
+      WORKFLOW_CALLBACK_ORIGIN: http://sonataflow-devmode:8080
       LLM_MODEL: ${LLM_MODEL:-default}
       LITELLM_API_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
       ARTIFACT_STORE_URL: http://artifact-store:9000
@@ -81,6 +95,8 @@ services:
       dockerfile: acp-writer/deploy/pods/Containerfile.patient-data
     profiles: [orchestrated]
     environment:
+      SERVICE_TOKEN_ACP_PATIENT_DATA: ${SERVICE_TOKEN_ACP_PATIENT_DATA:-carewright-local-service-token-acp-patient-data-dev-only}
+      WORKFLOW_CALLBACK_ORIGIN: http://sonataflow-devmode:8080
       ARTIFACT_STORE_URL: http://artifact-store:9000
       ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
       ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
@@ -91,6 +107,9 @@ services:
       dockerfile: acp-writer/deploy/pods/Containerfile.llm-reasoning
     profiles: [orchestrated]
     environment:
+      SERVICE_TOKEN_ACP_LLM_REASONING: ${SERVICE_TOKEN_ACP_LLM_REASONING:-carewright-local-service-token-acp-llm-reasoning-dev-only}
+      SERVICE_TOKEN_ACP_DECISION_ENGINE: ${SERVICE_TOKEN_ACP_DECISION_ENGINE:-carewright-local-service-token-acp-decision-engine-dev-only}
+      WORKFLOW_CALLBACK_ORIGIN: http://sonataflow-devmode:8080
       DECISION_ENGINE_URL: http://acp-decision-engine:8080
       LITELLM_URL: http://litellm:4000
       LLM_MODEL: ${LLM_MODEL:-default}
@@ -105,6 +124,7 @@ services:
       dockerfile: acp-writer/deploy/pods/Containerfile.decision-engine
     profiles: [orchestrated]
     environment:
+      SERVICE_TOKEN_ACP_DECISION_ENGINE: ${SERVICE_TOKEN_ACP_DECISION_ENGINE:-carewright-local-service-token-acp-decision-engine-dev-only}
       KOGITO_URL: http://kogito:8081
       ARTIFACT_STORE_URL: http://artifact-store:9000
       ARTIFACT_STORE_ACCESS_KEY: ${ARTIFACT_STORE_ACCESS_KEY:-slice-access}
@@ -116,6 +136,8 @@ services:
       dockerfile: acp-writer/deploy/pods/Containerfile.fhir-generation
     profiles: [orchestrated]
     environment:
+      SERVICE_TOKEN_ACP_FHIR_GENERATION: ${SERVICE_TOKEN_ACP_FHIR_GENERATION:-carewright-local-service-token-acp-fhir-generation-dev-only}
+      WORKFLOW_CALLBACK_ORIGIN: http://sonataflow-devmode:8080
       LITELLM_URL: http://litellm:4000
       LLM_MODEL: ${LLM_MODEL:-default}
       LITELLM_API_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
@@ -129,6 +151,8 @@ services:
       dockerfile: acp-writer/deploy/pods/Containerfile.fhir-server
     profiles: [orchestrated]
     environment:
+      SERVICE_TOKEN_ACP_FHIR_SERVER: ${SERVICE_TOKEN_ACP_FHIR_SERVER:-carewright-local-service-token-acp-fhir-server-dev-only}
+      APPROVAL_SIGNING_KEY: ${APPROVAL_SIGNING_KEY:-carewright-local-approval-signing-key-dev-only}
       FHIR_SERVER_URL: http://medplum-server:8103/fhir/R4
       AUTOMATION_SERVICE_URL: http://automation:8080
       AUTOMATION_SERVICE_TOKEN: ${AUTOMATION_SERVICE_TOKEN:-carewright-local-automation-dev-only}
@@ -137,13 +161,27 @@ services:
       ARTIFACT_STORE_SECRET_KEY: ${ARTIFACT_STORE_SECRET_KEY:-slice-secret}
 
   acp-writer-bff:
+    env_file:
+      - path: .medplum/smart-client.env
+        required: false
     build:
       context: .
       dockerfile: acp-writer/deploy/pods/Containerfile.bff
     profiles: [orchestrated]
     ports:
-      - "8094:8080"
+      - "127.0.0.1:8094:8080"
     environment:
+      SERVICE_TOKEN_ACP_BFF: ${SERVICE_TOKEN_ACP_BFF:-carewright-local-service-token-acp-bff-dev-only}
+      SERVICE_TOKEN_ACP_LLM_REASONING: ${SERVICE_TOKEN_ACP_LLM_REASONING:-carewright-local-service-token-acp-llm-reasoning-dev-only}
+      SERVICE_TOKEN_ACP_DECISION_ENGINE: ${SERVICE_TOKEN_ACP_DECISION_ENGINE:-carewright-local-service-token-acp-decision-engine-dev-only}
+      SERVICE_TOKEN_ACP_FHIR_SERVER: ${SERVICE_TOKEN_ACP_FHIR_SERVER:-carewright-local-service-token-acp-fhir-server-dev-only}
+      APPROVAL_SIGNING_KEY: ${APPROVAL_SIGNING_KEY:-carewright-local-approval-signing-key-dev-only}
+      SESSION_SIGNING_KEY: ${SESSION_SIGNING_KEY:-carewright-local-session-signing-key-dev-only}
+      ACP_PUBLIC_ORIGIN: http://localhost:3001
+      SESSION_COOKIE_SECURE: "false"
+      SMART_ISS_ALLOWLIST: http://localhost:8103/fhir/R4/
+      SMART_FHIR_INTERNAL_BASE: http://medplum-server:8103/fhir/R4/
+      ACP_ALLOW_DIRECT_IPS: ${ACP_ALLOW_DIRECT_IPS:-false}
       SONATAFLOW_URL: http://sonataflow-devmode:8080
       LLM_REASONING_URL: http://acp-llm-reasoning:8080
       DECISION_ENGINE_URL: http://acp-decision-engine:8080
@@ -156,8 +194,6 @@ services:
     profiles: [orchestrated]
     environment:
       BFF_HOST: acp-writer-bff:8080
-    volumes:
-      - ./acp-writer/ui/public/smart-config.json:/opt/app-root/src/smart-config.json:ro
 
 volumes:
   orchestrated-artifact-store-data:

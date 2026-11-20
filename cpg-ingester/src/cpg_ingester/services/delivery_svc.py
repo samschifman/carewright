@@ -9,10 +9,10 @@ import logging
 import tempfile
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request
-
 from cpg_contracts import get_artifact_store, resolve_ref
+from cpg_contracts.service_auth import require_service_token
 from cpg_ingester.nodes.delivery import delivery
+from fastapi import Depends, FastAPI, Request
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def health():
     return {"status": "UP", "service": "delivery"}
 
 
-@app.post("/api/v1/deliver")
+@app.post("/api/v1/deliver", dependencies=[Depends(require_service_token('SERVICE_TOKEN_CPG_DELIVERY', workflow_route=True))])
 async def deliver(request: Request):
     """Publish assembled artifacts to the artifact store."""
     data = await request.json()

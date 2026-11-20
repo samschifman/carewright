@@ -93,6 +93,17 @@ EOF
 create_bc "mock-ehr-app"    "mock-EHR/ui"          "Containerfile"
 create_bc "medplum-loader"  "mock-EHR"             "deploy/Containerfile.loader"
 
+# Empty allowlist fails closed. Set this before building for a writer Route.
+redirect_build_patch=$(python3 - <<'PYBUILD'
+import json, os
+print(json.dumps({"spec":{"strategy":{"dockerStrategy":{"buildArgs":[
+    {"name":"VITE_SMART_REDIRECT_ORIGINS","value":os.getenv("VITE_SMART_REDIRECT_ORIGINS", "")}
+]}}}}))
+PYBUILD
+)
+oc patch buildconfig mock-ehr-app -n "$NAMESPACE" --type=merge -p "$redirect_build_patch"
+
+
 # --- Step 3: Build custom images ---
 
 log ""
@@ -135,6 +146,8 @@ log "       -n $NAMESPACE"
 log ""
 log "  3. SMART credentials are handled automatically: the loader job registers"
 log "     the SMART app in Medplum and writes the credentials to the"
-log "     'smart-client-credentials' K8s Secret, which the acp-writer UI mounts."
-log "     If the loader ran before the acp-writer UI was up, restart it:"
-log "     oc rollout restart deployment/acp-ui -n $NAMESPACE"
+log "     'smart-client-credentials' K8s Secret, which the acp-writer BFF consumes."
+log "     The loader registers a new client on every run. deploy.sh restarts the"
+log "     Deployments that consume the Secret for you; after a hand-run loader,"
+log "     restart the writer BFF yourself so it loads the new credentials:"
+log "     oc rollout restart deployment/<writer-name>-bff -n $NAMESPACE"

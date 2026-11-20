@@ -5,10 +5,10 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 
-import mlflow
 import requests
-
 from cpg_contracts.automation.templates import AutomationTemplate
+from cpg_contracts.service_auth import service_token_headers
+from cpg_contracts.tracing import trace_safe
 
 
 class TemplateClient:
@@ -20,7 +20,7 @@ class TemplateClient:
         )).rstrip("/")
         self.timeout = timeout
 
-    @mlflow.trace(name="automation_template_client.list")
+    @trace_safe(name="automation_template_client.list")
     def list(
         self,
         *,
@@ -37,7 +37,7 @@ class TemplateClient:
         }
         response = requests.get(
             f"{self.base_url}/api/v1/automation/templates",
-            params=params,
+            headers=service_token_headers('SERVICE_TOKEN_ACP_DECISION_ENGINE'), params=params,
             timeout=self.timeout,
         )
         response.raise_for_status()
@@ -46,23 +46,23 @@ class TemplateClient:
             raise ValueError("automation registry list response must be a JSON array")
         return [AutomationTemplate.model_validate(item) for item in payload]
 
-    @mlflow.trace(name="automation_template_client.get")
+    @trace_safe(name="automation_template_client.get", ids=('template_id',))
     def get(self, template_id: str, version: str | None = None) -> AutomationTemplate:
         params = {"version": version} if version else None
         response = requests.get(
             f"{self.base_url}/api/v1/automation/templates/{template_id}",
-            params=params,
+            headers=service_token_headers('SERVICE_TOKEN_ACP_DECISION_ENGINE'), params=params,
             timeout=self.timeout,
         )
         response.raise_for_status()
         return AutomationTemplate.model_validate(response.json())
 
-    @mlflow.trace(name="automation_template_client.validate_instance")
+    @trace_safe(name="automation_template_client.validate_instance")
     def validate(self, payload: dict) -> dict:
         """Run static and Kogito validation through the decision-engine API."""
         response = requests.post(
             f"{self.base_url}/api/v1/automation/validate",
-            json=payload,
+            headers=service_token_headers('SERVICE_TOKEN_ACP_DECISION_ENGINE'), json=payload,
             timeout=self.timeout,
         )
         if response.status_code == 503:

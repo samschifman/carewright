@@ -10,7 +10,7 @@ import logging
 from datetime import date, datetime
 from typing import Any
 
-import mlflow
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -221,7 +221,7 @@ def _extract_obs_value(obs_or_component: dict) -> tuple[Any, str | None]:
     return None, None
 
 
-@mlflow.trace(name="ips_extract_observation")
+@trace_safe(name="ips_extract_observation")
 def extract_observation(
     ips_bundle: dict, system: str, code: str
 ) -> ExtractionResult:
@@ -264,7 +264,7 @@ def extract_observation(
     )
 
 
-@mlflow.trace(name="ips_extract_condition")
+@trace_safe(name="ips_extract_condition")
 def extract_condition(
     ips_bundle: dict, system: str, code: str
 ) -> ExtractionResult:
@@ -293,7 +293,7 @@ def extract_condition(
     return ExtractionResult(found=False, value=False)
 
 
-@mlflow.trace(name="ips_extract_medication")
+@trace_safe(name="ips_extract_medication")
 def extract_medication(
     ips_bundle: dict, system: str, code: str
 ) -> ExtractionResult:
@@ -316,7 +316,7 @@ def extract_medication(
     return ExtractionResult(found=False, value=False)
 
 
-@mlflow.trace(name="ips_extract_allergy")
+@trace_safe(name="ips_extract_allergy")
 def extract_allergy(
     ips_bundle: dict, system: str, code: str
 ) -> ExtractionResult:
@@ -345,7 +345,7 @@ def extract_allergy(
     return ExtractionResult(found=False, value=False)
 
 
-@mlflow.trace(name="ips_extract_procedure")
+@trace_safe(name="ips_extract_procedure")
 def extract_procedure(
     ips_bundle: dict, system: str, code: str
 ) -> ExtractionResult:
@@ -373,7 +373,7 @@ def extract_procedure(
     return ExtractionResult(found=False, value=False)
 
 
-@mlflow.trace(name="ips_extract_family_history")
+@trace_safe(name="ips_extract_family_history")
 def extract_family_history(
     ips_bundle: dict, system: str, code: str
 ) -> ExtractionResult:
@@ -397,7 +397,7 @@ def extract_family_history(
     return ExtractionResult(found=False, value=False)
 
 
-@mlflow.trace(name="ips_extract_diagnostic_report")
+@trace_safe(name="ips_extract_diagnostic_report")
 def extract_diagnostic_report(
     ips_bundle: dict, system: str, code: str
 ) -> ExtractionResult:
@@ -425,7 +425,7 @@ def extract_diagnostic_report(
     return ExtractionResult(found=False, value=False)
 
 
-@mlflow.trace(name="ips_extract_condition_concept")
+@trace_safe(name="ips_extract_condition_concept")
 def extract_condition_concept(
     ips_bundle: dict,
     code_tokens: list[str] | None = None,
@@ -465,7 +465,7 @@ def extract_condition_concept(
     return ExtractionResult(found=False, value=False)
 
 
-@mlflow.trace(name="ips_extract_medication_concept")
+@trace_safe(name="ips_extract_medication_concept")
 def extract_medication_concept(
     ips_bundle: dict,
     code_tokens: list[str] | None = None,
@@ -500,7 +500,7 @@ def extract_medication_concept(
     return ExtractionResult(found=False, value=False)
 
 
-@mlflow.trace(name="ips_extract_observation_concept")
+@trace_safe(name="ips_extract_observation_concept")
 def extract_observation_concept(
     ips_bundle: dict,
     code_tokens: list[str] | None = None,

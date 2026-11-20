@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Legacy loader: inoperative against Track B token-protected services until
+# service-token headers are wired. Shell tests cover argv handling only.
+# Track A replaces this deployment path.
 # deploy/load-published-artifacts.sh — Load cpg-ingester published artifacts into acp-writer
 #
 # TEMPORARY stand-in for the delivery/notification flow (not wired yet).
@@ -62,32 +65,37 @@ if [ -z "$BFF_POD" ]; then
     exit 1
 fi
 
+tmp_dir=$(mktemp -d)
+remote_tmp_dir=""
+trap 'rm -rf -- "$tmp_dir"; if [ -n "$remote_tmp_dir" ]; then oc exec "$ROUTER_POD" -n "$NAMESPACE" -- rm -rf -- "$remote_tmp_dir" >/dev/null 2>&1 || true; fi' EXIT
+remote_tmp_dir=$(oc exec "$ROUTER_POD" -n "$NAMESPACE" -- mktemp -d)
+
 BASE_KEY="published/${CPG_ID}"
 
 log_step "Loading published artifacts for CPG: $CPG_ID"
 
 # Step 1: Register guideline metadata
 log "Registering guideline metadata..."
-oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c "
+oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c '
 import os, boto3, sys
-s3 = boto3.client('s3',
-    endpoint_url=os.getenv('MINIO_ENDPOINT'),
-    aws_access_key_id=os.getenv('ARTIFACT_STORE_ACCESS_KEY'),
-    aws_secret_access_key=os.getenv('ARTIFACT_STORE_SECRET_KEY'))
+s3 = boto3.client("s3",
+    endpoint_url=os.getenv("MINIO_ENDPOINT"),
+    aws_access_key_id=os.getenv("ARTIFACT_STORE_ACCESS_KEY"),
+    aws_secret_access_key=os.getenv("ARTIFACT_STORE_SECRET_KEY"))
 try:
-    body = s3.get_object(Bucket='cpg-artifacts', Key='${BASE_KEY}/metadata.json')['Body'].read()
+    body = s3.get_object(Bucket="cpg-artifacts", Key=sys.argv[1] + "/metadata.json")["Body"].read()
     sys.stdout.buffer.write(body)
 except Exception as e:
-    print(f'ERROR: {e}', file=sys.stderr)
+    print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
-" 2>/dev/null > /tmp/cpg-metadata.json
+' "$BASE_KEY" 2>/dev/null > "$tmp_dir/cpg-metadata.json"
 
-oc cp /tmp/cpg-metadata.json "$ROUTER_POD:/tmp/cpg-metadata.json" -n "$NAMESPACE"
+oc cp "$tmp_dir/cpg-metadata.json" "$ROUTER_POD:$remote_tmp_dir/cpg-metadata.json" -n "$NAMESPACE"
 code=$(oc exec "$ROUTER_POD" -n "$NAMESPACE" -- \
     curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
     -X POST -H "Host: acp-llm-reasoning" \
     -H "Content-Type: application/json" \
-    --data-binary @/tmp/cpg-metadata.json \
+    --data-binary "@$remote_tmp_dir/cpg-metadata.json" \
     http://localhost:8080/api/v1/guidelines 2>/dev/null)
 log "  Guideline registration: HTTP $code"
 if [[ ! "$code" =~ ^2[0-9][0-9]$ ]]; then
@@ -97,26 +105,26 @@ fi
 
 # Step 2: Ingest recommendations
 log "Ingesting recommendations..."
-oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c "
+oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c '
 import os, boto3, sys
-s3 = boto3.client('s3',
-    endpoint_url=os.getenv('MINIO_ENDPOINT'),
-    aws_access_key_id=os.getenv('ARTIFACT_STORE_ACCESS_KEY'),
-    aws_secret_access_key=os.getenv('ARTIFACT_STORE_SECRET_KEY'))
+s3 = boto3.client("s3",
+    endpoint_url=os.getenv("MINIO_ENDPOINT"),
+    aws_access_key_id=os.getenv("ARTIFACT_STORE_ACCESS_KEY"),
+    aws_secret_access_key=os.getenv("ARTIFACT_STORE_SECRET_KEY"))
 try:
-    body = s3.get_object(Bucket='cpg-artifacts', Key='${BASE_KEY}/recommendations.json')['Body'].read()
+    body = s3.get_object(Bucket="cpg-artifacts", Key=sys.argv[1] + "/recommendations.json")["Body"].read()
     sys.stdout.buffer.write(body)
 except Exception as e:
-    print(f'ERROR: {e}', file=sys.stderr)
+    print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
-" 2>/dev/null > /tmp/cpg-recs.json
+' "$BASE_KEY" 2>/dev/null > "$tmp_dir/cpg-recs.json"
 
-oc cp /tmp/cpg-recs.json "$ROUTER_POD:/tmp/cpg-recs.json" -n "$NAMESPACE"
+oc cp "$tmp_dir/cpg-recs.json" "$ROUTER_POD:$remote_tmp_dir/cpg-recs.json" -n "$NAMESPACE"
 code=$(oc exec "$ROUTER_POD" -n "$NAMESPACE" -- \
     curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
     -X POST -H "Host: acp-llm-reasoning" \
     -H "Content-Type: application/json" \
-    --data-binary @/tmp/cpg-recs.json \
+    --data-binary "@$remote_tmp_dir/cpg-recs.json" \
     http://localhost:8080/api/v1/knowledge/recommendations/batch 2>/dev/null)
 log "  Recommendations ingest: HTTP $code"
 if [[ ! "$code" =~ ^2[0-9][0-9]$ ]]; then
@@ -132,42 +140,41 @@ dmn_url="http://localhost:8080/api/v1/decisions/models?source_cpg=${encoded_cpg}
 if [ "$REPLACE" = true ]; then
     dmn_url="${dmn_url}&replace=true"
 fi
-dmn_list=$(mktemp)
-bpmn_latest_list=$(mktemp)
-trap 'rm -f "$dmn_list" "$bpmn_latest_list"' EXIT
-oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c "
+dmn_list="$tmp_dir/dmn-list.jsonl"
+bpmn_latest_list="$tmp_dir/bpmn-latest-list.jsonl"
+oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c '
 import os, boto3, sys, json
-s3 = boto3.client('s3',
-    endpoint_url=os.getenv('MINIO_ENDPOINT'),
-    aws_access_key_id=os.getenv('ARTIFACT_STORE_ACCESS_KEY'),
-    aws_secret_access_key=os.getenv('ARTIFACT_STORE_SECRET_KEY'))
-objs = s3.list_objects_v2(Bucket='cpg-artifacts', Prefix='${BASE_KEY}/dmn/').get('Contents', [])
+s3 = boto3.client("s3",
+    endpoint_url=os.getenv("MINIO_ENDPOINT"),
+    aws_access_key_id=os.getenv("ARTIFACT_STORE_ACCESS_KEY"),
+    aws_secret_access_key=os.getenv("ARTIFACT_STORE_SECRET_KEY"))
+objs = s3.list_objects_v2(Bucket="cpg-artifacts", Prefix=sys.argv[1] + "/dmn/").get("Contents", [])
 for o in objs:
-    if o['Key'].endswith('.dmn'):
-        print(json.dumps({'key': o['Key'], 'name': o['Key'].rsplit('/',1)[-1].replace('.dmn','')}))
-" 2>/dev/null > "$dmn_list"
+    if o["Key"].endswith(".dmn"):
+        print(json.dumps({"key": o["Key"], "name": o["Key"].rsplit("/",1)[-1].replace(".dmn", "")}))
+' "$BASE_KEY" 2>/dev/null > "$dmn_list"
 
 while IFS= read -r line; do
     [ -z "$line" ] && continue
-    key=$(echo "$line" | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
-    name=$(echo "$line" | python3 -c "import sys,json; print(json.load(sys.stdin)['name'])")
+    key=$(printf '%s' "$line" | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
+    name=$(printf '%s' "$line" | python3 -c "import sys,json; print(json.load(sys.stdin)['name'])")
 
-    oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c "
+    oc exec "$BFF_POD" -n "$NAMESPACE" -- python3 -c '
 import os, boto3, sys
-s3 = boto3.client('s3',
-    endpoint_url=os.getenv('MINIO_ENDPOINT'),
-    aws_access_key_id=os.getenv('ARTIFACT_STORE_ACCESS_KEY'),
-    aws_secret_access_key=os.getenv('ARTIFACT_STORE_SECRET_KEY'))
-body = s3.get_object(Bucket='cpg-artifacts', Key='$key')['Body'].read()
+s3 = boto3.client("s3",
+    endpoint_url=os.getenv("MINIO_ENDPOINT"),
+    aws_access_key_id=os.getenv("ARTIFACT_STORE_ACCESS_KEY"),
+    aws_secret_access_key=os.getenv("ARTIFACT_STORE_SECRET_KEY"))
+body = s3.get_object(Bucket="cpg-artifacts", Key=sys.argv[1])["Body"].read()
 sys.stdout.buffer.write(body)
-" 2>/dev/null > "/tmp/dmn-upload.dmn"
+' "$key" 2>/dev/null > "$tmp_dir/dmn-upload.dmn"
 
-    oc cp "/tmp/dmn-upload.dmn" "$ROUTER_POD:/tmp/dmn-upload.dmn" -n "$NAMESPACE"
+    oc cp "$tmp_dir/dmn-upload.dmn" "$ROUTER_POD:$remote_tmp_dir/dmn-upload.dmn" -n "$NAMESPACE"
     response=$(oc exec "$ROUTER_POD" -n "$NAMESPACE" -- \
         curl -sS -w '\n__HTTP_STATUS__:%{http_code}' --max-time 15 \
         -X POST -H "Host: acp-decision-engine" \
         -H "Content-Type: application/xml" \
-        --data-binary @/tmp/dmn-upload.dmn \
+        --data-binary "@$remote_tmp_dir/dmn-upload.dmn" \
         "$dmn_url" 2>/dev/null)
     code="${response##*__HTTP_STATUS__:}"
     body="${response%$'\n__HTTP_STATUS__:'*}"
@@ -239,13 +246,13 @@ s3 = boto3.client("s3",
     aws_access_key_id=os.getenv("ARTIFACT_STORE_ACCESS_KEY"),
     aws_secret_access_key=os.getenv("ARTIFACT_STORE_SECRET_KEY"))
 sys.stdout.buffer.write(s3.get_object(Bucket=bucket, Key=key)["Body"].read())
-' "$template_ref" > /tmp/bpmn-template.json 2>/dev/null; then
+' "$template_ref" > "$tmp_dir/bpmn-template.json" 2>/dev/null; then
         echo "WARNING: Could not retrieve BPMN template '$template_id' for CPG '$CPG_ID'; skipping" >&2
         bpmn_failure_count=$((bpmn_failure_count + 1))
         continue
     fi
 
-    if ! oc cp /tmp/bpmn-template.json "$ROUTER_POD:/tmp/bpmn-template.json" -n "$NAMESPACE"; then
+    if ! oc cp "$tmp_dir/bpmn-template.json" "$ROUTER_POD:$remote_tmp_dir/bpmn-template.json" -n "$NAMESPACE"; then
         echo "WARNING: Could not stage BPMN template '$template_id' for CPG '$CPG_ID'; skipping" >&2
         bpmn_failure_count=$((bpmn_failure_count + 1))
         continue
@@ -255,7 +262,7 @@ sys.stdout.buffer.write(s3.get_object(Bucket=bucket, Key=key)["Body"].read())
         curl -sS -w '\n__HTTP_STATUS__:%{http_code}' --max-time 30 \
         -X POST -H "Host: acp-decision-engine" \
         -H "Content-Type: application/json" \
-        --data-binary @/tmp/bpmn-template.json \
+        --data-binary "@$remote_tmp_dir/bpmn-template.json" \
         "$automation_url" 2>/dev/null); then
         code=$(printf '%s' "$response" | sed -n 's/.*__HTTP_STATUS__:\([0-9][0-9][0-9]\)$/\1/p')
         body=$(printf '%s' "$response" | sed 's/__HTTP_STATUS__:[0-9][0-9][0-9]$//')

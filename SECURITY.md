@@ -24,7 +24,7 @@ The example scenarios use synthetic clinical practice guidelines and hand-crafte
 
 ## Deployment Hardening
 
-CPG-to-ACP is **experimental** and is **not hardened for exposure to untrusted networks**. The REST API endpoints are **unauthenticated** in the current implementation. Run CPG-to-ACP only inside a trusted environment (local machine, or a cluster namespace not reachable from the public internet). Do not expose these endpoints directly; place your own authenticating gateway in front if external access is required.
+CPG-to-ACP is experimental and restricted to synthetic data within a verified peer-workload boundary. Browser routes require scoped sessions and CSRF for mutations; internal mutating routes require receiver service credentials, and approved FHIR publication requires a signed artifact-bound review. Deployment isolation and OpenShell gateway authentication must pass environment probes before use. See [the security design and accepted gaps](docs/security.md).
 
 ## Dependency Policy
 

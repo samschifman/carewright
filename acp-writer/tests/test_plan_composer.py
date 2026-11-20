@@ -6,16 +6,15 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from acp_writer.nodes.plan_composer import (
     _format_conditions,
     _format_demographics,
     _format_recommendations,
     _merge_goals_for_merged_regimens,
     _merge_same_cpg_medication_regimens,
-    _resolve_missing_medication_codes,
     _neutralize_unprovided_pronouns,
     _parse_brief_from_response,
+    _resolve_missing_medication_codes,
     _sanitize_provenance,
     plan_composer,
 )
@@ -312,7 +311,9 @@ class TestPlanComposer:
         assert "this activity must be an object" in failed["brief_review_feedback"]
         assert failed["brief_parse_failed"] is True
         assert failed["brief_review_count"] == 1
-        assert "Traceback" in caplog.text
+        assert "details redacted" in caplog.text
+        assert "Traceback" not in caplog.text
+        assert "this activity must be an object" not in caplog.text
 
         state.update(failed)
         repaired = plan_composer(state)

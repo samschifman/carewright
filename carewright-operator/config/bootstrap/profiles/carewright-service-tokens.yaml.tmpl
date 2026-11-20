@@ -1,0 +1,44 @@
+id: carewright-service-tokens
+display_name: CareWright service-tokens
+description: Process environment credentials; no endpoint access granted
+category: data
+credentials:
+  - name: SERVICE_TOKEN_ACP_BFF
+    env_vars: [SERVICE_TOKEN_ACP_BFF]
+    required: true
+  - name: SERVICE_TOKEN_ACP_DECISION_ENGINE
+    env_vars: [SERVICE_TOKEN_ACP_DECISION_ENGINE]
+    required: true
+  - name: SERVICE_TOKEN_ACP_LLM_REASONING
+    env_vars: [SERVICE_TOKEN_ACP_LLM_REASONING]
+    required: true
+  - name: SERVICE_TOKEN_ACP_PATIENT_DATA
+    env_vars: [SERVICE_TOKEN_ACP_PATIENT_DATA]
+    required: true
+  - name: SERVICE_TOKEN_ACP_FHIR_GENERATION
+    env_vars: [SERVICE_TOKEN_ACP_FHIR_GENERATION]
+    required: true
+  - name: SERVICE_TOKEN_ACP_FHIR_SERVER
+    env_vars: [SERVICE_TOKEN_ACP_FHIR_SERVER]
+    required: true
+  - name: SERVICE_TOKEN_CPG_BFF
+    env_vars: [SERVICE_TOKEN_CPG_BFF]
+    required: true
+  - name: SERVICE_TOKEN_CPG_INGESTION
+    env_vars: [SERVICE_TOKEN_CPG_INGESTION]
+    required: true
+  - name: SERVICE_TOKEN_CPG_LLM_ANALYSIS
+    env_vars: [SERVICE_TOKEN_CPG_LLM_ANALYSIS]
+    required: true
+  - name: SERVICE_TOKEN_CPG_ASSEMBLY
+    env_vars: [SERVICE_TOKEN_CPG_ASSEMBLY]
+    required: true
+  - name: SERVICE_TOKEN_CPG_DELIVERY
+    env_vars: [SERVICE_TOKEN_CPG_DELIVERY]
+    required: true
+endpoints: []
+binaries:
+  - /sandbox/.venv/bin/python
+  - /sandbox/.venv/bin/python3
+  - /usr/bin/python3
+  - /usr/bin/python3.*

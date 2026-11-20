@@ -10,26 +10,29 @@ Security profile: Kogito runtime + MinIO only (no LLM, no MaaS).
 import logging
 
 import mlflow
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-
 from acp_writer.api import (
-    _dynamic_models,
-    _automation_registry,
     _automation_dmn_namespaces,
     _automation_dmn_summaries,
+    _automation_registry,
     _automation_validation_result,
-    _parse_dmn_metadata,
+    _dynamic_models,
     _evaluate_jit,
+    _parse_dmn_metadata,
     _validate_dmn_with_engine,
-    validate_bpmn,
     _validation_failure_response,
+    validate_bpmn,
 )
 from acp_writer.services.automation_registry import router as automation_registry_router
 from acp_writer.tools.dmn_evaluation import DmnEngineError
 from cpg_contracts.decisions import normalize_decision_model_summary
+from cpg_contracts.service_auth import require_service_token
+from cpg_contracts.tracing import install_phi_span_processor
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
+
+install_phi_span_processor()
 
 app = FastAPI(title="acp-writer-decision-engine", version="0.2.0")
 
@@ -50,7 +53,7 @@ app.include_router(automation_registry_router)
 # --- DMN model management ---
 
 
-@app.post("/api/v1/decisions/models", status_code=201)
+@app.post("/api/v1/decisions/models", status_code=201, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_DECISION_ENGINE'))])
 async def deploy_decision_model(
     request: Request,
     source_cpg: str | None = None,
@@ -92,7 +95,7 @@ def list_decision_models():
 # --- DMN evaluation (thin: pre-resolved inputs only) ---
 
 
-@app.post("/api/v1/evaluate")
+@app.post("/api/v1/evaluate", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_DECISION_ENGINE'))])
 async def evaluate(request: Request):
     """Evaluate a DMN model with pre-resolved inputs.
 
@@ -114,19 +117,19 @@ async def evaluate(request: Request):
         outputs = _evaluate_jit(deployed["dmn_xml"], inputs)
         return {"outputs": outputs}
     except DmnEngineError as exc:
-        logger.warning("DMN engine rejected evaluation for %s: %s", model_id, exc.error)
+        logger.warning('DMN engine rejected model_id=%s status=%s', model_id, exc.status_code)
         return JSONResponse(status_code=exc.status_code, content={
             "error": exc.error, "messages": exc.messages,
         })
     except Exception as exc:
-        logger.error("DMN evaluation failed for %s: %s", model_id, exc)
+        logger.error('DMN evaluation failed model_id=%s exception_type=%s', model_id, type(exc).__name__)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 # --- Deprecated: bundle-accepting execution (transition period) ---
 
 
-@app.post("/api/v1/execute")
+@app.post("/api/v1/execute", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_DECISION_ENGINE'))])
 async def execute_deprecated(request: Request):
     """Execute DMN models against patient data.
 
@@ -135,8 +138,8 @@ async def execute_deprecated(request: Request):
     locally. It exists for backward compatibility during the transition
     to the LLM-reasoning pod hosting the resolution loop.
     """
-    from cpg_contracts import get_phi_store, resolve_ref
     from acp_writer.nodes.dmn_executor import dmn_executor
+    from cpg_contracts import get_phi_store, resolve_ref
 
     data = await request.json()
     phi_store = get_phi_store()

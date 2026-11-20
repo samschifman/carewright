@@ -4,6 +4,8 @@ This guide covers deploying the full CPG-to-ACP system to an OpenShift cluster w
 
 > **Deployment paths:** This guide describes the existing script/Helm-based deployment. The Kubernetes operator is maintained in [`carewright-operator/`](../carewright-operator/) and has a separate external-prerequisites bootstrap plus CR-based pipeline deployment path. For that path, follow the [operator end-to-end OpenShift guide](../carewright-operator/docs/openshift-e2e.md). Do not run both deployment paths in the same namespace; they would manage overlapping application resources.
 
+> **Browser sessions and SMART launch need the operator path.** The scripts and Helm charts in this guide do not deliver the application credentials added for sessions and service-to-service calls: the per-receiver service tokens, the approval and session signing keys, and the writer's SMART settings (client credentials, issuer allowlist, public origin). Without them the script-deployed writer BFF cannot give a browser a session, so SMART launch from the mock EHR does not complete on this path. Those settings are wired only for the operator-managed pipelines (`spec.serviceTokens`, `spec.approvalSigning`, `spec.sessionSigning`, `spec.smart`); see [Track B application credentials](#track-b-application-credentials) and the [operator guide](../carewright-operator/docs/openshift-e2e.md). The script path is scheduled for retirement in favour of the operator ([release plan](../dev_docs/release-plan.md), A6).
+
 ## Prerequisites
 
 Before deploying, ensure:
@@ -169,6 +171,8 @@ cp deploy/config/secrets.env.template deploy/config/secrets.env
 ./deploy/setup/setup-namespace.sh --config deploy/config/cluster.env
 
 # 7. Deploy all components
+#    This does not set up browser sessions or SMART launch for the writer;
+#    see the note at the top of this guide.
 ./deploy/deploy-all.sh --config deploy/config/cluster.env
 
 # 8. Verify
@@ -185,6 +189,7 @@ Non-secret configuration. Template checked in; actual file gitignored.
 |---|---|---|
 | `NAMESPACE` | OpenShift project (max 35 chars) | `sschifma-cpg-to-acp` |
 | `CLUSTER_DOMAIN` | Cluster domain for Route hostnames | `apps.rosa.agentic-mcp.jolf.p3.openshiftapps.com` |
+| `SMART_WRITER_ORIGIN` | Used by `mock-EHR/deploy/deploy.sh` only (optional). The writer UI origin the mock EHR trusts for SMART launch: one value drives the SMART client the loader registers and the EHR authorization page's redirect allowlist. It configures the EHR side only; launch also needs a writer BFF configured with the same public origin and the SMART client credentials, which today means the operator-managed writer (`spec.smart`). Set it to that writer's UI route. Unset, it falls back to `https://acp-ui-<NAMESPACE>.<CLUSTER_DOMAIN>`, the script-deployed UI route, which cannot complete a launch | `https://care-plan-writer-ui-ns.apps.example.com` |
 | `MAAS_GATEWAY_URL` | LLM gateway base URL (bare origin, no `/v1`) | `http://maas-default-gateway-...:80` or `https://api.enmaas.devshift.net` |
 | `MAAS_ROUTE_SEGMENT` | Optional model path segment (leave empty for EnMaaS) | `gpt-5-6` |
 | `LLM_MODEL_DEFAULT` | Model parameter in API payloads | `gpt-5.6-terra` |
@@ -217,7 +222,7 @@ LLM credentials are read from the environment by the LLM client factory in prior
 | `minio-credentials` | `MINIO_ROOT_USER/PASSWORD`, `ARTIFACT_STORE_ACCESS/SECRET_KEY` | `setup-secrets.sh` | MinIO, all service pods |
 | `fhir-client-credentials` | `FHIR_CLIENT_ID`, `FHIR_CLIENT_SECRET` | `setup-secrets.sh` (optional) | fhir-server pod |
 | `medplum-user-credentials` | `MEDPLUM_SUPERADMIN_PASSWORD`, `MEDPLUM_ADMIN_EMAIL/PASSWORD`, `MEDPLUM_PRACTITIONER_PASSWORD` | `setup-secrets.sh` (optional) | mock-EHR loader job |
-| `smart-client-credentials` | `smart-config.json` (JSON with clientId/clientSecret) | mock-EHR loader job | IPS Viewer (mounted as file) |
+| `smart-client-credentials` | `SMART_CLIENT_ID`, `SMART_CLIENT_SECRET` | mock-EHR loader job | Writer BFF environment only |
 
 **Security notes:**
 - `secrets.env` is gitignored and NOT allowlisted in gitleaks
@@ -496,3 +501,15 @@ The following paths are **documented but have not been exercised** — expect ro
 | `setup-secrets.sh --interactive` | Only `--from-env` has been used |
 | Single-component update | Changing one component and verifying the others are untouched |
 | Non-admin deploy | All testing ran with cluster-admin; a least-privilege role has not been derived |
+
+### Track B application credentials
+
+| Secret | Keys | Consumer |
+| --- | --- | --- |
+| `carewright-service-tokens` | Per-receiver `SERVICE_TOKEN_*` | BFFs, workflows and sandbox service callers |
+| `carewright-approval-signing-key` | `APPROVAL_SIGNING_KEY` | Writer BFF and writer FHIR publication sandbox only |
+| `carewright-session-signing-key` | `SESSION_SIGNING_KEY` | Writer BFF only |
+| `carewright-ingester-signing-key` | `CPG_SIGNING_KEY` | Ingester BFF only |
+| `smart-client-credentials` | `SMART_CLIENT_ID`, `SMART_CLIENT_SECRET` | Writer BFF only; never mount into UI docroot |
+
+The operator bootstrap generates missing service/signing credentials without printing values. Both pipelines select `spec.serviceTokens`; writer alone selects `spec.approvalSigning` and `spec.sessionSigning`, while ingester selects `spec.signing`. The browser signing fields are plain `secretRef` entries. Writer `spec.smart.credentials` selects the SMART Secret, also with a plain `secretRef`. Register the writer UI origin's `/api/v1/launch` and `/api/v1/launch/callback` paths in Medplum. Existing environments need re-registration and BFF restart. See [security](../docs/security.md) for the required origins, one-worker constraint, rotation and environment probes. The retired chart no longer mounts browser SMART secrets; deployment artifacts outside the operator path need equivalent backend credential wiring before use.

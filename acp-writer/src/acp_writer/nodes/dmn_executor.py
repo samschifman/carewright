@@ -10,9 +10,6 @@ import re
 from datetime import date, datetime, timezone
 from typing import Any
 
-import mlflow
-from pydantic import ValidationError
-
 from acp_writer.state import CarePlanComposerState
 from acp_writer.tools.dmn_evaluation import (
     DmnEngineError,
@@ -37,6 +34,8 @@ from acp_writer.tools.temporal_queries import (
     rate_of_change,
 )
 from cpg_contracts import Extraction
+from cpg_contracts.tracing import trace_safe
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +101,7 @@ def _try_extract_by_code(
     return None, None
 
 
-@mlflow.trace(name="dmn_extract_via_pipeline")
+@trace_safe(name="dmn_extract_via_pipeline")
 def _extract_via_pipeline(
     ips_bundle: dict, var_name: str, var_type: str,
     inventory: Any, llm_client: Any, reference_date: str | None = None,
@@ -118,7 +117,7 @@ def _extract_via_pipeline(
             var_name, inventory, resource_kind, llm_client=llm_client,
         )
     except Exception as exc:
-        logger.warning("Pipeline resolution failed for '%s': %s", var_name, exc)
+        logger.warning('Pipeline resolution failed: exception_type=%s', type(exc).__name__)
         audit["degraded"] = True
         audit["error"] = str(exc)
         return None, None, audit
@@ -170,7 +169,7 @@ def _extract_via_pipeline(
     return None, None, audit
 
 
-@mlflow.trace(name="dmn_extract_temporal")
+@trace_safe(name="dmn_extract_temporal")
 def _extract_temporal(
     ips_bundle: dict,
     extraction: dict,
@@ -237,7 +236,7 @@ def _extract_temporal(
     return result.value, result.provenance, audit
 
 
-@mlflow.trace(name="dmn_resolve_input")
+@trace_safe(name="dmn_resolve_input")
 def _extract_input_value(
     ips_bundle: dict, var_name: str, var_type: str,
     prior_results: dict[str, dict],
@@ -291,7 +290,7 @@ def _extract_input_value(
     return None, None, {"match_basis": None, "degraded": audit.get("degraded", False)}
 
 
-@mlflow.trace(name="dmn_resolve_inputs")
+@trace_safe(name="dmn_resolve_inputs")
 def resolve_inputs(
     expected_inputs: list[dict],
     ips_bundle: dict,
@@ -334,7 +333,7 @@ def resolve_inputs(
     return inputs, fhir_refs, input_audit
 
 
-@mlflow.trace(name="dmn_executor")
+@trace_safe(name="dmn_executor")
 def dmn_executor(state: CarePlanComposerState) -> dict:
     """Execute applicable DMN models in topological order.
 
@@ -362,8 +361,7 @@ def dmn_executor(state: CarePlanComposerState) -> dict:
         from acp_writer.llm import get_llm
         llm_client = get_llm(state)
     except Exception as exc:
-        logger.warning("LLM client unavailable for DMN extraction — degraded mode: %s", exc)
-
+        logger.warning('LLM client unavailable for DMN extraction — degraded mode exception_type=%s (details redacted)', type(exc).__name__)
     evaluation_client = get_evaluation_client(state)
 
     model_map = {m["id"]: m for m in applicable_models}
@@ -392,7 +390,7 @@ def dmn_executor(state: CarePlanComposerState) -> dict:
             temporal_index=temporal_index,
         )
 
-        logger.info("Evaluating DMN model: %s with inputs: %s", model_info.get("name"), inputs)
+        logger.info('Evaluating DMN model model_id=%s', model_id)
 
         try:
             result = evaluation_client.evaluate(model_id, inputs)
@@ -407,7 +405,7 @@ def dmn_executor(state: CarePlanComposerState) -> dict:
                 "input_resolution": input_audit,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
-            logger.info("DMN result for %s: %s", model_info.get("name"), result)
+            logger.info('DMN evaluation complete model_id=%s', model_id)
 
         except ModelNotDeployed:
             logger.warning("Model %s not deployed — skipping", model_id)
@@ -423,7 +421,7 @@ def dmn_executor(state: CarePlanComposerState) -> dict:
             })
 
         except DmnEngineError as exc:
-            logger.error("DMN engine rejected %s: %s", model_id, exc.messages)
+            logger.error('DMN engine rejected model_id=%s status=%s', model_id, exc.status_code)
             audit_trail.append({
                 "model_id": model_id,
                 "model_name": model_info.get("name", model_id),
@@ -438,7 +436,7 @@ def dmn_executor(state: CarePlanComposerState) -> dict:
             })
 
         except Exception as e:
-            logger.error("DMN evaluation failed for %s: %s", model_id, e)
+            logger.error('DMN evaluation failed model_id=%s exception_type=%s', model_id, type(e).__name__)
             audit_trail.append({
                 "model_id": model_id,
                 "model_name": model_info.get("name", model_id),

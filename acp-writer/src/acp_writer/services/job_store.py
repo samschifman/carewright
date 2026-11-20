@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import re
 import uuid
+from pathlib import Path
 from typing import Any
 
-import mlflow
-
 from cpg_contracts import ArtifactStore, get_phi_store
-
+from cpg_contracts.tracing import trace_safe
 
 _SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
@@ -45,7 +43,7 @@ class JobStore:
     def _withdrawal_key(careplan_id: str) -> str:
         return f"automation-publications/{_safe(careplan_id)}/withdrawn.json"
 
-    @mlflow.trace(name="automation.job_store.put")
+    @trace_safe(name="automation.job_store.put")
     def put(self, job: dict[str, Any]) -> None:
         key = self._job_key(job["careplan_id"], job["job_id"])
         if self.artifact_store:
@@ -53,14 +51,14 @@ class JobStore:
             return
         self._write_file(key, json.dumps(job, sort_keys=True).encode("utf-8"))
 
-    @mlflow.trace(name="automation.job_store.get")
+    @trace_safe(name="automation.job_store.get", ids=('careplan_id', 'job_id'))
     def get(self, careplan_id: str, job_id: str) -> dict[str, Any] | None:
         key = self._job_key(careplan_id, job_id)
         if self.artifact_store:
             return self._get_artifact_json(key)
         return self._get_file_json(key)
 
-    @mlflow.trace(name="automation.job_store.list")
+    @trace_safe(name="automation.job_store.list", ids=('careplan_id',))
     def list(self, careplan_id: str | None = None) -> list[dict[str, Any]]:
         if careplan_id is not None:
             careplan = _safe(careplan_id)
@@ -82,14 +80,14 @@ class JobStore:
                 jobs.append(item)
         return sorted(jobs, key=lambda item: (item.get("careplan_id", ""), item.get("created_at", "")))
 
-    @mlflow.trace(name="automation.job_store.withdrawal")
+    @trace_safe(name="automation.job_store.withdrawal", ids=('careplan_id',))
     def get_withdrawal(self, careplan_id: str) -> dict[str, Any] | None:
         key = self._withdrawal_key(careplan_id)
         if self.artifact_store:
             return self._get_artifact_json(key)
         return self._get_file_json(key)
 
-    @mlflow.trace(name="automation.job_store.tombstone")
+    @trace_safe(name="automation.job_store.tombstone", ids=('careplan_id',))
     def put_withdrawal(self, careplan_id: str, marker: dict[str, Any]) -> None:
         key = self._withdrawal_key(careplan_id)
         if self.artifact_store:
@@ -97,7 +95,7 @@ class JobStore:
             return
         self._write_file(key, json.dumps(marker, sort_keys=True).encode("utf-8"))
 
-    @mlflow.trace(name="automation.job_store.get_artifact")
+    @trace_safe(name="automation.job_store.get_artifact")
     def _get_artifact_json(self, key: str) -> dict[str, Any] | None:
         try:
             value = self.artifact_store.get(f"{self.artifact_store.bucket}:{key}")
@@ -110,7 +108,7 @@ class JobStore:
             raise
         return value if isinstance(value, dict) else None
 
-    @mlflow.trace(name="automation.job_store.list_artifacts")
+    @trace_safe(name="automation.job_store.list_artifacts")
     def _list_artifact_jobs(self, prefix: str) -> list[dict[str, Any]]:
         client = self.artifact_store._get_client()
         paginator = client.get_paginator("list_objects_v2")
@@ -125,7 +123,7 @@ class JobStore:
                     jobs.append(value)
         return sorted(jobs, key=lambda item: (item.get("careplan_id", ""), item.get("created_at", "")))
 
-    @mlflow.trace(name="automation.job_store.get_file")
+    @trace_safe(name="automation.job_store.get_file")
     def _get_file_json(self, key: str) -> dict[str, Any] | None:
         try:
             value = json.loads((self.directory / key).read_text(encoding="utf-8"))
@@ -135,7 +133,7 @@ class JobStore:
             return None
         return value if isinstance(value, dict) else None
 
-    @mlflow.trace(name="automation.job_store.write_file")
+    @trace_safe(name="automation.job_store.write_file")
     def _write_file(self, key: str, payload: bytes) -> None:
         path = self.directory / key
         path.parent.mkdir(parents=True, exist_ok=True)

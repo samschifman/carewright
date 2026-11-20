@@ -10,13 +10,12 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
 
-import mlflow
-
 from acp_writer.tools.temporal_index import (
     IndexedObservation,
     TemporalIndex,
     _parse_datetime,
 )
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +80,7 @@ def _filter_window(
     ]
 
 
-@mlflow.trace(name="temporal_observations_in_window")
+@trace_safe(name="temporal_observations_in_window")
 def observations_in_window(
     index: TemporalIndex,
     code: str,
@@ -113,7 +112,7 @@ def observations_in_window(
     )
 
 
-@mlflow.trace(name="temporal_observation_count")
+@trace_safe(name="temporal_observation_count")
 def observation_count(
     index: TemporalIndex,
     code: str,
@@ -171,7 +170,7 @@ def _apply_threshold(
     return result
 
 
-@mlflow.trace(name="temporal_consecutive_above")
+@trace_safe(name="temporal_consecutive_above")
 def consecutive_above(
     index: TemporalIndex,
     code: str,
@@ -219,7 +218,7 @@ def consecutive_above(
     )
 
 
-@mlflow.trace(name="temporal_rate_of_change")
+@trace_safe(name="temporal_rate_of_change")
 def rate_of_change(
     index: TemporalIndex,
     code: str,
@@ -280,7 +279,7 @@ def rate_of_change(
     )
 
 
-@mlflow.trace(name="temporal_cross_resource")
+@trace_safe(name="temporal_cross_resource")
 def cross_resource_temporal(
     index: TemporalIndex,
     bundle: dict,

@@ -9,10 +9,9 @@ from datetime import date
 from enum import Enum
 from typing import Any
 
-import mlflow
-from pydantic import BaseModel, Field
-
 from acp_writer.tools.ips_serializer import serialize_ips
+from cpg_contracts.tracing import trace_safe
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +105,7 @@ def validate_plan(plan: dict) -> list[str]:
     return errors
 
 
-@mlflow.trace(name="qa_generate_query_plan")
+@trace_safe(name="qa_generate_query_plan")
 def generate_query_plan(
     question: str,
     condensed_ips: str,
@@ -135,5 +134,5 @@ def generate_query_plan(
             "params": {k: v for k, v in plan.params.model_dump().items() if v is not None},
         }
     except Exception as exc:
-        logger.warning("Structured query plan generation failed: %s", exc)
+        logger.warning('Structured query plan generation failed exception_type=%s (details redacted)', type(exc).__name__)
         return None

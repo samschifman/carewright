@@ -37,6 +37,10 @@ case "${1:-}" in
         exit 1
         ;;
     cp)
+        [[ "$2" != /tmp/cpg-metadata.json && "$2" != /tmp/cpg-recs.json && "$2" != /tmp/dmn-upload.dmn && "$2" != /tmp/bpmn-template.json ]]
+        [[ "$3" == "router-pod:$TEST_ROOT/remote."* ]]
+        cp "$2" "${3#router-pod:}"
+        printf '%s\n' "$2" "${3#router-pod:}" >> "$TEST_TEMP_PATH_LOG"
         exit 0
         ;;
     exec)
@@ -46,9 +50,32 @@ case "${1:-}" in
         exec_command="${1:-}"
         shift || true
 
+        if [[ "$exec_command" == "mktemp" ]]; then
+            mktemp -d "$TEST_ROOT/remote.XXXXXX"
+            exit 0
+        fi
+        if [[ "$exec_command" == "rm" ]]; then
+            [[ "$*" == "-rf -- $TEST_ROOT/remote."* ]]
+            rm "$@"
+            exit 0
+        fi
+
         if [[ "$exec_command" == "python3" ]]; then
             [[ "${1:-}" == "-c" ]] && shift
             python_source="${1:-}"
+            shift
+            # Real syntax compilation, even when IDs/object keys contain quotes.
+            python3 -c 'import sys; compile(sys.argv[1], "<loader>", "exec")' "$python_source"
+            [[ "$python_source" == *'sys.argv[1]'* ]]
+            [[ "$python_source" != *"$TEST_CPG_ID"* ]]
+            case "$python_source" in
+                *metadata.json*|*recommendations.json*|*'/dmn/'*)
+                    [[ "$#" -eq 1 && "$1" == "published/$TEST_CPG_ID" ]];;
+            esac
+            if [[ -n "${TEST_DMN_KEY:-}" && "$python_source" == *'Key=sys.argv[1])'* ]]; then
+                [[ "$#" -eq 1 && "$1" == "$TEST_DMN_KEY" ]]
+                [[ "$python_source" != *"$TEST_DMN_KEY"* ]]
+            fi
             case "$python_source" in
                 *metadata.json*) printf '{"cpg_id":"fixture"}\n';;
                 *recommendations.json*) printf '{"recommendations":[]}\n';;
@@ -61,9 +88,13 @@ case "${1:-}" in
                                 '{"latest_key":"published/fixture/bpmn/follow-up-visit/latest.json","template_ref":"cpg-artifacts:published/fixture/bpmn/follow-up-visit/51b7a1c4c200.template.json","template_id":"follow-up-visit"}'
                         fi
                     else
-                        printf '%s\n' \
-                            '{"key":"published/fixture/dmn/model-one.dmn","name":"model-one"}' \
-                            '{"key":"published/fixture/dmn/model-two.dmn","name":"model-two"}'
+                        if [[ -n "${TEST_DMN_KEY:-}" ]]; then
+                            python3 -c 'import json,sys; print(json.dumps({"key": sys.argv[1], "name": "synthetic-model"}))' "$TEST_DMN_KEY"
+                        else
+                            printf '%s\n' \
+                                '{"key":"published/fixture/dmn/model-one.dmn","name":"model-one"}' \
+                                '{"key":"published/fixture/dmn/model-two.dmn","name":"model-two"}'
+                        fi
                     fi
                     ;;
                 *latest.json*) printf '{"template_id":"home-bp-monitoring","version":"499a6a2c1b81","template_ref":"cpg-artifacts:published/fixture/bpmn/home-bp-monitoring/499a6a2c1b81.template.json"}\n';;
@@ -86,6 +117,7 @@ case "${1:-}" in
             status_marker=false
             automation_request=false
             for arg in "$@"; do
+                if [[ "$arg" == @* ]]; then [[ -f "${arg#@}" ]]; fi
                 [[ "$arg" == *__HTTP_STATUS__* ]] && status_marker=true
                 [[ "$arg" == http://localhost:* ]] && printf '%s\n' "$arg" >> "$TEST_URL_LOG"
                 [[ "$arg" == *"/api/v1/automation/templates"* ]] && automation_request=true
@@ -146,7 +178,8 @@ CLUSTER_DOMAIN="unused.example"
 CONFIG
 
 export PATH="$FAKE_BIN:$PATH"
-export TEST_STATE_DIR
+export TEST_STATE_DIR TEST_ROOT
+export TEST_TEMP_PATH_LOG="$TEST_ROOT/temp-paths.log"
 export TEST_URL_LOG="$TEST_ROOT/request-urls.log"
 
 assert_contains() {
@@ -172,12 +205,18 @@ assert_not_contains() {
 run_loader() {
     local codes="$1"
     shift
-    rm -f "$TEST_STATE_DIR/curl-calls" "$TEST_URL_LOG"
+    rm -f "$TEST_STATE_DIR/curl-calls" "$TEST_URL_LOG" "$TEST_TEMP_PATH_LOG"
     export TEST_CODES="$codes"
+    export TEST_CPG_ID="${*: -1}"
     if "$SCRIPT_PATH" --config "$TEST_CONFIG" "$@" > "$TEST_OUTPUT" 2>&1; then
         result_status=0
     else
         result_status=$?
+    fi
+    if [[ -f "$TEST_TEMP_PATH_LOG" ]]; then
+        while IFS= read -r staged_path; do
+            [[ ! -e "$staged_path" ]] || { echo "FAIL: temporary artifact not removed: $staged_path" >&2; exit 1; }
+        done < "$TEST_TEMP_PATH_LOG"
     fi
 }
 
@@ -237,3 +276,8 @@ run_loader '201,500' 'CPG-RECOMMENDATION-ERROR'
 [[ "$result_status" -eq 1 ]] || { cat "$TEST_OUTPUT" >&2; exit 1; }
 assert_contains 'Recommendations ingest failed with HTTP 500' "$TEST_OUTPUT"
 echo 'PASS: recommendation ingestion errors stop loading'
+
+export TEST_DMN_KEY=$'published/fixture/dmn/quote\' and \"double\"\nnewline.dmn'
+run_loader '201,201,201' $'CPG-quote\' and \"double\"\nnewline'
+[[ "$result_status" -eq 0 ]] || { cat "$TEST_OUTPUT" >&2; exit 1; }
+echo 'PASS: quoted IDs and multiline object keys stay in argv, and local/pod temporary artifacts are cleaned up'

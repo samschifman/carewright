@@ -167,3 +167,39 @@ def test_src_contains_no_llm_api_key_literal():
         if "llm_api_key" in path.read_text()
     ]
     assert not hits, "Credential state field literal found in: " + ", ".join(hits)
+
+
+def test_patient_data_uses_shape_only_tracing():
+    """Raw decorators and HTTP autologging must not capture writer patient data."""
+    from cpg_contracts.tracing import PHI_PARAM_NAMES
+
+    root = Path(__file__).resolve().parents[2]
+    violations = []
+    for src in (root / "acp-writer/src", root / "shared/src"):
+        for path in src.rglob("*.py"):
+            tree = ast.parse(path.read_text())
+            aliases = {"mlflow"}
+            raw_traces = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    aliases.update(a.asname or a.name for a in node.names if a.name == "mlflow")
+                if isinstance(node, ast.ImportFrom) and node.module == "mlflow":
+                    raw_traces.update(a.asname or a.name for a in node.names if a.name == "trace")
+            def dotted(node):
+                if isinstance(node, ast.Name):
+                    return node.id
+                if isinstance(node, ast.Attribute):
+                    return dotted(node.value) + "." + node.attr
+                return ""
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and dotted(node.func) in {a + ".fastapi.autolog" for a in aliases}:
+                    violations.append(f"{path.relative_to(root)}:{node.lineno}: FastAPI autolog")
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                params = {a.arg for a in node.args.posonlyargs + node.args.args + node.args.kwonlyargs}
+                raw = {a + ".trace" for a in aliases} | raw_traces
+                if any(dotted(d.func if isinstance(d, ast.Call) else d) in raw for d in node.decorator_list):
+                    # All writer traces are safe: return values can carry PHI even when parameters don't.
+                    if "acp-writer" in path.parts or params & PHI_PARAM_NAMES:
+                        violations.append(f"{path.relative_to(root)}:{node.lineno}:{node.name}")
+    assert not violations, "Unsafe patient telemetry:\n" + "\n".join(violations)

@@ -17,11 +17,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import mlflow
-
 from acp_writer.tools.bundle_inventory import BundleInventory, InventoryEntry
 from acp_writer.tools.concept_resolver import resolve as resolve_concept
 from acp_writer.tools.ips_extractor import _normalize_display
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,7 @@ def _match_inventory_by_display(
     return matches
 
 
-@mlflow.trace(name="concept_resolve")
+@trace_safe(name="concept_resolve")
 def resolve_concept_in_bundle(
     term: str,
     inventory: BundleInventory,
@@ -173,7 +172,7 @@ def resolve_concept_in_bundle(
                         codes_tried=codes_tried, steps_run=steps,
                     )
     except Exception as exc:
-        logger.warning("Terminology lookup failed for '%s': %s", term, exc)
+        logger.warning('Terminology lookup failed exception_type=%s (details redacted)', type(exc).__name__)
 
     # Step 3: Display-text matching
     steps.append("display_text")
@@ -216,7 +215,7 @@ def resolve_concept_in_bundle(
     )
 
 
-@mlflow.trace(name="llm_inventory_match")
+@trace_safe(name="llm_inventory_match")
 def _llm_inventory_match(
     term: str,
     inventory_entries: list[InventoryEntry],
@@ -259,7 +258,7 @@ def _llm_inventory_match(
         return [e for e in inventory_entries if e.fhir_reference in ref_set]
 
     except Exception as exc:
-        logger.warning("LLM inventory match failed: %s", exc)
+        logger.warning('LLM inventory match failed exception_type=%s (details redacted)', type(exc).__name__)
         return None
 
 

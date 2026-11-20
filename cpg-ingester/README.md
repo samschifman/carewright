@@ -194,6 +194,8 @@ npm run dev          # http://localhost:3003
 
 The UI proxies `/api/*` requests to the BFF (default `http://localhost:8095`). Start the BFF first (see below).
 
+The UI needs an operator session before it shows anything: without one `/api/v1/session` returns 401 and the page stops at the session gate. [Local operator session](#local-operator-session) shows the two ways to get one on your machine.
+
 ### Production build
 
 The UI is built as a multi-stage Docker image: Node 22 Alpine for the build step, nginx-unprivileged for serving. nginx uses `envsubst` to resolve `${BFF_HOST}` at container startup, proxying `/api/` requests to the BFF pod.
@@ -202,6 +204,21 @@ The UI is built as a multi-stage Docker image: Node 22 Alpine for the build step
 cpg-ingester/ui/Containerfile       # Multi-stage build
 cpg-ingester/ui/nginx.conf       # Template with ${BFF_HOST} substitution
 ```
+
+### Async service callbacks
+
+When running async services by hand, set `WORKFLOW_CALLBACK_ORIGIN` to the
+SonataFlow origin reachable **from those services**, for example
+`WORKFLOW_CALLBACK_ORIGIN=http://localhost:8097`. A comma-separated list of
+origins is supported. Each entry must be `http://host[:port]` or
+`https://host[:port]`; paths and credentials are not allowed. A callback must
+match a configured scheme, host, and effective port. Missing configuration or
+a disallowed callback returns HTTP 400 before background work starts; callback
+delivery rechecks the origin and never follows redirects.
+
+`compose.orchestrated.yml` sets `http://sonataflow-devmode:8080` on each async
+service. Operator-managed deployments also need their workflow Service origin
+in this variable; the operator wiring is delivered separately in Track B6.
 
 ## Backend-for-Frontend (BFF)
 
@@ -242,8 +259,51 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e . -e ../shared
 pip install fastapi uvicorn python-multipart
 
-uvicorn cpg_ingester.services.bff:app --host 0.0.0.0 --port 8095 --reload
+# The UI origin, a non-Secure cookie for plain-HTTP localhost, and the
+# development auto-session (mock mode only). See "Local operator session".
+export CPG_PUBLIC_ORIGIN=http://localhost:3003
+export SESSION_COOKIE_SECURE=false
+export CPG_DEV_AUTO_SESSION=true
+
+uvicorn cpg_ingester.services.bff:app --host 127.0.0.1 --port 8095 --reload
 ```
+
+### Local operator session
+
+Every run, upload and review route needs an operator session, and the UI stops at a session gate until it has one. On a cluster the session comes from a launch link minted inside the BFF pod (see [Operator browser sessions](#operator-browser-sessions)). Locally there are two ways.
+
+**Development auto-session (mock mode).** With `CPG_DEV_AUTO_SESSION=true` the BFF creates an operator session the first time the UI asks for one. It applies only in mock mode (no `SONATAFLOW_URL`), and the BFF refuses to start with it unless `CPG_PUBLIC_ORIGIN` is a localhost origin, so it cannot be enabled on a cluster. Three settings must agree:
+
+| Variable | Local value | Why |
+|---|---|---|
+| `CPG_PUBLIC_ORIGIN` | `http://localhost:3003` | The exact origin the browser shows for the UI (Vite dev server and the Compose UI both use port 3003). State-changing requests from any other origin are refused. Use `localhost`, not `127.0.0.1`, in the browser as well. |
+| `SESSION_COOKIE_SECURE` | `false` | The session cookie is `Secure` by default, which a plain-HTTP page will not send back. `false` is accepted only with a localhost HTTP origin. |
+| `CPG_DEV_AUTO_SESSION` | `true` | Creates the session without a launch link. Off by default. |
+
+Standalone: export the three values before `uvicorn` as shown above, run `npm run dev` in `cpg-ingester/ui`, and open `http://localhost:3003`.
+
+Compose already sets the first two for `cpg-ingester-bff`; pass the third when you start it:
+
+```bash
+CPG_DEV_AUTO_SESSION=true podman-compose --profile ingester-pods up cpg-ingester-bff cpg-ingester-ui
+# then open http://localhost:3003
+```
+
+**Local launch link (any mode).** When the BFF is not in mock mode (for example the orchestrated Compose profile, where `SONATAFLOW_URL` is set) the auto-session does not apply. Mint a single-use link against the local BFF with its service token, then open it through the UI origin so the cookie is set for the page you will use:
+
+```bash
+# Compose default; use your own value if you overrode it. Standalone: export
+# SERVICE_TOKEN_CPG_BFF to any value before starting uvicorn, and use it here.
+export SERVICE_TOKEN_CPG_BFF="${SERVICE_TOKEN_CPG_BFF:-carewright-local-service-token-cpg-bff-dev-only}"
+
+curl -s -X POST http://localhost:8095/api/v1/admin/launch-links \
+  -H "X-Service-Token: $SERVICE_TOKEN_CPG_BFF"
+# {"url": "/api/v1/launch/<token>", "expiresIn": 600}
+
+# Open http://localhost:3003/api/v1/launch/<token> in the browser.
+```
+
+The link works once and expires after ten minutes. Sign out from the UI to end the session.
 
 Without `SONATAFLOW_URL` / `MINIO_ENDPOINT` set, the BFF starts in mock mode automatically.
 
@@ -256,6 +316,10 @@ Without `SONATAFLOW_URL` / `MINIO_ENDPOINT` set, the BFF starts in mock mode aut
 | `ACP_WRITER_BFF_URL` | _(empty)_ | Care Plan Writer BFF address; enables downstream notification when set |
 | `MINIO_ENDPOINT` | _(empty)_ | MinIO endpoint. When absent, enables mock mode |
 | `MLFLOW_TRACKING_URI` | _(empty)_ | MLflow tracing endpoint |
+| `CPG_PUBLIC_ORIGIN` | _(empty)_ | Exact origin of the UI as the browser sees it; state-changing requests from other origins are refused |
+| `SESSION_COOKIE_SECURE` | `true` | `false` only with a localhost HTTP `CPG_PUBLIC_ORIGIN` |
+| `CPG_DEV_AUTO_SESSION` | `false` | Local mock mode only: create an operator session without a launch link. The BFF refuses to start with it off a localhost origin |
+| `SERVICE_TOKEN_CPG_BFF` | _(empty)_ | Credential for `POST /api/v1/admin/launch-links` (mint a launch link) |
 
 ## Deployment
 
@@ -313,8 +377,10 @@ helm upgrade --install cpg-ingester deploy/chart/ \
 Both services are in the root `compose.yml` under the `ingester-pods` profile:
 
 ```bash
-podman-compose --profile ingester-pods up cpg-ingester-bff cpg-ingester-ui
+CPG_DEV_AUTO_SESSION=true podman-compose --profile ingester-pods up cpg-ingester-bff cpg-ingester-ui
 ```
+
+`CPG_DEV_AUTO_SESSION=true` gives the UI an operator session in mock mode; without it, mint a local launch link. See [Local operator session](#local-operator-session).
 
 | Service | Port | Notes |
 |---|---|---|
@@ -325,3 +391,11 @@ podman-compose --profile ingester-pods up cpg-ingester-bff cpg-ingester-ui
 
 - `data/synthetic-hypertension-cpg.pdf` — Synthetic CPG for testing
 - `data/golden/` — Golden DMN files for validation
+
+## Operator browser sessions
+
+Mint a ten-minute, single-use link with `carewright-operator/scripts/ingester-launch-link.sh <namespace> <cpgingester-name>` (run from the repository root). The service token stays inside the BFF pod. Treat the printed URL as a bearer credential; do not paste it into logs or public chat. Following the link consumes it before session creation, sets an HttpOnly operator cookie and redirects to `/`. Responses and the UI set `Referrer-Policy: no-referrer`; nginx API access logging is off. Configure upstream ingress logging to avoid recording launch paths.
+
+Set exact `CPG_PUBLIC_ORIGIN`, `SERVICE_TOKEN_CPG_BFF` and `CPG_SIGNING_KEY`. The UI obtains a CSRF token from `/api/v1/session` and sends it on upload/review/cancel/rerun/logout. Reviews require current `reviewRound` and `artifactRevision`; completion time is server assigned. Stale rounds fail with 409; confirmed duplicates send no second event. All operator reads require a session. `CPG_DEV_AUTO_SESSION=true` enables an explicitly logged development auto-session only when SonataFlow is absent; it is off by default. Use one BFF replica/worker, with Recreate updates. See [security](../docs/security.md).
+
+Review-gate cancellation requires both SonataFlow and the artifact store: without MinIO it returns `503 approval-store-unavailable`, preserving the signed round binding.

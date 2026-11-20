@@ -57,6 +57,9 @@ COMPLETED = {
 PERSISTED = {
     "id": CAREPLAN_ID,
     "status": "active",
+    # The fhir-server record names the approving session's patient and issuer.
+    "patient_reference": "Patient/p1",
+    "issuer": "",
     "bundle": {
         "resourceType": "Bundle",
         "entry": [
@@ -132,3 +135,22 @@ def test_persisted_careplan_without_a_run_is_unchanged(client, monkeypatch):
     detail = client.get(f"/api/v1/careplans/{CAREPLAN_ID}").json()
     activity = next(a for a in detail["view"]["activities"] if a["id"] == ACTIVITY_ID)
     assert "automations" not in activity
+
+
+def test_instance_fetch_failure_returns_the_base_plan(client, monkeypatch, caplog):
+    """Enrichment is optional: a workflow lookup failure must not turn the plan into a 500."""
+    class ListsButCannotLoad:
+        async def list_instances(self):
+            return [COMPLETED]
+
+        async def get_instance(self, sf_id):
+            raise RuntimeError("data index unavailable: patient detail that must not be logged")
+
+    monkeypatch.setattr(bff, "_sonataflow", ListsButCannotLoad())
+    response = client.get(f"/api/v1/careplans/{CAREPLAN_ID}")
+
+    assert response.status_code == 200
+    activity = next(a for a in response.json()["view"]["activities"] if a["id"] == ACTIVITY_ID)
+    assert "automations" not in activity
+    assert "sf-1" in caplog.text and "RuntimeError" in caplog.text
+    assert "must not be logged" not in caplog.text

@@ -9,8 +9,9 @@ cpg-phi bucket; non-PHI data (recommendations) in cpg-artifacts.
 import logging
 from typing import Any
 
-import mlflow
+from cpg_contracts.approvals import artifact_revision, normalize_ref
 from cpg_contracts.artifact_store import ArtifactStore
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def _fetch_ref(store: ArtifactStore, ref: str) -> dict | None:
     try:
         return store.get(ref)
     except Exception as exc:
-        logger.warning("Could not resolve artifact ref %s: %s", ref, exc)
+        logger.warning('Could not resolve artifact ref exception_type=%s (details redacted)', type(exc).__name__)
         return None
 
 
@@ -57,7 +58,7 @@ def _format_brief_goal_target(
     return measure
 
 
-@mlflow.trace(name="plan_goal_from_entry")
+@trace_safe(name="plan_goal_from_entry")
 def plan_goal_from_entry(entry: dict, idx: int) -> dict:
     """Map a planning-brief goal dict → the BFF ``PlanGoal`` shape.
 
@@ -81,7 +82,7 @@ def plan_goal_from_entry(entry: dict, idx: int) -> dict:
     return pg
 
 
-@mlflow.trace(name="plan_activity_from_entry")
+@trace_safe(name="plan_activity_from_entry")
 def plan_activity_from_entry(entry: dict, idx: int) -> dict:
     """Map a planning-brief activity dict → the BFF ``PlanActivity`` shape.
 
@@ -116,7 +117,7 @@ def plan_activity_from_entry(entry: dict, idx: int) -> dict:
     return pa
 
 
-@mlflow.trace(name="plan_activity_automation_view")
+@trace_safe(name="plan_activity_automation_view")
 def _automation_view_from_entry(entry: dict) -> dict:
     """Map a planning-brief automation instance into its UI view model."""
     if hasattr(entry, "model_dump"):
@@ -160,7 +161,7 @@ def _automation_view_from_entry(entry: dict) -> dict:
     }
 
 
-@mlflow.trace(name="plan_conflict_from_entry")
+@trace_safe(name="plan_conflict_from_entry")
 def plan_conflict_from_entry(entry: dict) -> dict:
     """Map a planning-brief ``ConflictEntry`` dict → the BFF ``PlanConflict`` shape.
 
@@ -213,7 +214,7 @@ def _to_coded_items(codes: list | None) -> list[dict]:
     return items
 
 
-@mlflow.trace(name="enrich_run_detail")
+@trace_safe(name="enrich_run_detail")
 def enrich_run_detail(
     detail: dict[str, Any],
     phi_store: ArtifactStore | None,
@@ -287,6 +288,13 @@ def enrich_run_detail(
             if resolved:
                 bundle = resolved
         fhir_bundle = bundle.get("fhir_bundle", bundle)
+        if isinstance(fhir_bundle, dict) and fhir_bundle.get("resourceType") == "Bundle":
+            detail["artifactRevision"] = artifact_revision(fhir_bundle)
+            if ref:
+                try:
+                    detail["artifactRef"] = normalize_ref(ref)
+                except ValueError:
+                    pass
 
         care_plan_view: dict[str, Any] = {"fhirBundle": fhir_bundle}
         if planning_brief and isinstance(planning_brief, dict):

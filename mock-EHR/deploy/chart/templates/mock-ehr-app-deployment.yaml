@@ -20,6 +20,10 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: ehr-ui
         app.kubernetes.io/part-of: cpg-to-acp
+      annotations:
+        # config.json is a subPath mount, which a running pod never refreshes:
+        # roll the pod whenever the rendered configuration changes.
+        checksum/config: {{ include (print $.Template.BasePath "/mock-ehr-app-configmap.yaml") . | sha256sum }}
     spec:
       containers:
         - name: mock-ehr-app

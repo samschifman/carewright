@@ -75,8 +75,8 @@ Producers must not assume a specific consumer runtime. Consumers are pluggable b
 - Do not put guideline-specific clinical language, thresholds, drug names, intervals, codes, or URLs in prompts or source. Look up codes rather than inventing them; report reviewer rejection patterns instead of patching clinical content into prompts or source.
 
 ### Observability
-- All new functions that perform meaningful work (API calls, LLM invocations, data transformations, external service calls) must be traced with `@mlflow.trace`. This is not optional.
-- `acp-writer` uses `mlflow.fastapi.autolog()` for endpoint tracing and `mlflow.langchain.autolog()` for LangGraph pipeline tracing.
+- All new functions that perform meaningful work (API calls, LLM invocations, data transformations, external service calls) must be traced with `@mlflow.trace` or the PHI-safe `@trace_safe`. This is not optional.
+- Functions handling patient data (including outputs and errors) use `cpg_contracts.tracing.trace_safe`: shape summaries and explicitly opted-in IDs only. FastAPI and LangChain autologging are prohibited on writer PHI paths because they capture request bodies or prompts. The writer architecture test enforces safe decorators; pipeline sentinel tests check traces and logs. Install the PHI span processor in each writer service as a second layer. Never log patient values, upstream response bodies, or raw exception messages.
 - `cpg-ingester` uses `mlflow.langchain.autolog()` for automatic LangGraph/LLM call tracing.
 - Set `MLFLOW_TRACKING_URI` in environment configuration for both local (compose.yml) and OpenShift (Helm chart) deployments.
 - See `platform/mlflow/README.md` for the full tracing inventory.

@@ -7,17 +7,16 @@ for resource construction. Adds AI Transparency IG compliance
 
 import logging
 
-import mlflow
-
 from acp_writer.output import write_artifact
 from acp_writer.planning_brief import PlanningBrief
 from acp_writer.state import CarePlanComposerState
 from acp_writer.validators.fhir_bundle_builder import build_fhir_bundle
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
 
-@mlflow.trace(name="fhir_bundle_generator")
+@trace_safe(name="fhir_bundle_generator")
 def fhir_bundle_generator(state: CarePlanComposerState) -> dict:
     """Generate a FHIR R4 transaction Bundle from the Planning Brief."""
     logger.info("── FHIR Bundle Generator ──")
@@ -42,7 +41,7 @@ def fhir_bundle_generator(state: CarePlanComposerState) -> dict:
         # _coerce_conflicts_field validator), so reaching here means the goals/
         # activities themselves are invalid. Surface it — an empty bundle must
         # not masquerade as a successful generation.
-        logger.error("Invalid Planning Brief: %s", e)
+        logger.error('Invalid Planning Brief exception_type=%s (details redacted)', type(e).__name__)
         return {
             "fhir_bundle": {
                 "resourceType": "Bundle",

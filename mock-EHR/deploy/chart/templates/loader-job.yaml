@@ -1,6 +1,6 @@
 {{- if .Values.loader.enabled }}
-{{- $clusterDomain := .Values.clusterDomain | default "apps.example.com" -}}
-{{- $acpWriterUiRoute := printf "https://acp-ui-%s.%s" .Release.Namespace $clusterDomain -}}
+{{- /* The same writer origin feeds the OAuth page's redirect allowlist (see _helpers.tpl). */ -}}
+{{- $acpWriterUiRoute := include "mock-ehr.acpWriterOrigin" . | default (printf "https://acp-ui-%s.apps.example.com" .Release.Namespace) -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -33,9 +33,9 @@ spec:
             - name: DATA_DIR
               value: /data
             - name: ACP_WRITER_LAUNCH_URI
-              value: {{ $acpWriterUiRoute }}/launch
+              value: {{ $acpWriterUiRoute }}/api/v1/launch
             - name: ACP_WRITER_REDIRECT_URI
-              value: {{ $acpWriterUiRoute }}/
+              value: {{ $acpWriterUiRoute }}/api/v1/launch/callback
             - name: MEDPLUM_SUPERADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:

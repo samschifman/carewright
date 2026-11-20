@@ -10,10 +10,9 @@ from enum import Enum
 from typing import Any
 from uuid import uuid4
 
-import mlflow
-from pydantic import BaseModel, Field, model_validator
-
 from cpg_contracts.automation.instances import ActivityAutomation
+from cpg_contracts.tracing import trace_safe
+from pydantic import BaseModel, Field, model_validator
 
 
 class FHIRCode(BaseModel):
@@ -241,7 +240,7 @@ def _norm_source(s) -> dict | None:
     return None
 
 
-@mlflow.trace(name="coerce_conflicts")
+@trace_safe(name="coerce_conflicts")
 def coerce_conflicts(raw: list | None) -> list[dict]:
     """Upgrade legacy / loosely-shaped conflict entries into new-shape dicts.
 
@@ -529,7 +528,7 @@ class PlanningBrief(BaseModel):
         return data
 
 
-@mlflow.trace(name="stamp_activity_ids")
+@trace_safe(name="stamp_activity_ids")
 def stamp_activity_ids(
     brief: PlanningBrief,
     prior_brief: PlanningBrief | dict | None = None,

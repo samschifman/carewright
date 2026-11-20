@@ -13,9 +13,6 @@ See working/issue-169-conflict-surfacing/dev-plan.md §WS2.
 import logging
 import time
 
-import mlflow
-from cpg_contracts import content_to_text
-
 from acp_writer.llm import get_llm
 from acp_writer.llm_json import loads_json
 from acp_writer.output import write_artifact
@@ -34,6 +31,8 @@ from acp_writer.prompts.conflict_analyst import (
     conflict_analyst_system_prompt,
 )
 from acp_writer.state import CarePlanComposerState
+from cpg_contracts import content_to_text
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +108,7 @@ def _load_prior_conflicts(state: CarePlanComposerState) -> list[ConflictEntry]:
         try:
             entries.append(ConflictEntry.model_validate(c))
         except Exception as exc:  # noqa: BLE001 — skip an unvalidatable prior conflict
-            logger.warning("Skipping unvalidatable prior conflict %r: %s", c, exc)
+            logger.warning('Skipping unvalidatable prior conflict exception_type=%s (details redacted)', type(exc).__name__)
     return entries
 
 
@@ -200,7 +199,7 @@ def _build_entry(
     conflict is kept even with empty indices, because a resolved conflict may
     describe items that no longer exist in the revised plan."""
     if not isinstance(raw, dict):
-        logger.warning("Dropping non-object conflict item: %r", raw)
+        logger.warning('Dropping non-object conflict item (details redacted)')
         return None
 
     prior_by_id = prior_by_id or {}
@@ -216,7 +215,7 @@ def _build_entry(
     # A fresh conflict must reference at least one live item; a carried-forward
     # prior conflict (esp. a resolved one) may legitimately have none.
     if not goal_indices and not activity_indices and prior is None:
-        logger.warning("Dropping conflict with no valid indices: %s", raw.get("description"))
+        logger.warning('Dropping conflict with no valid indices (details redacted)')
         return None
 
     sources: list[ConflictSource] = []
@@ -232,7 +231,7 @@ def _build_entry(
                 )
             )
         except Exception as exc:  # noqa: BLE001 — drop the bad source, keep the conflict
-            logger.warning("Dropping malformed conflict source %r: %s", s, exc)
+            logger.warning('Dropping malformed conflict source exception_type=%s (details redacted)', type(exc).__name__)
 
     category = _coerce_enum(
         raw.get("category"), ConflictCategory,
@@ -293,7 +292,7 @@ def _parse_conflicts(content: str) -> list[dict]:
     return conflicts
 
 
-@mlflow.trace(name="conflict_analyst")
+@trace_safe(name="conflict_analyst")
 def conflict_analyst(state: CarePlanComposerState) -> dict:
     """Detect plan-level conflicts and annotate the planning brief."""
     brief = dict(state.get("planning_brief") or {})
@@ -348,7 +347,7 @@ def conflict_analyst(state: CarePlanComposerState) -> dict:
                 if last_response_text:
                     # A response arrived but didn't parse — echo it back with a
                     # correction so the model can fix its own output.
-                    logger.warning("Conflict parse failed (attempt 1), retrying with feedback: %s", e)
+                    logger.warning('Conflict parse failed (attempt 1), retrying with feedback exception_type=%s (details redacted)', type(e).__name__)
                     messages.append({"role": "assistant", "content": last_response_text})
                     messages.append({
                         "role": "user",
@@ -359,12 +358,12 @@ def conflict_analyst(state: CarePlanComposerState) -> dict:
                     # Transport/empty error before any text — retry with the
                     # ORIGINAL messages. Never append an empty assistant turn:
                     # some providers reject empty-content messages outright.
-                    logger.warning("Conflict LLM call failed with no response (attempt 1), retrying: %s", e)
+                    logger.warning('Conflict LLM call failed with no response (attempt 1), retrying exception_type=%s (details redacted)', type(e).__name__)
                 continue
             # Graceful degradation: keep the brief's existing conflicts, continue.
             # No analysis ran, so no enforcement signal — return an empty list
             # explicitly so a stale value from an earlier pass can't linger.
-            logger.error("Conflict analysis failed after retry — keeping existing conflicts: %s", e)
+            logger.error('Conflict analysis failed after retry — keeping existing conflicts exception_type=%s (details redacted)', type(e).__name__)
             return {
                 "planning_brief": brief,
                 "conflict_prompt": user_prompt,
@@ -381,7 +380,7 @@ def conflict_analyst(state: CarePlanComposerState) -> dict:
         try:
             entry = _build_entry(r, goals, activities, prior_by_id)
         except Exception as exc:  # noqa: BLE001 — advisory step must never crash the run
-            logger.warning("Skipping malformed conflict item (%s): %r", exc, r)
+            logger.warning('Skipping malformed conflict item exception_type=%s (details redacted)', type(exc).__name__)
             malformed += 1
             continue
         if entry is not None:

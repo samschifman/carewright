@@ -78,6 +78,16 @@ type CPGLLMAnalysisComponentSpec struct {
 
 // CPGIngesterSpec defines the desired state of CPGIngester.
 type CPGIngesterSpec struct {
+	// ServiceTokens supplies per-receiver X-Service-Token credentials.
+	// +optional
+	ServiceTokens *ProviderSourceSpec `json:"serviceTokens,omitempty"`
+	// Signing supplies the ingester browser/review HMAC key.
+	// +optional
+	Signing *SecretSourceSpec `json:"signing,omitempty"`
+	// PublicOrigin is the exact browser UI origin used for CSRF checks.
+	// +optional
+	PublicOrigin string `json:"publicOrigin,omitempty"`
+
 	// Sandbox configures OpenShell settings shared by all ingester components.
 	// +optional
 	Sandbox PipelineSandboxSpec `json:"sandbox,omitempty"`

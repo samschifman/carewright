@@ -66,6 +66,12 @@ mockEhrApp:
   image:
     name: mock-ehr-app
     tag: latest
+  # Exact origins (comma-separated, scheme://host[:port]) the OAuth page may
+  # redirect to after sign-in. Served to the UI in /config.json, so one
+  # published image works for any deployment. Leave empty to allow exactly the
+  # writer origin (acpWriterOrigin below). A list set here may add origins but
+  # must include the writer origin.
+  smartRedirectOrigins: ""
   replicas: 1
   port: 8080
   resources:
@@ -89,3 +95,13 @@ loader:
 
 # Cluster domain for route hostnames (overridden by deploy scripts)
 clusterDomain: ""
+
+# The writer UI origin (scheme://host[:port]) as the browser sees it. One value
+# drives both the SMART client the loader registers in the EHR (launch and
+# redirect URIs) and the OAuth page's redirect allowlist. This is the EHR side
+# only: a launch also needs a writer BFF with the SMART client credentials and
+# the same public origin (ACP_PUBLIC_ORIGIN), which today is the
+# operator-managed writer (spec.smart.publicOrigin). Empty derives
+# https://acp-ui-<namespace>.<clusterDomain>, the script-deployed UI route,
+# whose writer does not receive SMART settings.
+acpWriterOrigin: ""

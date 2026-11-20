@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  Alert,
   Card,
   CardBody,
   DataList,
@@ -22,7 +23,7 @@ import {
 } from "@patternfly/react-core";
 import { PipelineStepper, useAdaptivePolling } from "@cpg-to-acp/ui-shared";
 import type { CodedItem, RunDetail, ReviewAction } from "@app/api/models";
-import { getRunDetail, submitReview } from "@app/services/api";
+import { ApiError, getRunDetail, submitReview } from "@app/services/api";
 import { toPipelineSteps } from "@app/pipeline/steps";
 import { ReviewPanel } from "@app/components/ReviewPanel";
 
@@ -42,9 +43,10 @@ export function RunDetailPage() {
     (r: RunDetail) => r.status === "completed" || r.status === "failed" || r.status === "cancelled",
     [],
   );
-  const { data: run } = useAdaptivePolling<RunDetail>({
+  const { data: run, error } = useAdaptivePolling<RunDetail>({
     fetcher,
     isComplete,
+    shouldRetry: (error) => !(error instanceof ApiError && [401, 403, 404].includes(error.status)),
     enabled: !!runId,
   });
 
@@ -65,6 +67,17 @@ export function RunDetailPage() {
 
   const patient = run?.patient;
 
+  // Only an error that polling will not recover from replaces the page: the
+  // session is gone or the run is out of scope. A transient failure (the hook
+  // keeps the last good run and retries) must leave the page mounted, or the
+  // clinician's unsent review feedback is lost with the form.
+  const terminalError = error instanceof ApiError && [401, 403, 404].includes(error.status);
+  if (error && (terminalError || !run)) {
+    return <PageSection><p role="alert">{error instanceof ApiError && [403, 404].includes(error.status)
+      ? "This run is not part of your current patient session."
+      : error.message}</p></PageSection>;
+  }
+
   if (!run) {
     return (
       <PageSection>
@@ -82,6 +95,18 @@ export function RunDetailPage() {
           </Title>
           <p>Status: {run.status}</p>
         </FlexItem>
+        {error && (
+          <FlexItem>
+            <Alert
+              variant="warning"
+              isInline
+              title="Connection problem. Retrying…"
+            >
+              The latest update could not be loaded. What you see is the last
+              version received; anything you have typed is kept.
+            </Alert>
+          </FlexItem>
+        )}
         {patient && (
           <FlexItem>
             <PatientSummarySection patient={patient} />
@@ -106,6 +131,7 @@ export function RunDetailPage() {
               key={run.reviewIteration}
               carePlan={run.carePlan}
               reviewIteration={run.reviewIteration}
+              artifactRevision={run.artifactRevision}
               previousFeedback={run.previousFeedback}
               onSubmit={handleReview}
             />

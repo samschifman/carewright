@@ -22,6 +22,9 @@ class CarePlanComposerState(TypedDict, total=False):
 
     # Phase 1: Condition Scanner outputs
     patient_reference: str
+    # Issuer of the session that approved the plan (from the signed approval
+    # record); set only on the approved write path. Scopes browser access.
+    issuer: str
     patient_demographics: dict[str, Any]
     condition_codes: list[dict[str, str]]
     medication_codes: list[dict[str, str]]

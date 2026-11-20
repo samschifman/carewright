@@ -9,10 +9,9 @@ import logging
 import os
 from typing import Any, Callable
 
-import mlflow
 import requests
-
 from acp_writer.state import CarePlanComposerState
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +76,7 @@ def _build_dependency_graph(
     return levels
 
 
-@mlflow.trace(name="guideline_resolver")
+@trace_safe(name="guideline_resolver")
 def guideline_resolver(
     state: CarePlanComposerState,
     *,
@@ -119,7 +118,7 @@ def guideline_resolver(
             resp.raise_for_status()
             all_models = resp.json()
         except Exception as e:
-            logger.warning("Failed to query decision engine for models: %s", e)
+            logger.warning('Failed to query decision engine for models exception_type=%s (details redacted)', type(e).__name__)
             all_models = []
     else:
         all_models = decision_models_provider()

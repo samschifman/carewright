@@ -6,6 +6,21 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: careplanwriter-sample
 spec:
+  serviceTokens:
+    type: carewright-service-tokens
+    secretRef: {name: carewright-service-tokens}
+  approvalSigning:
+    type: carewright-approval-signing
+    secretRef: {name: carewright-approval-signing-key}
+  sessionSigning:
+    secretRef: {name: carewright-session-signing-key}
+  smart:
+    credentials:
+      secretRef: {name: smart-client-credentials}
+    issAllowlist: [https://ehr.example.test/fhir/R4/]
+    publicOrigin: https://writer.example.test
+    redirectURI: https://writer.example.test/api/v1/launch/callback
+    scopes: launch openid fhirUser patient/*.read user/Practitioner.read
   sandbox:
     gateway:
       endpoint: http://openshell.openshell.svc.cluster.local:8080

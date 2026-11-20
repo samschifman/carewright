@@ -12,11 +12,10 @@ import json
 import logging
 import os
 
-import mlflow
 import requests
-from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
-
+from acp_writer.store.embedding import FakeEmbeddingProvider
+from acp_writer.store.guidelines_store import GuidelinesStore
+from acp_writer.store.vector_store import InMemoryVectorStore
 from cpg_contracts import (
     CPGMetadata,
     DecisionModelSummary,
@@ -25,9 +24,9 @@ from cpg_contracts import (
     RecommendationSearchRequest,
 )
 from cpg_contracts.decisions import normalize_decision_model_summary
-from acp_writer.store.embedding import FakeEmbeddingProvider
-from acp_writer.store.guidelines_store import GuidelinesStore
-from acp_writer.store.vector_store import InMemoryVectorStore
+from cpg_contracts.tracing import trace_safe
+from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ def _parse_dmn_metadata(dmn_xml: str) -> DecisionModelSummary:
 
 
 @mcp.tool()
-@mlflow.trace(name="mcp_deploy_decision_model")
+@trace_safe(name="mcp_deploy_decision_model")
 def deploy_decision_model(dmn_xml: str) -> str:
     """Deploy a DMN decision model to the care plan writer's internal decision engine."""
     summary = normalize_decision_model_summary(_parse_dmn_metadata(dmn_xml))
@@ -63,7 +62,7 @@ def deploy_decision_model(dmn_xml: str) -> str:
 
 
 @mcp.tool()
-@mlflow.trace(name="mcp_list_decision_models")
+@trace_safe(name="mcp_list_decision_models")
 def list_decision_models() -> str:
     """List all decision models currently deployed."""
     models = [m["summary"].model_dump(mode="json") for m in _dynamic_models.values()]
@@ -71,7 +70,7 @@ def list_decision_models() -> str:
 
 
 @mcp.tool()
-@mlflow.trace(name="mcp_evaluate_decision")
+@trace_safe(name="mcp_evaluate_decision", ids=('model_id',))
 def evaluate_decision(model_id: str, inputs: dict) -> str:
     """Evaluate a deployed DMN decision model with the given inputs.
 
@@ -94,26 +93,27 @@ def evaluate_decision(model_id: str, inputs: dict) -> str:
 
 
 @mcp.tool()
-@mlflow.trace(name="mcp_generate_careplan")
+@trace_safe(name="mcp_generate_careplan")
 def generate_careplan(ips_bundle: dict) -> str:
-    """Generate a patient-specific FHIR CarePlan from a FHIR IPS Bundle.
-
-    Proxies to the acp-writer FHIR Server pod via REST.
-    """
-    try:
-        r = requests.post(
-            f"{FHIR_SERVER_URL}/api/v1/write",
-            json={"fhir_bundle": ips_bundle},
-            timeout=120,
-        )
-        r.raise_for_status()
-        return json.dumps(r.json())
-    except requests.RequestException as e:
-        return json.dumps({"error": f"Care plan generation failed: {e}"})
+    """Generate a draft bundle for review without publishing to the FHIR server."""
+    from acp_writer import api
+    from acp_writer.pipeline import build_pipeline
+    graph = build_pipeline(
+        automation_registry=api._automation_registry,
+        automation_validator=api._automation_validation_result,
+        guidelines_store=_guidelines_store, vector_store=_vector_store,
+        decision_models_provider=lambda: [entry['summary'].model_dump(mode='json') for entry in _dynamic_models.values()],
+    )
+    result = graph.compile().invoke({
+        'ips_bundle': ips_bundle, 'approved': False,
+        'litellm_url': os.environ.get('LITELLM_URL', 'http://localhost:4000'),
+        'llm_model': os.environ.get('LLM_MODEL', 'default'),
+    })
+    return json.dumps(result.get('fhir_bundle', {}))
 
 
 @mcp.tool()
-@mlflow.trace(name="mcp_register_guideline")
+@trace_safe(name="mcp_register_guideline")
 def register_guideline(metadata: dict) -> str:
     """Register a CPG guideline's metadata."""
     cpg = CPGMetadata.model_validate(metadata)
@@ -122,7 +122,7 @@ def register_guideline(metadata: dict) -> str:
 
 
 @mcp.tool()
-@mlflow.trace(name="mcp_ingest_recommendation")
+@trace_safe(name="mcp_ingest_recommendation")
 def ingest_recommendation(recommendation: dict) -> str:
     """Ingest a single recommendation into the knowledge base."""
     rec = Recommendation.model_validate(recommendation)
@@ -131,7 +131,7 @@ def ingest_recommendation(recommendation: dict) -> str:
 
 
 @mcp.tool()
-@mlflow.trace(name="mcp_ingest_recommendation_batch")
+@trace_safe(name="mcp_ingest_recommendation_batch")
 def ingest_recommendation_batch(bundle: dict) -> str:
     """Ingest a batch of recommendations from a RecommendationBundle."""
     rb = RecommendationBundle.model_validate(bundle)
@@ -144,7 +144,7 @@ def ingest_recommendation_batch(bundle: dict) -> str:
 
 
 @mcp.tool()
-@mlflow.trace(name="mcp_search_recommendations")
+@trace_safe(name="mcp_search_recommendations")
 def search_recommendations(query: str, top_k: int = 5, source_cpg: str | None = None) -> str:
     """Search recommendations by semantic similarity with optional filters."""
     req = RecommendationSearchRequest(query=query, top_k=top_k, source_cpg=source_cpg)

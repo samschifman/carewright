@@ -19,8 +19,8 @@ import os
 from importlib import metadata
 from typing import TYPE_CHECKING, Any
 
-import mlflow
 from cpg_contracts.automation.expressions import ExpressionError, parse_duration
+from cpg_contracts.tracing import trace_safe
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids any import ordering risk
     from acp_writer.services.reviewer import ReviewerContext
@@ -165,7 +165,7 @@ def _binding_value(parameter: Any, binding: Any) -> tuple[str, Any]:
     return value_key, value
 
 
-@mlflow.trace(name="fhir.build_automation_document_reference")
+@trace_safe(name="fhir.build_automation_document_reference", ids=('template_id',))
 def build_automation_docref(
     *, docref_id: str, task_id: str, patient_ref: str, careplan_ref: str,
     revision: str, name: str, template_id: str, bpmn_xml: str, now: str,
@@ -210,7 +210,7 @@ def build_automation_docref(
     }
 
 
-@mlflow.trace(name="fhir.build_automation_task")
+@trace_safe(name="fhir.build_automation_task")
 def build_automation_task(
     *, task_id: str, automation: Any, name: str, patient_ref: str,
     careplan_ref: str, focus_ref: str | None, docref_ref: str, now: str,
@@ -289,7 +289,7 @@ def activity_automation_extension(docref_ref: str, task_ref: str, status: str = 
     }
 
 
-@mlflow.trace(name="fhir.build_automation_provenance")
+@trace_safe(name="fhir.build_automation_provenance")
 def build_automation_provenance(
     *, prov_uid: str, careplan_ref: str, activity_indices: list[int], docref_ref: str,
     task_ref: str, device_ref: str, recorded: str, source_recommendation_ids: list[str],
@@ -664,7 +664,7 @@ def is_conflict_provenance(prov: dict) -> bool:
     )
 
 
-@mlflow.trace(name="plan_conflict_from_provenance")
+@trace_safe(name="plan_conflict_from_provenance")
 def plan_conflict_from_provenance(prov: dict) -> dict | None:
     """Reconstruct a BFF ``PlanConflict`` from a conflict Provenance.
 
@@ -739,7 +739,7 @@ def plan_conflict_from_provenance(prov: dict) -> dict | None:
     return pc
 
 
-@mlflow.trace(name="build_conflict_provenance")
+@trace_safe(name="build_conflict_provenance")
 def build_conflict_provenance(
     prov_uid: str,
     conflict: Any,

@@ -17,15 +17,16 @@ import os
 import tempfile
 from uuid import uuid4
 
-from fastapi import BackgroundTasks, FastAPI, Request
-
 from cpg_contracts import get_artifact_store, post_callback, resolve_ref, store_artifact
+from cpg_contracts.cloud_events import require_callback_url
+from cpg_contracts.service_auth import require_service_token
+from cpg_ingester.nodes.classification_reviewer import classification_reviewer
 from cpg_ingester.nodes.content_filter import content_filter
 from cpg_ingester.nodes.figure_interpreter import figure_interpreter
 from cpg_ingester.nodes.item_identifier import item_identifier
-from cpg_ingester.nodes.classification_reviewer import classification_reviewer
 from cpg_ingester.nodes.metadata_extractor import metadata_extractor
 from cpg_ingester.nodes.structure_analyzer import structure_analyzer
+from fastapi import BackgroundTasks, Depends, FastAPI, Request
 
 logger = logging.getLogger(__name__)
 
@@ -253,18 +254,18 @@ def _do_generate(data: dict) -> dict:
         return result
 
 
-@app.post("/api/v1/analyze")
+@app.post("/api/v1/analyze", dependencies=[Depends(require_service_token('SERVICE_TOKEN_CPG_LLM_ANALYSIS'))])
 async def analyze(request: Request):
     """Run the full LLM analysis phase (sync)."""
     data = await request.json()
     return _do_analyze(data)
 
 
-@app.post("/api/v1/analyze-async")
+@app.post("/api/v1/analyze-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_CPG_LLM_ANALYSIS', workflow_route=True))])
 async def analyze_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept immediately, run analysis in background, POST callback."""
     data = await request.json()
-    callback_url = data.pop("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.pop("process_instance_id", "")
     background_tasks.add_task(
         _run_analyze_background, data, callback_url, process_instance_id
@@ -278,25 +279,25 @@ def _run_analyze_background(data: dict, callback_url: str, process_instance_id: 
     try:
         result = _do_analyze(data)
     except Exception as e:
-        logger.error("Analyze background task failed: %s", e)
-        result = {"error": str(e)}
+        logger.error("Analyze background task failed exception_type=%s", type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}"}
 
     result["iteration"] = iteration
     post_callback(callback_url, process_instance_id, "analyze-done", result)
 
 
-@app.post("/api/v1/generate")
+@app.post("/api/v1/generate", dependencies=[Depends(require_service_token('SERVICE_TOKEN_CPG_LLM_ANALYSIS'))])
 async def generate(request: Request):
     """Generate DMN and recommendations from an approved analysis (sync)."""
     data = await request.json()
     return _do_generate(data)
 
 
-@app.post("/api/v1/generate-async")
+@app.post("/api/v1/generate-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_CPG_LLM_ANALYSIS', workflow_route=True))])
 async def generate_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept immediately, run generation in background, POST callback."""
     data = await request.json()
-    callback_url = data.pop("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.pop("process_instance_id", "")
     background_tasks.add_task(
         _run_generate_background, data, callback_url, process_instance_id
@@ -310,8 +311,8 @@ def _run_generate_background(data: dict, callback_url: str, process_instance_id:
     try:
         result = _do_generate(data)
     except Exception as e:
-        logger.error("Generate background task failed: %s", e)
-        result = {"error": str(e)}
+        logger.error("Generate background task failed exception_type=%s", type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}"}
 
     result["iteration"] = iteration
     post_callback(callback_url, process_instance_id, "generate-done", result)

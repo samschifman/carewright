@@ -10,7 +10,7 @@ export function MermaidDiagram({ definition }: { definition: string }) {
 
     import('mermaid').then(({ default: mermaid }) => {
       if (cancelled) return;
-      mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+      mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'strict' });
       mermaid.render(`mermaid-${id}`, definition).then(({ svg }) => {
         if (!cancelled && containerRef.current) {
           containerRef.current.innerHTML = svg;

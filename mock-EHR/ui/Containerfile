@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+ARG VITE_SMART_REDIRECT_ORIGINS
+ENV VITE_SMART_REDIRECT_ORIGINS=$VITE_SMART_REDIRECT_ORIGINS
 RUN npm run build
 
 FROM quay.io/carewright/nginx-unprivileged:alpine

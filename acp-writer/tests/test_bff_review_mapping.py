@@ -14,13 +14,12 @@ mapper's view of where the loop is.
 
 from unittest.mock import AsyncMock
 
-from fastapi.testclient import TestClient
-
 from acp_writer.services import bff
 from acp_writer.services.sonataflow_client import (
     infer_current_state,
     map_to_run_detail,
 )
+from fastapi.testclient import TestClient
 
 
 def test_approve_routes_to_write_fhir():
@@ -132,13 +131,17 @@ def test_submit_review_during_fhir_review_returns_409(monkeypatch):
         async def get_instance(self, _instance_id):
             return instance
 
+    monkeypatch.setattr(bff, "APPROVAL_SIGNING_KEY", "test-signing-key")
+    class Store:
+        def get(self, key): raise KeyError(key)
+    monkeypatch.setattr(bff, "_phi_store", Store())
     fake = FakeSonataFlow()
     monkeypatch.setattr(bff, "_sonataflow", fake)
     monkeypatch.setattr(bff, "_pending_runs", {})
 
     response = TestClient(bff.app).post(
         "/api/v1/runs/run-1/review/careplan",
-        json={"decision": "approve", "reviewRound": 0},
+        json={"decision": "approve", "reviewRound": 0, "artifactRevision": "0" * 64},
     )
 
     assert response.status_code == 409

@@ -13,8 +13,23 @@ import os
 from uuid import uuid4
 
 import requests as http_requests
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
+# Reference the stores via the `api` module (NOT `from acp_writer.api import
+# _vector_store`): a from-import binds the name to whatever object exists at
+# import time, so a later init_stores() swap (e.g. to a real embedding provider)
+# would leave this service pointing at the stale store while the RAG nodes —
+# which read api._vector_store at call time — use the new one. Module-attribute
+# access keeps ingestion and retrieval on the same store.
+from acp_writer import api
+from acp_writer.nodes.automation_synthesizer import synthesize_automations_for_brief
+from acp_writer.nodes.brief_reviewer import brief_reviewer
+from acp_writer.nodes.conflict_analyst import conflict_analyst
+from acp_writer.nodes.fhir_semantic_reviewer import fhir_semantic_reviewer
+from acp_writer.nodes.guideline_resolver import guideline_resolver
+from acp_writer.nodes.plan_composer import plan_composer
+from acp_writer.nodes.recommendation_retriever import recommendation_retriever
+from acp_writer.pipeline import MAX_BRIEF_REVIEWS
+from acp_writer.services.template_client import TemplateClient
 from cpg_contracts import (
     CPGMetadata,
     Recommendation,
@@ -26,24 +41,14 @@ from cpg_contracts import (
     resolve_ref,
     store_artifact,
 )
-# Reference the stores via the `api` module (NOT `from acp_writer.api import
-# _vector_store`): a from-import binds the name to whatever object exists at
-# import time, so a later init_stores() swap (e.g. to a real embedding provider)
-# would leave this service pointing at the stale store while the RAG nodes —
-# which read api._vector_store at call time — use the new one. Module-attribute
-# access keeps ingestion and retrieval on the same store.
-from acp_writer import api
-from acp_writer.nodes.guideline_resolver import guideline_resolver
-from acp_writer.nodes.recommendation_retriever import recommendation_retriever
-from acp_writer.nodes.plan_composer import plan_composer
-from acp_writer.nodes.brief_reviewer import brief_reviewer
-from acp_writer.nodes.conflict_analyst import conflict_analyst
-from acp_writer.nodes.automation_synthesizer import synthesize_automations_for_brief
-from acp_writer.nodes.fhir_semantic_reviewer import fhir_semantic_reviewer
-from acp_writer.pipeline import MAX_BRIEF_REVIEWS
-from acp_writer.services.template_client import TemplateClient
+from cpg_contracts.cloud_events import require_callback_url
+from cpg_contracts.service_auth import require_service_token
+from cpg_contracts.tracing import install_phi_span_processor
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 
 logger = logging.getLogger(__name__)
+
+install_phi_span_processor()
 
 app = FastAPI(title="acp-writer-llm-reasoning", version="0.1.0")
 _store = get_artifact_store()
@@ -125,7 +130,7 @@ def list_guidelines():
 # --- CPG artifact management (used by cpg-ingester Delivery) ---
 
 
-@app.post("/api/v1/guidelines", status_code=201)
+@app.post("/api/v1/guidelines", status_code=201, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def register_guideline(request: Request):
     data = await request.json()
     metadata = CPGMetadata.model_validate(data)
@@ -133,7 +138,7 @@ async def register_guideline(request: Request):
     return result.model_dump(mode="json")
 
 
-@app.post("/api/v1/knowledge/recommendations/batch", status_code=201)
+@app.post("/api/v1/knowledge/recommendations/batch", status_code=201, dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def ingest_recommendation_batch(request: Request):
     data = await request.json()
     bundle = RecommendationBundle.model_validate(data)
@@ -145,7 +150,7 @@ async def ingest_recommendation_batch(request: Request):
     }
 
 
-@app.post("/api/v1/knowledge/search")
+@app.post("/api/v1/knowledge/search", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def search_knowledge(request: Request):
     data = await request.json()
     search_req = RecommendationSearchRequest.model_validate(data)
@@ -156,7 +161,7 @@ async def search_knowledge(request: Request):
 # --- DMN execution (resolution + evaluation loop) ---
 
 
-@app.post("/api/v1/execute-dmn")
+@app.post("/api/v1/execute-dmn", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def execute_dmn(request: Request):
     """Execute DMN models with concept-resolution pipeline.
 
@@ -184,11 +189,11 @@ async def execute_dmn(request: Request):
     return {"dmn_results": result.get("dmn_results", [])}
 
 
-@app.post("/api/v1/execute-dmn-async")
+@app.post("/api/v1/execute-dmn-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING', workflow_route=True))])
 async def execute_dmn_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept immediately, run DMN execution in background, POST callback."""
     data = await request.json()
-    callback_url = data.pop("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.pop("process_instance_id", "")
     background_tasks.add_task(_run_execute_dmn_background, data, callback_url, process_instance_id)
     return {"status": "accepted"}
@@ -213,8 +218,8 @@ def _run_execute_dmn_background(data: dict, callback_url: str, process_instance_
         result = dmn_executor(state)
         result = {"dmn_results": result.get("dmn_results", [])}
     except Exception as e:
-        logger.error("Execute-DMN background task failed: %s", e)
-        result = {"error": str(e), "dmn_results": []}
+        logger.error('Execute-DMN background task failed exception_type=%s (details redacted)', type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}", "dmn_results": []}
 
     post_callback(callback_url, process_instance_id, "execute-dmn-done", result)
 
@@ -222,7 +227,7 @@ def _run_execute_dmn_background(data: dict, callback_url: str, process_instance_
 # --- Pipeline execution endpoints ---
 
 
-@app.post("/api/v1/resolve")
+@app.post("/api/v1/resolve", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def resolve(request: Request):
     """Resolve applicable guidelines for patient conditions."""
     data = await request.json()
@@ -239,11 +244,11 @@ async def resolve(request: Request):
     }
 
 
-@app.post("/api/v1/resolve-async")
+@app.post("/api/v1/resolve-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING', workflow_route=True))])
 async def resolve_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept immediately, run resolve in background, POST callback."""
     data = await request.json()
-    callback_url = data.pop("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.pop("process_instance_id", "")
     background_tasks.add_task(_run_resolve_background, data, callback_url, process_instance_id)
     return {"status": "accepted"}
@@ -263,13 +268,13 @@ def _run_resolve_background(data: dict, callback_url: str, process_instance_id: 
             "dmn_dependency_graph": result.get("dmn_dependency_graph", []),
         }
     except Exception as e:
-        logger.error("Resolve background task failed: %s", e)
-        result = {"error": str(e)}
+        logger.error('Resolve background task failed exception_type=%s (details redacted)', type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}"}
 
     post_callback(callback_url, process_instance_id, "resolve-done", result)
 
 
-@app.post("/api/v1/retrieve")
+@app.post("/api/v1/retrieve", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def retrieve(request: Request):
     """Retrieve recommendations from vector store."""
     data = await request.json()
@@ -287,11 +292,11 @@ async def retrieve(request: Request):
     return {"recommendations": recs}
 
 
-@app.post("/api/v1/retrieve-async")
+@app.post("/api/v1/retrieve-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING', workflow_route=True))])
 async def retrieve_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept immediately, run retrieve in background, POST callback."""
     data = await request.json()
-    callback_url = data.pop("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.pop("process_instance_id", "")
     background_tasks.add_task(_run_retrieve_background, data, callback_url, process_instance_id)
     return {"status": "accepted"}
@@ -313,8 +318,8 @@ def _run_retrieve_background(data: dict, callback_url: str, process_instance_id:
         else:
             result = {"recommendations": recs}
     except Exception as e:
-        logger.error("Retrieve background task failed: %s", e)
-        result = {"error": str(e)}
+        logger.error('Retrieve background task failed exception_type=%s (details redacted)', type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}"}
 
     post_callback(callback_url, process_instance_id, "retrieve-done", result)
 
@@ -467,7 +472,7 @@ def _compose_pipeline(data: dict, strict_store: bool = False) -> dict:
             brief["review_status"] = "flagged"
             brief["review_feedback"] = f"{existing}\n{note}" if existing else note
             state["planning_brief"] = brief
-            logger.error("Unapplied clinician directives after enforcement retry: %s", names)
+            logger.error('Unapplied clinician directives after enforcement retry (details redacted)')
 
     brief = state.get("planning_brief", {})
     result = _prompt_artifact(state)
@@ -483,18 +488,18 @@ def _compose_pipeline(data: dict, strict_store: bool = False) -> dict:
     return result
 
 
-@app.post("/api/v1/compose")
+@app.post("/api/v1/compose", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def compose(request: Request):
     """Run Plan Composer with Brief Reviewer loop."""
     data = await request.json()
     return await asyncio.to_thread(_compose_pipeline, data)
 
 
-@app.post("/api/v1/compose-async")
+@app.post("/api/v1/compose-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING', workflow_route=True))])
 async def compose_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept immediately, run compose in background, POST callback."""
     data = await request.json()
-    callback_url = data.pop("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.pop("process_instance_id", "")
     background_tasks.add_task(_run_compose_background, data, callback_url, process_instance_id)
     return {"status": "accepted"}
@@ -504,13 +509,13 @@ def _run_compose_background(data: dict, callback_url: str, process_instance_id: 
     try:
         result = _compose_pipeline(data, strict_store=True)
     except Exception as e:
-        logger.error("Compose background task failed: %s", e)
-        result = {"error": str(e)}
+        logger.error('Compose background task failed exception_type=%s (details redacted)', type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}"}
 
     post_callback(callback_url, process_instance_id, "compose-done", result)
 
 
-@app.post("/api/v1/review-fhir")
+@app.post("/api/v1/review-fhir", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING'))])
 async def review_fhir(request: Request):
     """Run FHIR Semantic Reviewer."""
     data = await request.json()
@@ -530,11 +535,11 @@ async def review_fhir(request: Request):
     }
 
 
-@app.post("/api/v1/review-fhir-async")
+@app.post("/api/v1/review-fhir-async", dependencies=[Depends(require_service_token('SERVICE_TOKEN_ACP_LLM_REASONING', workflow_route=True))])
 async def review_fhir_async(request: Request, background_tasks: BackgroundTasks):
     """Async version: accept immediately, run review in background, POST callback."""
     data = await request.json()
-    callback_url = data.pop("callback_url", "")
+    callback_url = require_callback_url(data)
     process_instance_id = data.pop("process_instance_id", "")
     background_tasks.add_task(_run_review_fhir_background, data, callback_url, process_instance_id)
     return {"status": "accepted"}
@@ -557,7 +562,7 @@ def _run_review_fhir_background(data: dict, callback_url: str, process_instance_
             "fhir_review_count": result_state.get("fhir_review_count", 0),
         }
     except Exception as e:
-        logger.error("Review-FHIR background task failed: %s", e)
-        result = {"error": str(e), "fhir_review_feedback": "", "fhir_review_count": 0}
+        logger.error('Review-FHIR background task failed exception_type=%s (details redacted)', type(e).__name__)
+        result = {"error": f"operation-failed:{type(e).__name__}", "fhir_review_feedback": "", "fhir_review_count": 0}
 
     post_callback(callback_url, process_instance_id, "review-done", result)

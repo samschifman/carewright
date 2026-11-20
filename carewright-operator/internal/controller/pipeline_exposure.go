@@ -64,7 +64,7 @@ func reconcileBFFDeployment(ctx context.Context, k8sClient client.Client, scheme
 	if err != nil {
 		return bffDeploymentSummary{}, fmt.Errorf("resolve BFF resources: %w", err)
 	}
-	command := component.Command
+	command := append(slices.Clone(component.Command), "--no-access-log")
 	if len(component.Spec.Command) != 0 {
 		command = component.Spec.Command
 	}
@@ -77,6 +77,7 @@ func reconcileBFFDeployment(ctx context.Context, k8sClient client.Client, scheme
 		delete(envValues, "ARTIFACT_STORE_SECRET_KEY")
 	}
 	env := environmentVariables(envValues)
+	env = append(env, browserSecurityEnvironment(owner)...)
 	if artifactStore != nil && artifactStore.Credentials != nil {
 		secretName := artifactStore.Credentials.SecretRef.Name
 		if secretName == "" {
@@ -93,6 +94,7 @@ func reconcileBFFDeployment(ctx context.Context, k8sClient client.Client, scheme
 		}
 		setPipelineResourceLabels(deployment, owner, "bff")
 		deployment.Spec.Replicas = ptrTo(int32(1))
+		deployment.Spec.Strategy = appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}
 		deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: selector}
 		deployment.Spec.Template.Labels = maps.Clone(selector)
 		deployment.Spec.Template.Spec.Containers = []corev1.Container{{

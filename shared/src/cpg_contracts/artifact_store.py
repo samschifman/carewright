@@ -190,5 +190,5 @@ def store_artifact(
             ref = store.put(key, data)
             return None, ref
         except Exception as e:
-            logger.warning("Artifact store unavailable, falling back to inline: %s", e)
+            logger.warning("Artifact store unavailable, falling back to inline")
     return data, None

@@ -32,12 +32,14 @@ export interface AppShellProps {
   navItems: NavItemConfig[];
   brandText?: string;
   children: React.ReactNode;
+  headerActions?: React.ReactNode;
 }
 
 export function AppShell({
   navItems,
   brandText = "CPG Care Plans",
   children,
+  headerActions,
 }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { theme, toggleTheme } = useTheme();
@@ -80,6 +82,7 @@ export function AppShell({
       <MastheadContent>
         <Toolbar isFullHeight>
           <ToolbarContent>
+            {headerActions && <ToolbarItem>{headerActions}</ToolbarItem>}
             <ToolbarItem align={{ default: "alignEnd" }}>
               <Button
                 variant="plain"

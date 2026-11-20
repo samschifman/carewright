@@ -14,9 +14,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-import mlflow
-from cpg_contracts import content_to_text
-
 from acp_writer.llm import get_llm
 from acp_writer.llm_json import loads_json
 from acp_writer.output import write_artifact
@@ -34,6 +31,8 @@ from acp_writer.prompts.plan_composer import (
 )
 from acp_writer.state import CarePlanComposerState
 from acp_writer.tools.concept_resolver import resolve
+from cpg_contracts import content_to_text
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +133,7 @@ def _source_recommendation_ids(item: dict) -> list[str]:
     return list(dict.fromkeys(value for value in values if isinstance(value, str) and value.strip()))
 
 
-@mlflow.trace(name="resolve_missing_medication_codes")
+@trace_safe(name="resolve_missing_medication_codes")
 def _resolve_missing_medication_codes(brief_data: dict[str, Any]) -> None:
     """Resolve missing medication coding through the shared concept path."""
     for activity in brief_data.get("activities") or []:
@@ -396,7 +395,7 @@ def _parse_brief_from_response(content: str) -> dict[str, Any]:
     return loads_json(content)
 
 
-@mlflow.trace(name="plan_composer")
+@trace_safe(name="plan_composer")
 def plan_composer(state: CarePlanComposerState) -> dict:
     """Map decisions + recommendations → PlanningBrief."""
     patient_ref = state.get("patient_reference", "Patient/unknown")
@@ -575,7 +574,7 @@ def plan_composer(state: CarePlanComposerState) -> dict:
             f"Planning Brief parse/normalization error: {safe_error}\n"
             f"Offending fragment (first 500 characters): {str(safe_fragment)[:500]}"
         )
-        logger.exception("Failed to parse or normalize Planning Brief from LLM response")
+        logger.error('Failed to parse or normalize Planning Brief from LLM response exception_type=%s (details redacted)', type(e).__name__)
         return {
             "planning_brief": {
                 "patient_reference": patient_ref,

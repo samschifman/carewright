@@ -1,17 +1,26 @@
+import { resolveConfig, type AppConfig } from './runtimeConfig';
+
 export const APP_NAME = 'CareView EHR';
 
-export async function loadConfig(): Promise<{ medplumBaseUrl: string }> {
+let current: AppConfig | undefined;
+
+/** Load `/config.json` (mounted at deploy time) over the build-time defaults. */
+export async function loadConfig(): Promise<AppConfig> {
+  let runtime: unknown;
   try {
     const resp = await fetch('/config.json');
-    if (resp.ok) {
-      const config = await resp.json();
-      if (config.medplumBaseUrl) return config;
-    }
+    if (resp.ok) runtime = await resp.json();
   } catch {
-    // Config file not available — use defaults
+    // Config file not available or not JSON — use the build-time defaults.
   }
+  current = resolveConfig(runtime, {
+    medplumBaseUrl: import.meta.env.VITE_MEDPLUM_BASE_URL,
+    smartRedirectOrigins: import.meta.env.VITE_SMART_REDIRECT_ORIGINS,
+  });
+  return current;
+}
 
-  return {
-    medplumBaseUrl: import.meta.env.VITE_MEDPLUM_BASE_URL || 'http://localhost:8103/',
-  };
+/** The configuration loaded before first render; redirects are refused until then. */
+export function appConfig(): AppConfig {
+  return current ?? { medplumBaseUrl: '', smartRedirectOrigins: '' };
 }

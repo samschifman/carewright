@@ -5,20 +5,21 @@ import logging
 from pathlib import Path
 
 import click
-import mlflow
 import requests
-
 from cpg_contracts import DecisionModelSummary
+from cpg_contracts.service_auth import service_token_headers
+from cpg_contracts.tracing import trace_safe
 
 logger = logging.getLogger(__name__)
 
 
-@mlflow.trace(name="deploy_dmn")
+@trace_safe(name="deploy_dmn")
 def deploy_dmn(
     dmn_path: Path,
     acp_writer_url: str,
     source_cpg: str | None = None,
     replace: bool = False,
+    token_env: str = "SERVICE_TOKEN_ACP_DECISION_ENGINE",
 ) -> DecisionModelSummary:
     """POST a DMN file to the acp-writer decisions API."""
     dmn_xml = dmn_path.read_text()
@@ -32,7 +33,7 @@ def deploy_dmn(
     r = requests.post(
         f"{acp_writer_url}/api/v1/decisions/models",
         data=dmn_xml,
-        headers={"Content-Type": "application/xml"},
+        headers={**{"Content-Type": "application/xml"}, **service_token_headers(token_env)},
         params=params,
         timeout=30,
     )
@@ -46,18 +47,19 @@ def deploy_dmn(
     return summary
 
 
-@mlflow.trace(name="deploy_automation_template")
+@trace_safe(name="deploy_automation_template")
 def deploy_template(
     template_path: Path,
     acp_writer_url: str,
     source_cpg: str | None = None,
+    token_env: str = "SERVICE_TOKEN_ACP_DECISION_ENGINE",
 ) -> dict:
     """POST a versioned AutomationTemplate JSON to the acp-writer registry."""
     payload = json.loads(template_path.read_text())
     params = {"source_cpg": source_cpg} if source_cpg else {}
     response = requests.post(
         f"{acp_writer_url}/api/v1/automation/templates",
-        json=payload,
+        headers=service_token_headers(token_env), json=payload,
         params=params,
         timeout=30,
     )
@@ -87,12 +89,14 @@ def deploy_template(
 @click.option("--acp-writer-url", default="http://localhost:8082", help="ACP Writer base URL.")
 @click.option("--source-cpg", default=None, help="CPG ID to link deployed models to.")
 @click.option("--replace", is_flag=True, help="Replace a colliding model from another source CPG.")
+@click.option("--token-env", default="SERVICE_TOKEN_ACP_DECISION_ENGINE", help="Environment variable holding the receiver service credential.")
 def main(
     dmn_files: tuple[Path, ...],
     template_files: tuple[Path, ...],
     acp_writer_url: str,
     source_cpg: str | None,
     replace: bool,
+    token_env: str,
 ):
     """Deploy DMN files and automation templates to the acp-writer service."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -103,7 +107,7 @@ def main(
 
     for dmn_path in dmn_files:
         try:
-            summary = deploy_dmn(dmn_path, acp_writer_url, source_cpg=source_cpg, replace=replace)
+            summary = deploy_dmn(dmn_path, acp_writer_url, source_cpg=source_cpg, replace=replace, token_env=token_env)
             click.echo(f"  Deployed: {summary.name} ({summary.id})")
         except requests.HTTPError as e:
             click.echo(f"  FAILED: {dmn_path.name} — {e}", err=True)
@@ -114,7 +118,7 @@ def main(
     for template_path in template_files:
         try:
             result = deploy_template(
-                template_path, acp_writer_url, source_cpg=source_cpg
+                template_path, acp_writer_url, source_cpg=source_cpg, token_env=token_env
             )
             summary = result.get("summary", result) if isinstance(result, dict) else {}
             click.echo(

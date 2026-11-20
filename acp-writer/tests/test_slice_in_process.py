@@ -2,21 +2,14 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import json
-from pathlib import Path
 import sys
+from copy import deepcopy
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.testclient import TestClient
-from lxml import etree
 import pytest
-
-from cpg_contracts.automation.catalog import load_catalog
-from cpg_contracts.automation.compiler import compile
-from cpg_contracts.automation.ir import ProcessIR, SourceRef, ir_version
 from acp_writer import api
 from acp_writer.nodes import fhir_server_writer
 from acp_writer.nodes.automation_synthesizer import synthesize_for_activity
@@ -25,6 +18,13 @@ from acp_writer.planning_brief import PlanActivity, PlanningBrief
 from acp_writer.services import automation_publisher, bff, decision_engine, fhir_server
 from acp_writer.services.automation_publisher import AutomationPublisher
 from acp_writer.services.job_store import JobStore
+from cpg_contracts.automation.catalog import load_catalog
+from cpg_contracts.automation.compiler import compile
+from cpg_contracts.automation.ir import ProcessIR, SourceRef, ir_version
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.testclient import TestClient
+from lxml import etree
+
 ROOT = Path(__file__).resolve().parents[2]
 AUTOMATION_SRC = str(ROOT / "automation" / "src")
 if AUTOMATION_SRC not in sys.path:
@@ -35,8 +35,10 @@ if SCRIPTS_SRC not in sys.path:
 
 import automation_service.app as automation_service_module
 from automation_service.store import AutomationStore
-from slice_automation_guard import write_automation_guard, write_automation_guard_or_raise
-
+from slice_automation_guard import (
+    write_automation_guard,
+    write_automation_guard_or_raise,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY = FIXTURES / "replay"
@@ -48,12 +50,46 @@ AUTOMATION_EXTENSION = (
 )
 
 
+def _signed_approval(monkeypatch, bundle):
+    """Pin the reviewed fixture and sign it through the production record format."""
+    from acp_writer.services.reviewer import default_reviewer
+    from cpg_contracts.approvals import artifact_revision, sign_record
+    signing_key = "synthetic-slice-signing-key"
+    monkeypatch.setenv("APPROVAL_SIGNING_KEY", signing_key)
+    bundle_key = "slice/fhir_bundle.json"
+    record_key = "slice/approvals/0.json"
+    record = sign_record({
+        "runId": "slice", "workflowInstanceId": CAREPLAN_ID, "reviewRound": 0,
+        "fhirBundleRef": "cpg-phi:" + bundle_key,
+        "artifactRevision": artifact_revision(bundle), "decision": "approve",
+        "reviewer": default_reviewer().model_dump(),
+        "sessionSubject": "slice-patient", "issuer": "",
+    }, signing_key)
+    class Store:
+        def get_raw_in_bucket(self, bucket, key):
+            assert bucket == "cpg-phi"
+            return json.dumps({bundle_key: bundle, record_key: record}[key]).encode()
+    monkeypatch.setattr(fhir_server, "_phi_store", Store())
+    return {"status": "active", "approval_ref": "cpg-phi:" + record_key,
+            "fhir_bundle_ref": "cpg-phi:" + bundle_key}
+
+
+def _published(ref: str) -> str:
+    """The canonical published-artifact ref the BFF accepts for a fixture key."""
+    return f"cpg-artifacts:published/{CPG_ID}/{ref}"
+
+
+def _fixture_key(ref: str) -> str:
+    return ref.removeprefix(f"cpg-artifacts:published/{CPG_ID}/")
+
+
 class GoldenArtifactStore:
     def __init__(self, templates: dict[str, Path], dmns: dict[str, Path]):
         self.templates = templates
         self.dmns = dmns
 
     def get(self, ref: str):
+        ref = _fixture_key(ref)
         template = json.loads(self.templates[ref].read_text())
         template_id = template["summary"]["id"]
         # The source goldens use one placeholder recommendation id; the replay
@@ -62,7 +98,7 @@ class GoldenArtifactStore:
         return template
 
     def get_raw(self, ref: str):
-        return self.dmns[ref].read_bytes()
+        return self.dmns[_fixture_key(ref)].read_bytes()
 
 
 class SavedResponseLLM:
@@ -88,6 +124,7 @@ class LiveArtifactStore:
         }
 
     def get(self, ref: str):
+        ref = _fixture_key(ref)
         if ref == "live/recommendations.json":
             return json.loads((LIVE / "recommendations.json").read_text())
         if ref in self.template_overrides:
@@ -98,7 +135,7 @@ class LiveArtifactStore:
         raise KeyError(ref)
 
     def get_raw(self, ref: str):
-        return self.dmns[ref].read_bytes()
+        return self.dmns[_fixture_key(ref)].read_bytes()
 
 
 def _json_prompt_section(prompt: str, heading: str) -> dict:
@@ -404,11 +441,11 @@ def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp
             "cpg_id": CPG_ID,
             "artifacts": [
                 *[
-                    {"type": "dmn", "ref": ref, "name": Path(ref).stem}
+                    {"type": "dmn", "ref": _published(ref), "name": Path(ref).stem}
                     for ref in sorted(dmn_by_ref)
                 ],
                 *[
-                    {"type": "bpmn", "ref": ref}
+                    {"type": "bpmn", "ref": _published(ref)}
                     for ref in sorted(template_by_ref)
                 ],
             ],
@@ -486,17 +523,13 @@ def test_saved_replay_generates_and_publishes_approved_careplan(monkeypatch, tmp
             for entry in generated["entry"]
         )
 
-        draft = fhir_writer_client.post("/api/v1/write", json={
-            "fhir_bundle": generated,
-            "careplan_id": CAREPLAN_ID,
-            "patient_reference": "Patient/synthetic-001",
-            "approved": False,
-        })
-        assert draft.status_code == 200
-        assert draft.json()["delivery_status"] == "draft"
+        # A token alone cannot publish even when the caller supplies a bundle.
+        assert fhir_writer_client.post("/api/v1/write", json={
+            "fhir_bundle": generated, "careplan_id": CAREPLAN_ID,
+        }).status_code in {403, 503}
         approved = fhir_writer_client.put(
             f"/api/v1/careplans/{CAREPLAN_ID}/status",
-            json={"status": "active", "reviewer": {"display": "Synthetic clinician"}},
+            json=_signed_approval(monkeypatch, generated),
         )
         assert approved.status_code == 200
         assert approved.json()["delivery_status"] == "delivered"
@@ -632,11 +665,11 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
             "cpg_id": CPG_ID,
             "artifacts": [
                 *[
-                    {"type": "dmn", "ref": ref, "name": Path(ref).stem}
+                    {"type": "dmn", "ref": _published(ref), "name": Path(ref).stem}
                     for ref in dmn_refs
                 ],
-                {"type": "recommendations", "ref": "live/recommendations.json"},
-                *[{"type": "bpmn", "ref": ref} for ref in template_refs],
+                {"type": "recommendations", "ref": _published("live/recommendations.json")},
+                *[{"type": "bpmn", "ref": _published(ref)} for ref in template_refs],
             ],
         })
         assert registration.status_code == 200
@@ -791,7 +824,7 @@ def test_live_fixture_replay_runs_pipeline_validation_approval_and_publication(m
 
         approved = fhir_writer_client.put(
             f"/api/v1/careplans/{CAREPLAN_ID}/status",
-            json={"status": "active", "reviewer": {"display": "Synthetic replay clinician"}},
+            json=_signed_approval(monkeypatch, result["fhir_bundle"]),
         )
         assert approved.status_code == 200
         assert approved.json()["delivery_status"] == "delivered"

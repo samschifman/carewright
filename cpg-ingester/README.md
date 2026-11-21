@@ -19,6 +19,17 @@ Phase 2 — Generation (parallel with adversarial review):
 
 See `dev_docs/design/cpg-ingester-design.md` for the full design rationale.
 
+## Recommendation extraction
+
+The extractor uses the measured compact V23 prompt, including source applicability,
+clinical purpose, supplied referenced qualifiers, abbreviation expansion and page
+preservation. See [integration evidence and limits](../dev_docs/evaluations/recommendation-extractor-v23.md)
+for its exact identity, checks and frozen evaluator handoff. The
+[benchmark comparison](../dev_docs/evaluations/recommendation-extractor-v23.md#measured-evidence-and-open-findings) records
+19.0% more total tokens than the upstream prompt (12.6% fewer than V20), with one remaining inclusive-age omission and
+six type disagreements. Selection does not establish reviewer detection, repair
+of those findings or pipeline release readiness.
+
 ## Outputs
 
 1. **DMN decision tables** — Computable logic extracted from clinical decision algorithms, delivered to acp-writer's Drools/Kogito decision service (DMN 1.4).

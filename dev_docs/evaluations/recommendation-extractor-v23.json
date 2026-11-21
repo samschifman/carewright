@@ -1,0 +1,255 @@
+{
+  "application_and_test_file_pins": {
+    "cpg-ingester/src/cpg_ingester/prompts/rec_extractor.py": "03c2abda0a315e0661e0cb6e67058c1a6b4dd4669f697958d5cdd626e296ee2a",
+    "cpg-ingester/tests/test_rec_prompt_integration.py": "1e653b4b9c7729af7b17ec629a29c494df91b92f033d0013c962589d5641756c"
+  },
+  "application_changes": [
+    "cpg-ingester/src/cpg_ingester/prompts/rec_extractor.py"
+  ],
+  "authorization": "User approved V23 integration after reviewing the V23 findings.",
+  "benchmark": {
+    "dataset": {
+      "digest": "566ebdaeb17e090c60f084d7d8864c9660adcdc4b27d03dcd291d09421ffd584",
+      "version": "0.10.0"
+    },
+    "effective_grading_unresolved": 66,
+    "evaluator": {
+      "digest": "4cd1cd5304f32f8cb2d59c7207229af72085eaa8f8ee6bc0dc037cb3709663bd",
+      "version": "1.1.0"
+    },
+    "exact_working_file_pins_required": true,
+    "expected_objects": 114,
+    "mlflow_run_id": "3e37261d3f7e47f887ac302b76db6b53",
+    "model": {
+      "endpoint": "https://api.openai.com",
+      "inference_parameters": {
+        "max_tokens": 12000,
+        "reasoning_effort": "medium"
+      },
+      "model": "gpt-6.1-sol",
+      "provider": "openai",
+      "service_tier": "default"
+    },
+    "phase_manifest": "4d0796b115728ba3c112a7628778031c5d9937f5439731763252640eee008a8f",
+    "production_behavior": {
+      "digest": "3f962ecdd38b57647d052f707b5da334e61eaba94e55aaa6efdbf2630cb122d5",
+      "version": "production-81f2feb"
+    },
+    "raw_evidence_receipt": {
+      "archive": "working/rec-eval/snapshots/recommendations-v010-compact-v23-comparison-20261119.tar.gz",
+      "archive_file_count": 3366,
+      "archive_sha256": "9bbfd03937b1e519cb0a63d1a1af62d872f93e8655fadbfb702ec528ca406ebb",
+      "dataset_evaluator_runtime_sources_included": true,
+      "deployed_instance_verified": false,
+      "experiment_id": "116",
+      "generation_attempts_in_comparison": 39,
+      "historical_wrapper_parent_campaign_evidence_required": true,
+      "mlflow_run_id": "cf98eeb496dd4a2d89cb4a339dc92899",
+      "model_calls_in_checkpoint": 0,
+      "pipeline_release_approval": false,
+      "remote_full_inventory_readback_verified": true,
+      "status": "compact-v23-results-persisted"
+    },
+    "record_count": 39,
+    "run_id": "4ab6a3f8-b260-41ed-84fe-6d09d1fbbf97",
+    "source_examples": {
+      "diagnostic_primary_hypertension_context_retained": {
+        "baseline": [
+          0,
+          3
+        ],
+        "v15": [
+          0,
+          3
+        ],
+        "v18": [
+          3,
+          3
+        ],
+        "v20": [
+          2,
+          3
+        ],
+        "v22": [
+          3,
+          3
+        ],
+        "v23": [
+          3,
+          3
+        ]
+      },
+      "inclusive_age_reporting_scope_retained": {
+        "baseline": [
+          0,
+          3
+        ],
+        "v15": [
+          3,
+          3
+        ],
+        "v18": [
+          3,
+          3
+        ],
+        "v20": [
+          0,
+          3
+        ],
+        "v22": [
+          3,
+          3
+        ],
+        "v23": [
+          2,
+          3
+        ]
+      },
+      "supplied_actionable_preference_retained": {
+        "baseline": [
+          0,
+          3
+        ],
+        "v15": [
+          0,
+          3
+        ],
+        "v18": [
+          3,
+          3
+        ],
+        "v20": [
+          3,
+          3
+        ],
+        "v22": [
+          3,
+          3
+        ],
+        "v23": [
+          3,
+          3
+        ]
+      },
+      "treatment_response_purpose_retained": {
+        "baseline": [
+          0,
+          3
+        ],
+        "v15": [
+          0,
+          3
+        ],
+        "v18": [
+          1,
+          3
+        ],
+        "v20": [
+          3,
+          3
+        ],
+        "v22": [
+          3,
+          3
+        ],
+        "v23": [
+          3,
+          3
+        ]
+      }
+    },
+    "source_revision": "8c91df0cb1c318865ca449737de2278fd8955ad7",
+    "strict_type_disagreements": 6,
+    "usage": {
+      "input_tokens": 113223,
+      "output_tokens": 50551,
+      "total_tokens": 163774
+    },
+    "usage_saving_vs_v20_pct": 12.623576173073337
+  },
+  "contracts_changed": false,
+  "decision_date": "2026-11-19",
+  "decision_kind": "selected-for-integration-review",
+  "deployed": false,
+  "fresh_validation": false,
+  "historical_v20_live_evidence": {
+    "experiment_id": "118",
+    "mlflow_run_id": "422aa9b0f94a4579a2506c29bf3bcc88",
+    "not_v23_evidence": true,
+    "url": "https://rh-ai.apps.rosa.agentic-mcp.jolf.p3.openshiftapps.com/mlflow/#/experiments/118/runs/422aa9b0f94a4579a2506c29bf3bcc88?workspace=ksulayma-cpg-to-acp"
+  },
+  "integration_base": "6de0bbd322390dde5e0f7a9c3c083cc3c36aecae",
+  "limitations": [
+    "Previously exposed tuning sources; no independent clinical signoff or fresh generalization.",
+    "Three repetitions of a source are not independent cases.",
+    "Controls from2026-11-18 are reused on2026-11-19; sequential cross-day time/service drift remains possible, provider weights not attested.",
+    "First-pass extractor only; no measured reviewer repair, patient outcome or release approval.",
+    "Actual API usage is measured; monetary cost/cache pricing/controlled latency are not inferred.",
+    "Source review is coordinator engineering inspection with prior exposure, not independent clinical adjudication.",
+    "Historical wrapper replay requires preserved parent campaign evidence; duplicate identity guards remain.",
+    "Current integration surrounding code is newer than benchmark runtime; scripted checks establish mechanics, not model detection/repair quality.",
+    "Historical V20 live probes are not V23 measurements.",
+    "Known defective individual outputs are not accepted by this candidate selection."
+  ],
+  "model_configuration_changed": false,
+  "open_findings": [
+    {
+      "classification": "Material source-applicability omission, not a formatting/phrase-match false alarm.",
+      "comparator": "v22",
+      "disposition": "Open; this individual output is not accepted by candidate retention. Same instance is already absent in V20/upstream, but V22 retained it.",
+      "finding": "Inclusive adults/children/young-people applicability omitted from complete reporting object.",
+      "hypothesized_consequence": "Potential loss of discovery/applicability for included ages; downstream patient/retrieval effect is unmeasured.",
+      "key": [
+        "v09-control-nice01",
+        1,
+        "nice-ckd-r1-1-1"
+      ]
+    },
+    {
+      "finding": "Nonverbatim timing-origin absence commentary; no new timing instruction. V22 had same pattern in repetition3.",
+      "key": [
+        "nice-ng238-s03",
+        2,
+        "ng238-1-11-2"
+      ]
+    },
+    {
+      "case_id": "v09-control-nice01",
+      "finding": "Source-supported committee/evidence-review commentary added to remarks; keep distinct from eligibility or invented evidence.",
+      "reference": "nice-ckd-r1-1-2"
+    },
+    {
+      "case_id": "v09-control-nice02",
+      "finding": "Nested ACR expansion remains awkward in some repetitions; no clinical meaning change identified.",
+      "reference": "nice-ckd-r1-1-11"
+    }
+  ],
+  "pipeline_release_approval": false,
+  "prompt": {
+    "digest": "88e87d41d8f9d6b727bfd6fac458573f76252a9da6b828787db6d790ffeb0faa",
+    "version": "compact-abbreviation-v23"
+  },
+  "publication": {
+    "base": "main",
+    "independent_evaluator_pr": 191,
+    "scope": "Standalone application prompt, wiring/routing tests and concise handoff; no evaluation-harness code or full experiment dumps.",
+    "supersedes_draft_pr": 201
+  },
+  "research_decision": "retain_for_iteration_with_open_regressions",
+  "research_decision_changed": false,
+  "reviewer_changed": false,
+  "routing_changed": false,
+  "schema_version": "1.0.0",
+  "verification": {
+    "baseline_v20_tests_passed": 85,
+    "identity_and_mechanics_test": "cpg-ingester/tests/test_rec_prompt_integration.py",
+    "integration_checks": 8,
+    "new_generation_calls_in_integration": 0,
+    "selected_v23_tests_passed": 85,
+    "semantic_reviewer_detection_measured": false,
+    "test_source": "Generic scripted LLM boundaries using actual nodes and compiled graph.",
+    "v23_live_review_repair_probes": 0,
+    "warning": "Existing MLflow/SQLAlchemy deprecation warning.",
+    "warnings": 1
+  }
+}

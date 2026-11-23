@@ -385,7 +385,16 @@ def test_thin_experiment_runs_and_saves_replayable_evidence(tmp_path, monkeypatc
     assert result["metrics"]["recommendation_recall"] == 1
     (record_path,) = run_path.glob("stages/*/repetition-*/cases/*/record.json")
     raw_rows = json.loads(record_path.read_bytes())["artifacts"]["raw-rows.json"]
+    expected_usage = {"input_tokens": 5, "output_tokens": 7, "total_tokens": 12}
+    assert result["usage"] == {
+        "totals": expected_usage,
+        "coverage": dict.fromkeys(expected_usage, 1),
+        "attempts": 1,
+    }
     assert result["cases"][0] == {
+        "usage": expected_usage,
+        "usage_coverage": dict.fromkeys(expected_usage, 1),
+        "attempts": 1,
         "case": 1,
         "usable": True,
         **experiment.replay_case(ref, cases, raw_rows).metrics,

@@ -91,11 +91,22 @@ class CapturedProvider:
                 }
             )
             usage = response.usage_metadata or {}
+            quantities = {
+                "input_tokens": usage.get("input_tokens"),
+                "output_tokens": usage.get("output_tokens"),
+                "total_tokens": usage.get("total_tokens"),
+                "cached_input_tokens": (usage.get("input_token_details") or {}).get(
+                    "cache_read"
+                ),
+                "reasoning_tokens": (usage.get("output_token_details") or {}).get(
+                    "reasoning"
+                ),
+            }
             attempt.usage(
                 **{
-                    k: v
-                    for k, v in usage.items()
-                    if isinstance(v, (int, float)) and not isinstance(v, bool)
+                    key: value
+                    for key, value in quantities.items()
+                    if type(value) is int and value >= 0
                 }
             )
             try:

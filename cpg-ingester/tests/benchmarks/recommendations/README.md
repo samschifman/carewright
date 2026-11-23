@@ -246,3 +246,40 @@ critical defects, differential failures, and material tradeoffs before
 promotion. Keep the baseline when the evidence shows no meaningful gain.
 Mark comparisons inconclusive when coverage or run variability could explain
 the observed gain.
+
+### Usage and promotion recommendation
+
+Every verified gain counts, including a field-level improvement when both
+prompts share another defect. Keep critical regressions and shared defects
+visible separately. No minimum quality delta or universal token cap applies.
+
+The saved report and MLflow run include measured token totals across all
+attempts and the number of attempts reporting each quantity. Per-case usage
+is in the report. Partial coverage means the total is only the observed
+subtotal. Cached input and reasoning are optional breakdowns of input and
+output. Include failed attempts with reported usage.
+
+To estimate an incremental cost, subtract cached input from input before
+applying the uncached rate, apply the cached rate to cached input, and apply
+the output rate to all output. Divide by the attempted ingestion count for a
+per-ingestion estimate, or scale by expected volume for a monthly estimate.
+Record the rate schedule, coverage, and units for both arms. Reasoning
+already included in output is charged only once. Uncertain billing or
+missing required usage calls for human review. For self-hosted workloads,
+review latency and throughput against the deployment allowance.
+
+Use the policy command after reviewing the paired evidence. For example,
+with both cost inputs in dollars per ingestion:
+
+```bash
+python -m benchmarks.recommendations.experiment recommend \
+  --evidence gain --cost-delta 0.002 --cost-allowance 0.005
+```
+
+An observed gain within the allowance recommends promotion.
+`--noncritical-regression` or an unavailable or exceeded allowance routes
+the decision to human review. Use this flag for material noncritical
+tradeoffs, including latency. `--critical-regression` blocks promotion.
+Select `inconclusive` if evidence is insufficient, and `no-gain` if the paired
+evidence supports keeping the baseline. This recommendation does not change
+the application prompt.

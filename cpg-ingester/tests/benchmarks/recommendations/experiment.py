@@ -4,7 +4,9 @@ import argparse
 import hashlib
 import importlib
 import json
+import math
 import re
+from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -104,6 +106,9 @@ def run(args):
     store.put("prompt.json", templates)
     records = []
     feedback = []
+    usage_totals = Counter()
+    usage_coverage = Counter()
+    attempt_count = 0
     with patch.object(module, "REC_EXTRACTOR_SYSTEM", system):
         for repetition in range(1, args.repetitions + 1):
             for ref in refs:
@@ -113,8 +118,30 @@ def run(args):
                 if not adapter.validate(record):
                     raise ValueError("Invalid extraction accounting")
                 records.append(record)
+                usage = Counter()
+                coverage = Counter()
+                for attempt in range(1, capture.attempts + 1):
+                    artifact = (
+                        store.path
+                        / capture.prefix
+                        / f"attempt-{attempt}"
+                        / "attempt.json"
+                    )
+                    quantities = json.loads(artifact.read_bytes())["usage"]
+                    usage.update(quantities)
+                    coverage.update(quantities.keys())
+                attempt_count += capture.attempts
+                usage_totals.update(usage)
+                usage_coverage.update(coverage)
                 feedback.append(
-                    {"case": len(records), "usable": record.usable, **record.metrics}
+                    {
+                        "case": len(records),
+                        "usable": record.usable,
+                        **record.metrics,
+                        "usage": dict(usage),
+                        "usage_coverage": dict(coverage),
+                        "attempts": capture.attempts,
+                    }
                 )
     summary = adapter.summarize(records)
     store.put(
@@ -123,6 +150,11 @@ def run(args):
             "metrics": summary.metrics,
             "findings": summary.findings,
             "cases": feedback,
+            "usage": {
+                "totals": dict(usage_totals),
+                "coverage": dict(usage_coverage),
+                "attempts": attempt_count,
+            },
         },
     )
     store.put("checksums.json", {ref.name: ref.sha256 for ref in store.refs})
@@ -168,6 +200,17 @@ def publish(path, experiment):
                 str(path / name), None if parent == Path(".") else str(parent)
             )
         mlflow.log_metrics(results["metrics"])
+        if usage := results.get("usage"):
+            mlflow.log_metrics(
+                {
+                    "usage.attempts": usage["attempts"],
+                    **{f"usage.{k}": v for k, v in usage["totals"].items()},
+                    **{
+                        f"usage.reported_attempts.{k}": v
+                        for k, v in usage["coverage"].items()
+                    },
+                }
+            )
         mlflow.genai.evaluate(
             data=[
                 {
@@ -182,6 +225,25 @@ def publish(path, experiment):
             ],
             scorers=[extraction_usable, recommendation_recall],
         )
+
+
+def promotion_recommendation(args):
+    """Apply the policy to reviewer findings and a matched cost comparison."""
+    if args.critical_regression:
+        return "block"
+    if args.evidence == "inconclusive":
+        return "inconclusive"
+    if args.evidence == "no-gain":
+        return "keep-baseline"
+    if (
+        args.noncritical_regression
+        or args.cost_delta is None
+        or args.cost_allowance is None
+    ):
+        return "human-review"
+    if args.cost_delta > args.cost_allowance:
+        return "human-review"
+    return "recommend-promotion"
 
 
 def main(argv=None):
@@ -204,7 +266,23 @@ def main(argv=None):
     upload = commands.add_parser("publish")
     upload.add_argument("path", type=Path)
     upload.add_argument("--experiment", default=STAGE)
+    decision = commands.add_parser("recommend")
+    decision.add_argument(
+        "--evidence", choices=("gain", "no-gain", "inconclusive"), required=True
+    )
+    decision.add_argument("--critical-regression", action="store_true")
+    decision.add_argument("--noncritical-regression", action="store_true")
+    decision.add_argument("--cost-delta", type=float)
+    decision.add_argument("--cost-allowance", type=float)
     args = parser.parse_args(argv)
+    if args.command == "recommend":
+        for value in (args.cost_delta, args.cost_allowance):
+            if value is not None and not math.isfinite(value):
+                parser.error("Cost values must be finite")
+        if args.cost_allowance is not None and args.cost_allowance < 0:
+            parser.error("Cost allowance must be nonnegative")
+        print(promotion_recommendation(args))
+        return 0
     if args.command == "replay-case":
         manifest = json.loads(args.manifest.read_bytes())
         record = json.loads(args.record.read_bytes())

@@ -168,6 +168,11 @@ func (r *SandboxRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return r.fail(ctx, &request, "InvalidSpec", err)
 	}
 
+	if revision := localCredentialRevision(&request); revision != "" {
+		sum := sha256.Sum256([]byte(desiredHash + "/" + revision))
+		// Keep the revision-derived hash label-safe, just like requestHash.
+		desiredHash = hex.EncodeToString(sum[:])[:63]
+	}
 	sandboxName := effectiveSandboxName(&request)
 	if request.Status.SpecHash != "" && previousLocationChanged(&request, sandboxName) {
 		previousRequest := request.DeepCopy()
@@ -296,7 +301,11 @@ func closeSession(session *OpenShellClientSession) {
 // registerProviders ensures Secret-backed providers exist before the sandbox is
 // created. The provider name is shared by components in one pipeline, so a
 // Secret version marker prevents unnecessary updates on every poll.
-func (r *SandboxRequestReconciler) registerProviders(ctx context.Context, request *appsv1alpha1.SandboxRequest) error {
+func (r *SandboxRequestReconciler) registerProviders(ctx context.Context, request *appsv1alpha1.SandboxRequest) (resultErr error) {
+	// SDK diagnostics may include a provider config payload. Do not publish them
+	// to logs, Events, or status for the experimental local credential channel.
+	defer func() { resultErr = sanitizeLocalCredentialError(request, resultErr) }()
+
 	if len(request.Spec.ProviderRegistrations) == 0 {
 		return nil
 	}
@@ -325,8 +334,20 @@ func (r *SandboxRequestReconciler) registerProviders(ctx context.Context, reques
 		for name, value := range secret.Data {
 			credentials[name] = string(value)
 		}
+		providerConfig := maps.Clone(registration.Config)
+		syncVersion := secret.ResourceVersion
+		if len(registration.LocalCredentials) != 0 {
+			if err := ensureLocalCredentialProfile(ctx, session.Client, workspace(request)); err != nil {
+				return err
+			}
+			providerConfig, syncVersion, err = resolveLocalCredentialConfig(ctx, r.Client, request.Namespace, registration)
+			if err != nil {
+				return err
+			}
+			credentials = nil
+		}
 		source := key.String()
-		secretMarker := string(secret.UID) + "/" + secret.ResourceVersion
+		secretMarker := string(secret.UID) + "/" + syncVersion
 		existing, err := session.Client.Providers().Get(ctx, workspace(request), registration.Name)
 		if err != nil && !openshellv1.IsNotFound(err) {
 			return fmt.Errorf("get OpenShell provider %q: %w", registration.Name, err)
@@ -337,12 +358,12 @@ func (r *SandboxRequestReconciler) registerProviders(ctx context.Context, reques
 			}
 			providerMarker := existing.ID + "/" + secretMarker
 			secretSynced := (existing.Annotations[providerSecretUID] == string(secret.UID) &&
-				existing.Annotations[providerSecretVersion] == secret.ResourceVersion) ||
+				existing.Annotations[providerSecretVersion] == syncVersion) ||
 				request.Status.ProviderSyncMarkers[registration.Name] == providerMarker
 			if secretSynced &&
 				existing.Type == registration.Type &&
 				existing.Spec.ProfileWorkspace == workspace(request) &&
-				maps.Equal(existing.Spec.Config, registration.Config) {
+				maps.Equal(existing.Spec.Config, providerConfig) {
 				if err := r.trackManagedProvider(ctx, request, managedProviderStatus(request, registration), providerMarker); err != nil {
 					return err
 				}
@@ -355,11 +376,11 @@ func (r *SandboxRequestReconciler) registerProviders(ctx context.Context, reques
 			Annotations: map[string]string{
 				providerSourceKey:     source,
 				providerSecretUID:     string(secret.UID),
-				providerSecretVersion: secret.ResourceVersion,
+				providerSecretVersion: syncVersion,
 			},
 			Spec: openshellv1.ProviderSpec{
 				Credentials:      credentials,
-				Config:           maps.Clone(registration.Config),
+				Config:           providerConfig,
 				ProfileWorkspace: workspace(request),
 			},
 		}
@@ -1087,7 +1108,7 @@ func (r *SandboxRequestReconciler) requestsForProviderSecret(ctx context.Context
 	for i := range requests.Items {
 		request := &requests.Items[i]
 		for _, registration := range request.Spec.ProviderRegistrations {
-			if registration.SecretRef.Name == object.GetName() {
+			if registrationUsesSecret(registration, object.GetName()) {
 				result = append(result, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(request)})
 				break
 			}

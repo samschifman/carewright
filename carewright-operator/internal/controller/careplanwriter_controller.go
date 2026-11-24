@@ -30,7 +30,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	appsv1alpha1 "carewright.io/carewright-operator/api/v1alpha1"
 )
@@ -50,7 +52,7 @@ type CarePlanWriterReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps;secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=agents.x-k8s.io,resources=sandboxes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
 
@@ -72,6 +74,9 @@ func (r *CarePlanWriterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 	effective := writer.DeepCopy()
 	effective.Spec.ArtifactStore = artifactStore.Spec
+	if err := preparePipelineSecurity(ctx, r.Client, effective); err != nil {
+		return ctrl.Result{}, reportPipelineSecurityFailure(ctx, r.Client, &writer, err)
+	}
 
 	knownEndpoints, err := componentServiceURLs(ctx, r.Client, &writer)
 	if err != nil {
@@ -92,7 +97,7 @@ func (r *CarePlanWriterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		},
 	}
 	components := carePlanWriterComponents(effective, knownEndpoints)
-	workflow, err := reconcilePipelineWorkflow(ctx, r.Client, r.Scheme, &writer, template, knownEndpoints, len(components)+1)
+	workflow, err := reconcilePipelineWorkflow(ctx, r.Client, r.Scheme, effective, template, knownEndpoints, len(components)+1)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -101,11 +106,11 @@ func (r *CarePlanWriterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 	components = carePlanWriterComponents(effective, knownEndpoints)
 
-	summary, err := reconcileComponentSandboxes(ctx, r.Client, r.Scheme, &writer, writer.Spec.Sandbox, workflow.URL, components)
+	summary, err := reconcileComponentSandboxes(ctx, r.Client, r.Scheme, effective, effective.Spec.Sandbox, workflow.URL, components)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	bff, err := reconcileBFFDeployment(ctx, r.Client, r.Scheme, &writer, carePlanWriterBFFComponent(effective, summary.Endpoints, workflow.URL), effective.Spec.ArtifactStore)
+	bff, err := reconcileBFFDeployment(ctx, r.Client, r.Scheme, effective, carePlanWriterBFFComponent(effective, summary.Endpoints, workflow.URL), effective.Spec.ArtifactStore)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -118,11 +123,12 @@ func (r *CarePlanWriterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	workflow, err = reconcilePipelineWorkflow(ctx, r.Client, r.Scheme, &writer, template, summary.Endpoints, summary.Desired)
+	workflow, err = reconcilePipelineWorkflow(ctx, r.Client, r.Scheme, effective, template, summary.Endpoints, summary.Desired)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	before := writer.DeepCopy()
+	markPipelineSecurityReady(&writer)
 	writer.Status.ObservedGeneration = writer.Generation
 	writer.Status.Endpoints = maps.Clone(summary.Endpoints)
 	if artifactStore.URL != "" {
@@ -160,6 +166,9 @@ func (r *CarePlanWriterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 func (r *CarePlanWriterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1alpha1.CarePlanWriter{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+			return pipelinesForSecuritySecret(ctx, r.Client, object, true)
+		})).
 		Owns(&appsv1alpha1.SandboxRequest{}).
 		Owns(sonataFlowObject()).
 		Owns(&corev1.ConfigMap{}).

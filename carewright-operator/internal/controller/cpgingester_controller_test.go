@@ -63,6 +63,7 @@ var _ = Describe("CPGIngester Controller", func() {
 		resource := &appsv1alpha1.CPGIngester{
 			ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
 			Spec: appsv1alpha1.CPGIngesterSpec{
+				Security:      &appsv1alpha1.PipelineSecuritySpec{ManagedSecrets: ptrTo(false), LocalCredentialFiles: ptrTo(false)},
 				Signing:       &appsv1alpha1.SecretSourceSpec{SecretRef: corev1.LocalObjectReference{Name: "ingester-signing"}},
 				PublicOrigin:  "https://ingester.test",
 				ServiceTokens: &appsv1alpha1.ProviderSourceSpec{Type: "carewright-service-tokens", SecretRef: corev1.LocalObjectReference{Name: "service-tokens"}},

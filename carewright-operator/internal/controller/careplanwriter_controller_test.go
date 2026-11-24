@@ -66,6 +66,7 @@ var _ = Describe("CarePlanWriter Controller", func() {
 		resource := &appsv1alpha1.CarePlanWriter{
 			ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
 			Spec: appsv1alpha1.CarePlanWriterSpec{
+				Security:        &appsv1alpha1.PipelineSecuritySpec{ManagedSecrets: ptrTo(false), LocalCredentialFiles: ptrTo(false)},
 				ServiceTokens:   &appsv1alpha1.ProviderSourceSpec{Type: "carewright-service-tokens", SecretRef: corev1.LocalObjectReference{Name: "service-tokens"}},
 				SessionSigning:  &appsv1alpha1.SecretSourceSpec{SecretRef: corev1.LocalObjectReference{Name: "session-key"}},
 				ApprovalSigning: &appsv1alpha1.ProviderSourceSpec{Type: "carewright-approval-signing", SecretRef: corev1.LocalObjectReference{Name: "signing-key"}},

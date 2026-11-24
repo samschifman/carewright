@@ -1026,6 +1026,28 @@ spec:
                 x-kubernetes-validations:
                 - message: gateway.name and gateway.endpoint are mutually exclusive
                   rule: '!has(self.gateway) || !(has(self.gateway.name) && has(self.gateway.endpoint))'
+              security:
+                default: {}
+                description: |-
+                  Security configures generated application secrets and experimental local files.
+                  Both behaviors default to enabled; explicitly set individual fields false to opt out.
+                properties:
+                  localCredentialFiles:
+                    default: true
+                    description: |-
+                      LocalCredentialFiles copies scoped credentials through
+                      NON-SECRET OpenShell provider config into files and process environments.
+                      Defaults to true; set false when using another credential delivery mechanism.
+                      Experimental; use only with synthetic data in a trusted gateway workspace.
+                    type: boolean
+                  managedSecrets:
+                    default: true
+                    description: |-
+                      ManagedSecrets creates missing namespace-shared bootstrap-compatible Secrets.
+                      Defaults to true. Set false to supply application Secrets externally.
+                      Existing Secrets and explicit custom references are never overwritten.
+                    type: boolean
+                type: object
               serviceTokens:
                 description: ServiceTokens supplies per-receiver X-Service-Token credentials.
                 properties:

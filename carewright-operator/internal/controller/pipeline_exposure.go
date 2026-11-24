@@ -97,6 +97,12 @@ func reconcileBFFDeployment(ctx context.Context, k8sClient client.Client, scheme
 		deployment.Spec.Strategy = appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}
 		deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: selector}
 		deployment.Spec.Template.Labels = maps.Clone(selector)
+		if revision := owner.GetAnnotations()[securityRevisionAnnotation]; revision != "" {
+			if deployment.Spec.Template.Annotations == nil {
+				deployment.Spec.Template.Annotations = map[string]string{}
+			}
+			deployment.Spec.Template.Annotations[securityRevisionAnnotation] = revision
+		}
 		deployment.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name: "bff", Image: component.Spec.Image, Command: slices.Clone(command), Env: env, Resources: resources,
 			Ports:          []corev1.ContainerPort{{Name: "http", ContainerPort: 8080, Protocol: corev1.ProtocolTCP}},

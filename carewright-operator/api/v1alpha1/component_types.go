@@ -238,3 +238,21 @@ type SmartClientSpec struct {
 	// +optional
 	InternalFHIRBase string `json:"internalFHIRBase,omitempty"`
 }
+
+// PipelineSecuritySpec configures default-on application credential management.
+// Neither option provisions external LLM, object-store, or SMART credentials.
+type PipelineSecuritySpec struct {
+	// ManagedSecrets creates missing namespace-shared bootstrap-compatible Secrets.
+	// Defaults to true. Set false to supply application Secrets externally.
+	// Existing Secrets and explicit custom references are never overwritten.
+	// +kubebuilder:default=true
+	// +optional
+	ManagedSecrets *bool `json:"managedSecrets,omitempty"`
+	// LocalCredentialFiles copies scoped credentials through
+	// NON-SECRET OpenShell provider config into files and process environments.
+	// Defaults to true; set false when using another credential delivery mechanism.
+	// Experimental; use only with synthetic data in a trusted gateway workspace.
+	// +kubebuilder:default=true
+	// +optional
+	LocalCredentialFiles *bool `json:"localCredentialFiles,omitempty"`
+}

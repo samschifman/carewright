@@ -54,7 +54,7 @@ type CPGIngesterReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps;secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=agents.x-k8s.io,resources=sandboxes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
 
@@ -76,6 +76,9 @@ func (r *CPGIngesterReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	effective := ingester.DeepCopy()
 	effective.Spec.ArtifactStore = artifactStore.Spec
+	if err := preparePipelineSecurity(ctx, r.Client, effective); err != nil {
+		return ctrl.Result{}, reportPipelineSecurityFailure(ctx, r.Client, &ingester, err)
+	}
 
 	knownEndpoints, err := componentServiceURLs(ctx, r.Client, &ingester)
 	if err != nil {
@@ -107,7 +110,7 @@ func (r *CPGIngesterReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		LiteralReplacements: literals,
 	}
 	components := cpgIngesterComponents(effective)
-	workflow, err := reconcilePipelineWorkflow(ctx, r.Client, r.Scheme, &ingester, template, knownEndpoints, len(components)+1)
+	workflow, err := reconcilePipelineWorkflow(ctx, r.Client, r.Scheme, effective, template, knownEndpoints, len(components)+1)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -116,11 +119,11 @@ func (r *CPGIngesterReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	components = cpgIngesterComponents(effective)
 
-	summary, err := reconcileComponentSandboxes(ctx, r.Client, r.Scheme, &ingester, ingester.Spec.Sandbox, workflow.URL, components)
+	summary, err := reconcileComponentSandboxes(ctx, r.Client, r.Scheme, effective, effective.Spec.Sandbox, workflow.URL, components)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	bff, err := reconcileBFFDeployment(ctx, r.Client, r.Scheme, &ingester, cpgIngesterBFFComponent(effective, workflow.URL, writerBFFURL), effective.Spec.ArtifactStore)
+	bff, err := reconcileBFFDeployment(ctx, r.Client, r.Scheme, effective, cpgIngesterBFFComponent(effective, workflow.URL, writerBFFURL), effective.Spec.ArtifactStore)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -133,11 +136,12 @@ func (r *CPGIngesterReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	workflow, err = reconcilePipelineWorkflow(ctx, r.Client, r.Scheme, &ingester, template, summary.Endpoints, summary.Desired)
+	workflow, err = reconcilePipelineWorkflow(ctx, r.Client, r.Scheme, effective, template, summary.Endpoints, summary.Desired)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	before := ingester.DeepCopy()
+	markPipelineSecurityReady(&ingester)
 	ingester.Status.ObservedGeneration = ingester.Generation
 	ingester.Status.Endpoints = maps.Clone(summary.Endpoints)
 	if artifactStore.URL != "" {
@@ -175,6 +179,9 @@ func (r *CPGIngesterReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *CPGIngesterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1alpha1.CPGIngester{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+			return pipelinesForSecuritySecret(ctx, r.Client, object, false)
+		})).
 		Watches(&appsv1alpha1.CarePlanWriter{}, handler.EnqueueRequestsFromMapFunc(r.ingestersForWriter)).
 		Owns(&appsv1alpha1.SandboxRequest{}).
 		Owns(sonataFlowObject()).

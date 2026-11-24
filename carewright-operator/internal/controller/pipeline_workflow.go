@@ -130,6 +130,13 @@ func reconcilePipelineWorkflow(
 			return summary, err
 		}
 	}
+	if revision := owner.GetAnnotations()[securityRevisionAnnotation]; revision != "" {
+		entries, _, _ := unstructured.NestedSlice(desired.Object, "spec", "podTemplate", "container", "env")
+		entries = append(entries, map[string]interface{}{"name": "CAREWRIGHT_SECURITY_REVISION", "value": revision})
+		if err := unstructured.SetNestedSlice(desired.Object, entries, "spec", "podTemplate", "container", "env"); err != nil {
+			return summary, err
+		}
+	}
 	desired.SetName(name)
 	desired.SetNamespace(owner.GetNamespace())
 	desired.SetGroupVersionKind(sonataFlowGVK)

@@ -91,14 +91,19 @@ func reconcileComponentSandboxes(
 	for _, component := range components {
 		tokens, signing := pipelineSecuritySources(owner)
 		serviceProvider, registration := managedProvider(owner, "service-tokens", "", tokens)
-		if serviceProvider != "" {
+		if serviceProvider != "" && (pipelineSecurityOptions(owner) == nil || !pipelineSecurityOptions(owner).LocalCredentialFiles) {
 			component.Providers = append(slices.Clone(component.Providers), serviceProvider)
 			component.Registrations = append(slices.Clone(component.Registrations), providerRegistrations(registration)...)
 		}
-		if component.Name == "fhir-server" && signing != nil {
+		if component.Name == "fhir-server" && signing != nil && (pipelineSecurityOptions(owner) == nil || !pipelineSecurityOptions(owner).LocalCredentialFiles) {
 			signingProvider, signingRegistration := managedProvider(owner, "approval-signing", "", signing)
 			component.Providers = append(component.Providers, signingProvider)
 			component.Registrations = append(component.Registrations, providerRegistrations(signingRegistration)...)
+		}
+		localRegistration := componentLocalCredentialRegistration(owner, component.Name)
+		if localRegistration != nil {
+			component.Providers = append(slices.Clone(component.Providers), localRegistration.Name)
+			component.Registrations = append(slices.Clone(component.Registrations), *localRegistration)
 		}
 		component.Env = mergedEnv(component.Env, map[string]string{"WORKFLOW_CALLBACK_ORIGIN": workflowOriginURL(workflowURL)})
 		requestName := componentRequestName(owner.GetName(), component.Name)
@@ -122,6 +127,7 @@ func reconcileComponentSandboxes(
 			if len(component.Spec.Command) != 0 {
 				command = component.Spec.Command
 			}
+			command = wrapLocalCredentialCommand(command, localRegistration)
 			providers := append(slices.Clone(component.Providers), component.Spec.ExtraProviders...)
 			networkAccess := slices.Clone(workflowAccess)
 			networkAccess = append(networkAccess, component.NetworkAccess...)

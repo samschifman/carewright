@@ -36,7 +36,7 @@ func secretEnvironment(source *appsv1alpha1.ProviderSourceSpec, keys ...string) 
 }
 
 func secretKeyEnvironment(secret corev1.LocalObjectReference, keys ...string) []corev1.EnvVar {
-	entries := []corev1.EnvVar{}
+	entries := make([]corev1.EnvVar, 0, len(keys))
 	for _, key := range keys {
 		entries = append(entries, corev1.EnvVar{Name: key, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: secret, Key: key}}})
 	}

@@ -111,7 +111,15 @@ type SandboxNetworkAccessSpec struct {
 // SandboxProviderRegistration declares a provider that the controller registers
 // from a namespace-local Secret before creating the sandbox.
 // +kubebuilder:validation:XValidation:rule="self.secretRef.name.size() > 0",message="secretRef.name is required"
+// +kubebuilder:validation:XValidation:rule="!has(self.localCredentials) || size(self.localCredentials) == 0 || (self.type == 'carewright-local-credentials-file' && (!has(self.config) || size(self.config) == 0))",message="localCredentials requires the dedicated local-file profile and empty config"
 type SandboxProviderRegistration struct {
+	// LocalCredentials opts into the experimental local-file profile. Each map
+	// key is a process environment name; its value selects a namespace-local
+	// Secret key. Resolved values enter NON-SECRET provider config, never this CR.
+	// Only SERVICE_TOKEN_* and APPROVAL_SIGNING_KEY names are supported.
+	// +optional
+	LocalCredentials map[string]corev1.SecretKeySelector `json:"localCredentials,omitempty"`
+
 	// Name is the provider name in the selected OpenShell workspace.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`

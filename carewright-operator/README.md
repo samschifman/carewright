@@ -147,7 +147,15 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](../LICENSE).
 
 ## Application sessions and credentials
 
-Bootstrap creates `carewright-service-tokens`, `carewright-approval-signing-key`, `carewright-session-signing-key` and `carewright-ingester-signing-key` if absent and validates the required keys on reuse. It imports credential-only `carewright-service-tokens` and `carewright-approval-signing` OpenShell profiles, granting no endpoint access. Both pipelines reference `spec.serviceTokens`. Writer alone references `spec.approvalSigning` and `spec.sessionSigning`; ingester uses `spec.signing`. Browser signing fields contain plain Secret references. Validate these profiles against the installed gateway before deploying; local gateway validation and cluster runtime probes are not substitutes for each other.
+Application-key generation and scoped local provider files are **enabled by
+default**. Set `spec.security.managedSecrets: false` and/or
+`spec.security.localCredentialFiles: false` to opt out. Provider files expose
+keys through a **NON-SECRET** config channel; this remains an experimental
+synthetic-data deployment path. See [Managed application security](docs/managed-application-security.md)
+for defaults, migration, ownership, rotation, and production-security gates.
+
+
+By default, the operator creates missing built-in application Secrets (`carewright-service-tokens`, `carewright-approval-signing-key`, `carewright-session-signing-key`, and `carewright-ingester-signing-key`) and preserves existing values. Bootstrap defers their creation by default; set `OPERATOR_MANAGED_SECURITY=0` for the legacy script-generation path. Explicit custom Secret names must already exist. It imports credential-only `carewright-service-tokens` and `carewright-approval-signing` OpenShell profiles, granting no endpoint access. Both pipelines reference `spec.serviceTokens`. Writer alone references `spec.approvalSigning` and `spec.sessionSigning`; ingester uses `spec.signing`. Browser signing fields contain plain Secret references. Validate these profiles against the installed gateway before deploying; local gateway validation and cluster runtime probes are not substitutes for each other.
 
 Writer `spec.smart` supplies Secret-backed credentials (`SMART_CLIENT_ID`, `SMART_CLIENT_SECRET`), issuer allowlist, exact public origin/redirect URI, scopes, and optional internal FHIR base. Medplum must register the UI Route's `/api/v1/launch` and `/api/v1/launch/callback` paths. Backend secrets never enter the UI. The BFF receives individual Secret keys; only the FHIR publication sandbox receives the signing provider. Workflow pods receive token references, and callback components receive the workflow origin. Reconcile uses a single BFF replica and Recreate updates; custom BFF commands must retain one worker and disable access logging.
 
